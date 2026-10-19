@@ -1,0 +1,1205 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://study-english.local/contracts/core.v1",
+  "$defs": {
+    "versionRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "hash"
+      ]
+    },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "attempt_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "learner",
+            "dry_run"
+          ]
+        },
+        "item": {
+          "$ref": "#/$defs/versionRef"
+        },
+        "rubric": {
+          "$ref": "#/$defs/versionRef"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "guided",
+            "self_practice",
+            "exam"
+          ]
+        },
+        "purpose": {
+          "type": "string",
+          "enum": [
+            "lesson",
+            "practice",
+            "7A",
+            "7B",
+            "9"
+          ]
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "DRAFT",
+            "SUBMITTED",
+            "REPAIRING",
+            "AWAITING_VERIFICATION",
+            "CLOSED"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "attempt_id",
+        "scope",
+        "item",
+        "rubric",
+        "mode",
+        "purpose",
+        "state",
+        "created_at"
+      ]
+    },
+    "submission": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "submission_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attempt_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "original",
+            "repair"
+          ]
+        },
+        "parent_submission_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence_source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "content_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "repair_attempt_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "submission_id",
+        "attempt_id",
+        "revision",
+        "kind",
+        "parent_submission_id",
+        "evidence_source_id",
+        "content_hash",
+        "repair_attempt_index",
+        "created_at"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "original"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "parent_submission_id": {
+                "type": "null"
+              },
+              "revision": {
+                "const": 0
+              },
+              "repair_attempt_index": {
+                "const": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "parent_submission_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "repair_attempt_index": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "assistance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "event_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attempt_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "submission_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hint_level": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "content_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "competency_impacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "competency_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "impact": {
+                "type": "string",
+                "enum": [
+                  "affected",
+                  "no_related_effect_detected",
+                  "unknown"
+                ]
+              },
+              "reduced_load": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "competency_id",
+              "impact",
+              "reduced_load"
+            ]
+          }
+        },
+        "pre_snapshot_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "post_snapshot_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "displayed_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "idempotency_key",
+        "attempt_id",
+        "submission_id",
+        "hint_level",
+        "content_hash",
+        "competency_impacts",
+        "pre_snapshot_id",
+        "post_snapshot_id",
+        "displayed_at"
+      ]
+    },
+    "exposure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "event_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item": {
+          "$ref": "#/$defs/versionRef"
+        },
+        "item_family_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shared_stimulus_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "surface": {
+          "type": "string",
+          "enum": [
+            "builder",
+            "learner"
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "learner",
+            "dry_run"
+          ]
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "prompt",
+            "hint",
+            "answer",
+            "explanation",
+            "sample_or_variant"
+          ]
+        },
+        "seen_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "idempotency_key",
+        "item",
+        "item_family_id",
+        "shared_stimulus_id",
+        "surface",
+        "scope",
+        "level",
+        "seen_at"
+      ]
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "observation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "submission_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "competency_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "item": {
+          "$ref": "#/$defs/versionRef"
+        },
+        "rubric": {
+          "$ref": "#/$defs/versionRef"
+        },
+        "ai_run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "supersedes_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "processing": {
+          "type": "string",
+          "enum": [
+            "processed",
+            "missing_data",
+            "technical_error"
+          ]
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "met",
+            "not_met",
+            "inconclusive"
+          ]
+        },
+        "measurement_quality": {
+          "type": "string",
+          "enum": [
+            "sufficient",
+            "insufficient",
+            "unknown"
+          ]
+        },
+        "opportunity": {
+          "type": "string",
+          "enum": [
+            "observed",
+            "absent",
+            "unknown"
+          ]
+        },
+        "support_impact": {
+          "type": "string",
+          "enum": [
+            "affected",
+            "no_related_effect_detected",
+            "unknown"
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "learner",
+            "dry_run"
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "observation_id",
+        "submission_id",
+        "evidence_source_id",
+        "competency_id",
+        "item",
+        "rubric",
+        "ai_run_id",
+        "supersedes_id",
+        "processing",
+        "outcome",
+        "measurement_quality",
+        "opportunity",
+        "support_impact",
+        "scope"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "measurement_quality": {
+                "enum": [
+                  "insufficient",
+                  "unknown"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "const": "inconclusive"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "processing": {
+                "enum": [
+                  "missing_data",
+                  "technical_error"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "const": "inconclusive"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "qc": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "type": "string",
+          "enum": [
+            "QC1",
+            "QC2",
+            "QC3",
+            "QC4"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_RUN"
+          ]
+        },
+        "content_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "policy_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "stage",
+        "status",
+        "content_hash",
+        "policy_version"
+      ]
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "package": {
+          "$ref": "#/$defs/versionRef"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/versionRef"
+          }
+        },
+        "content_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "usage_rights": {
+          "type": "string",
+          "enum": [
+            "verified",
+            "unknown"
+          ]
+        },
+        "qc": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/qc"
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "package",
+        "dependencies",
+        "content_path",
+        "usage_rights",
+        "qc"
+      ]
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "release_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "package": {
+          "$ref": "#/$defs/versionRef"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "active",
+            "suspended",
+            "retired"
+          ]
+        },
+        "qc_policy_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "qc": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/qc"
+          }
+        },
+        "released_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "release_id",
+        "package",
+        "state",
+        "qc_policy_version",
+        "qc",
+        "released_at"
+      ]
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "profile_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "codex",
+            "claude-code",
+            "gemini-cli"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runner_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "NEEDS_LOGIN",
+            "NEEDS_VERIFICATION",
+            "READY",
+            "BUSY",
+            "COOLDOWN",
+            "QUOTA_EXHAUSTED",
+            "DISABLED"
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "profile_id",
+        "provider",
+        "label",
+        "runner_ref",
+        "state"
+      ]
+    },
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "job_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attempt_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snapshot_version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "attempt_generation": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "billing_policy": {
+          "const": "subscription_only"
+        },
+        "task_type": {
+          "type": "string",
+          "enum": [
+            "writing.assess",
+            "reading.blind_solve",
+            "reading.verify",
+            "repair.assess"
+          ]
+        },
+        "phase": {
+          "type": "string",
+          "enum": [
+            "assessment",
+            "blind_solve",
+            "verification",
+            "repair"
+          ]
+        },
+        "context_manifest_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rubric_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "text",
+              "structured_result",
+              "direct_audio"
+            ]
+          }
+        },
+        "eligible_providers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude-code",
+              "gemini-cli"
+            ]
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts_total": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            },
+            "timeout_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 180
+            }
+          },
+          "required": [
+            "max_attempts_total",
+            "timeout_seconds"
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "job_id",
+        "idempotency_key",
+        "attempt_id",
+        "snapshot_version",
+        "attempt_generation",
+        "billing_policy",
+        "task_type",
+        "phase",
+        "context_manifest_id",
+        "rubric_version",
+        "required_capabilities",
+        "eligible_providers",
+        "limits"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "task_type": {
+                "const": "writing.assess"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "phase": {
+                "const": "assessment"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "task_type": {
+                "const": "reading.blind_solve"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "phase": {
+                "const": "blind_solve"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "task_type": {
+                "const": "reading.verify"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "phase": {
+                "const": "verification"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "task_type": {
+                "const": "repair.assess"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "phase": {
+                "const": "repair"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "job_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "execution_index": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "lease_owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lease_expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "RUNNING",
+            "VALIDATING",
+            "COMPLETED",
+            "FAILED",
+            "CANCELLED",
+            "STALE"
+          ]
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "fake",
+            "codex",
+            "claude-code",
+            "gemini-cli"
+          ]
+        },
+        "cli_version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "run_id",
+        "job_id",
+        "generation",
+        "execution_index",
+        "lease_owner",
+        "lease_expires_at",
+        "state",
+        "provider",
+        "cli_version",
+        "model"
+      ]
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "manifest_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "assessor",
+            "blind_solver",
+            "verifier",
+            "repair_tutor"
+          ]
+        },
+        "phase": {
+          "type": "string",
+          "enum": [
+            "assessment",
+            "blind_solve",
+            "verification",
+            "repair"
+          ]
+        },
+        "input_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "policy_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rubric": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/versionRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "knowledge": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/versionRef"
+          }
+        },
+        "disclosure_level": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allowed_resource_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "manifest_id",
+        "role",
+        "phase",
+        "input_hash",
+        "policy_version",
+        "rubric",
+        "knowledge",
+        "disclosure_level",
+        "allowed_resource_ids"
+      ]
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "proposal_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base_plan_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "task_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "scheduled_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "Z$"
+              }
+            },
+            "required": [
+              "task_id",
+              "scheduled_at"
+            ]
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "estimated_minutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "PROPOSED",
+            "ACCEPTED",
+            "REJECTED",
+            "EXPIRED",
+            "STALE"
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "proposal_id",
+        "base_plan_version",
+        "changes",
+        "reasons",
+        "estimated_minutes",
+        "expires_at",
+        "state"
+      ]
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "job_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context_manifest_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "processing": {
+          "type": "string",
+          "enum": [
+            "processed",
+            "missing_data",
+            "technical_error"
+          ]
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "met",
+            "not_met",
+            "inconclusive"
+          ]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "synthetic": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "schema_version",
+        "job_id",
+        "context_manifest_id",
+        "processing",
+        "outcome",
+        "evidence_refs",
+        "limitations",
+        "synthetic"
+      ]
+    }
+  }
+}

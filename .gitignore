@@ -1,0 +1,15 @@
+node_modules/
+dist/
+var/
+coverage/
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.log
+*.tsbuildinfo

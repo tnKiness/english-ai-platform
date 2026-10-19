@@ -1,0 +1,215 @@
+{
+  "versionRef": {
+    "id": "synthetic-item",
+    "version": "v1",
+    "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "attempt": {
+    "schema_version": "1",
+    "attempt_id": "a",
+    "scope": "dry_run",
+    "item": {
+      "id": "synthetic-item",
+      "version": "v1",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "rubric": {
+      "id": "synthetic-item",
+      "version": "v1",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "mode": "self_practice",
+    "purpose": "7A",
+    "state": "DRAFT",
+    "created_at": "2026-10-19T00:00:00Z"
+  },
+  "submission": {
+    "schema_version": "1",
+    "submission_id": "s",
+    "attempt_id": "a",
+    "revision": 0,
+    "kind": "original",
+    "parent_submission_id": null,
+    "evidence_source_id": "source",
+    "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "repair_attempt_index": 0,
+    "created_at": "2026-10-19T00:00:00Z"
+  },
+  "assistance": {
+    "schema_version": "1",
+    "event_id": "e",
+    "idempotency_key": "k",
+    "attempt_id": "a",
+    "submission_id": "s",
+    "hint_level": 1,
+    "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "competency_impacts": [
+      {
+        "competency_id": "synthetic-competency",
+        "impact": "unknown",
+        "reduced_load": true
+      }
+    ],
+    "pre_snapshot_id": null,
+    "post_snapshot_id": null,
+    "displayed_at": "2026-10-19T00:00:00Z"
+  },
+  "exposure": {
+    "schema_version": "1",
+    "event_id": "e",
+    "idempotency_key": "k",
+    "item": {
+      "id": "synthetic-item",
+      "version": "v1",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "item_family_id": "family",
+    "shared_stimulus_id": null,
+    "surface": "builder",
+    "scope": "dry_run",
+    "level": "answer",
+    "seen_at": "2026-10-19T00:00:00Z"
+  },
+  "observation": {
+    "schema_version": "1",
+    "observation_id": "o",
+    "submission_id": "s",
+    "evidence_source_id": "source",
+    "competency_id": "synthetic-competency",
+    "item": {
+      "id": "synthetic-item",
+      "version": "v1",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "rubric": {
+      "id": "synthetic-item",
+      "version": "v1",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "ai_run_id": "run",
+    "supersedes_id": null,
+    "processing": "processed",
+    "outcome": "inconclusive",
+    "measurement_quality": "unknown",
+    "opportunity": "unknown",
+    "support_impact": "unknown",
+    "scope": "dry_run"
+  },
+  "qc": {
+    "stage": "QC1",
+    "status": "NOT_RUN",
+    "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "policy_version": "v1"
+  },
+  "package": {
+    "schema_version": "1",
+    "package": {
+      "id": "synthetic-item",
+      "version": "v1",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "dependencies": [],
+    "content_path": "synthetic.json",
+    "usage_rights": "unknown",
+    "qc": []
+  },
+  "release": {
+    "schema_version": "1",
+    "release_id": "r",
+    "package": {
+      "id": "synthetic-item",
+      "version": "v1",
+      "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "state": "draft",
+    "qc_policy_version": "v1",
+    "qc": [],
+    "released_at": null
+  },
+  "profile": {
+    "schema_version": "1",
+    "profile_id": "p",
+    "provider": "codex",
+    "label": "synthetic",
+    "runner_ref": "isolated",
+    "state": "NEEDS_VERIFICATION"
+  },
+  "job": {
+    "schema_version": "1",
+    "job_id": "j",
+    "idempotency_key": "k",
+    "attempt_id": "a",
+    "snapshot_version": 0,
+    "attempt_generation": 1,
+    "billing_policy": "subscription_only",
+    "task_type": "writing.assess",
+    "phase": "assessment",
+    "context_manifest_id": "ctx",
+    "rubric_version": "v1",
+    "required_capabilities": [
+      "text",
+      "structured_result"
+    ],
+    "eligible_providers": [
+      "codex"
+    ],
+    "limits": {
+      "max_attempts_total": 3,
+      "timeout_seconds": 180
+    }
+  },
+  "run": {
+    "schema_version": "1",
+    "run_id": "run",
+    "job_id": "j",
+    "generation": 1,
+    "execution_index": 1,
+    "lease_owner": "worker",
+    "lease_expires_at": "2026-10-19T00:00:00Z",
+    "state": "RUNNING",
+    "provider": "fake",
+    "cli_version": null,
+    "model": null
+  },
+  "manifest": {
+    "schema_version": "1",
+    "manifest_id": "ctx",
+    "role": "blind_solver",
+    "phase": "blind_solve",
+    "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "policy_version": "v1",
+    "rubric": null,
+    "knowledge": [],
+    "disclosure_level": 0,
+    "allowed_resource_ids": []
+  },
+  "proposal": {
+    "schema_version": "1",
+    "proposal_id": "p",
+    "base_plan_version": 1,
+    "changes": [
+      {
+        "task_id": "task",
+        "scheduled_at": "2026-10-19T00:00:00Z"
+      }
+    ],
+    "reasons": [
+      "Synthetic test"
+    ],
+    "estimated_minutes": 10,
+    "expires_at": "2026-10-19T00:00:00Z",
+    "state": "PROPOSED"
+  },
+  "result": {
+    "schema_version": "1",
+    "job_id": "j",
+    "context_manifest_id": "ctx",
+    "processing": "processed",
+    "outcome": "inconclusive",
+    "evidence_refs": [],
+    "limitations": [
+      "Synthetic only"
+    ],
+    "synthetic": true
+  }
+}
