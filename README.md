@@ -37,4 +37,4 @@ npm.cmd run inventory
 - Backup spike mới chứng minh SQLite; phối hợp DB + JSON + media và recovery sau crash thuộc P1.
 - `var/`, database, log, credential và media cá nhân không được commit. Chưa có migrations; không khởi tạo kho học thật ở P0.
 
-Chưa khởi tạo Git hoặc tạo commit; đã có `.gitignore` chuẩn bị quản lý phiên bản. Khởi tạo/commit có thể thực hiện riêng khi người dùng yêu cầu.
+Mã nguồn: [tnKiness/english-ai-platform](https://github.com/tnKiness/english-ai-platform), nhánh `main`. `.gitignore` loại trừ `node_modules`, `dist`, `var/`, database, log và `.env`.
