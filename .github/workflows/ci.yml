@@ -27,6 +27,9 @@ jobs:
       - name: Build better-sqlite3
         working-directory: node_modules/better-sqlite3
         run: npx --yes node-gyp@12.4.0 rebuild --release
+      # Gateway integration tests grant read access to the group Codex's Windows sandbox uses.
+      - name: Create Codex sandbox group
+        run: net localgroup CodexSandboxUsers /add
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
