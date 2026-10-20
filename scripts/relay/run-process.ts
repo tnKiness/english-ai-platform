@@ -2,17 +2,18 @@ import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { join } from 'node:path';
 
-export interface RunResult { exitCode: number | null; timedOut: boolean; output: string }
+export interface RunResult { exitCode: number | null; timedOut: boolean }
 
-const KEEP = 64 * 1024; // only the tail is needed to classify the outcome
-
-/** Streams a CLI run to the console and a log file; on timeout/abort kills the whole process tree. */
+/**
+ * Runs a CLI, logs raw output to `logFile`, and hands every complete stdout/stderr line to `onLine`.
+ * On timeout/abort kills the whole process tree.
+ */
 export function runCli(bin: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv; stdin: string | null;
-  timeoutMs: number; logFile: string; signal?: AbortSignal; echo: boolean }): Promise<RunResult> {
+  timeoutMs: number; logFile: string; signal?: AbortSignal; onLine: (line: string, stream: 'stdout' | 'stderr') => void }): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const log = createWriteStream(opts.logFile, { flags: 'a' });
     const child = spawn(bin, args, { cwd: opts.cwd, env: opts.env, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-    let output = ''; let timedOut = false; let killing: Promise<void> | undefined;
+    let timedOut = false; let killing: Promise<void> | undefined;
     const kill = () => {
       if (killing || !child.pid) return;
       killing = process.platform === 'win32'
@@ -27,18 +28,21 @@ export function runCli(bin: string, args: string[], opts: { cwd: string; env: No
     const timer = setTimeout(() => { timedOut = true; kill(); }, opts.timeoutMs);
     const onAbort = () => kill();
     opts.signal?.addEventListener('abort', onAbort, { once: true });
-    const onData = (stream: NodeJS.WriteStream) => (chunk: Buffer) => {
+    const pending = { stdout: '', stderr: '' };
+    const onData = (stream: 'stdout' | 'stderr') => (chunk: Buffer) => {
       log.write(chunk);
-      if (opts.echo) stream.write(chunk);
-      output = (output + chunk.toString('utf8')).slice(-KEEP);
+      const lines = (pending[stream] + chunk.toString('utf8')).split(/\r?\n/);
+      pending[stream] = lines.pop() ?? '';
+      for (const line of lines) opts.onLine(line, stream);
     };
-    child.stdout.on('data', onData(process.stdout));
-    child.stderr.on('data', onData(process.stderr));
+    child.stdout.on('data', onData('stdout'));
+    child.stderr.on('data', onData('stderr'));
     child.stdin.on('error', () => undefined); // a CLI may exit before reading stdin
     child.once('error', (error) => { clearTimeout(timer); log.end(); reject(error); });
     child.once('close', (code) => {
       clearTimeout(timer); opts.signal?.removeEventListener('abort', onAbort);
-      void (killing ?? Promise.resolve()).then(() => log.end(() => resolve({ exitCode: code, timedOut, output })));
+      for (const stream of ['stdout', 'stderr'] as const) if (pending[stream]) opts.onLine(pending[stream], stream);
+      void (killing ?? Promise.resolve()).then(() => log.end(() => resolve({ exitCode: code, timedOut })));
     });
     child.stdin.end(opts.stdin ?? '');
   });

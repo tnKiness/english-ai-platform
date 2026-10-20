@@ -46,18 +46,22 @@ export const DEFAULT_MODELS = {
 } as const;
 
 const READ_TOOLS = ['Read', 'Glob', 'Grep'];
-const WORK_TOOLS = [...READ_TOOLS, 'Edit', 'Write', 'Bash(npm.cmd run:*)', 'Bash(npm run:*)', 'Bash(npx.cmd tsx:*)',
-  'Bash(git status:*)', 'Bash(git diff:*)', 'Bash(git log:*)', 'Bash(node --version)'];
+// Same commands for Claude Code's Bash and PowerShell tools: on Windows it may run either, and a Bash(...) rule
+// does not cover PowerShell (20/10/2026: `npm.cmd run check` was denied, so tests never ran).
+const WORK_COMMANDS = ['npm.cmd run:*', 'npm run:*', 'npx.cmd tsx:*', 'npx tsx:*', 'npx.cmd vitest:*', 'npx vitest:*',
+  'git status:*', 'git diff:*', 'git log:*', 'node --version'];
+const WORK_TOOLS = [...READ_TOOLS, 'Edit', 'Write', ...WORK_COMMANDS.flatMap((c) => [`Bash(${c})`, `PowerShell(${c})`])];
+const DENIED = ['git commit:*', 'git push:*'].flatMap((c) => [`Bash(${c})`, `PowerShell(${c})`]);
 
 export function providerSpecs(): Record<ProviderId, ProviderSpec> {
   return {
     claude: {
       id: 'claude', label: 'Claude Code', bin: firstExisting(process.env.RELAY_CLAUDE_BIN, claudeExe()),
       invocation: (prompt, { mode }) => ({
-        args: ['-p', '--output-format', 'text',
+        args: ['-p', '--output-format', 'stream-json', '--verbose',
           '--permission-mode', mode === 'work' ? 'acceptEdits' : 'default',
           '--allowedTools', ...(mode === 'work' ? WORK_TOOLS : READ_TOOLS),
-          '--disallowedTools', 'Bash(git commit:*)', 'Bash(git push:*)',
+          '--disallowedTools', ...DENIED,
           '--model', DEFAULT_MODELS.claude.model, '--effort', DEFAULT_MODELS.claude.effort],
         stdin: prompt,
       }),
@@ -74,7 +78,7 @@ export function providerSpecs(): Record<ProviderId, ProviderSpec> {
     codex: {
       id: 'codex', label: 'Codex (ChatGPT)', bin: firstExisting(process.env.RELAY_CODEX_BIN, newestCodex(), where('codex.exe')[0]),
       invocation: (_prompt, { cwd, mode, lastMessageFile }) => ({
-        args: ['exec', '--sandbox', mode === 'work' ? 'workspace-write' : 'read-only', '-C', cwd, '--color', 'never',
+        args: ['exec', '--json', '--sandbox', mode === 'work' ? 'workspace-write' : 'read-only', '-C', cwd, '--color', 'never',
           '-o', lastMessageFile, '-m', DEFAULT_MODELS.codex.model, '-c', `model_reasoning_effort="${DEFAULT_MODELS.codex.effort}"`, '-'],
         stdin: _prompt, lastMessageFile,
       }),
@@ -88,7 +92,7 @@ export function providerSpecs(): Record<ProviderId, ProviderSpec> {
     agy: {
       id: 'agy', label: 'Antigravity (Gemini)', bin: firstExisting(process.env.RELAY_AGY_BIN, join(LOCAL, 'agy', 'bin', 'agy.exe'), where('agy.exe')[0]),
       invocation: (prompt, { mode }) => ({
-        args: ['-p', prompt, '--output-format', 'text', '--sandbox', '--mode', mode === 'work' ? 'accept-edits' : 'plan',
+        args: ['-p', prompt, '--output-format', 'stream-json', '--sandbox', '--mode', mode === 'work' ? 'accept-edits' : 'plan',
           '--model', DEFAULT_MODELS.agy.model],
         stdin: null,
       }),
