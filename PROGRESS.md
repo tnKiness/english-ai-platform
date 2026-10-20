@@ -7,7 +7,7 @@ Cập nhật: 20/10/2026 — Asia/Bangkok.
 - P0 hoàn tất: skeleton Node/TypeScript/React/Vite/Fastify, schema v1 (15 definition), state guard, fake adapter, spike Windows runner và SQLite backup. Chi tiết: [P0_ACCEPTANCE](docs/engineering/P0_ACCEPTANCE.md), [P0_DATA_AND_STATE](docs/engineering/P0_DATA_AND_STATE.md), [README](README.md).
 - P1 hoàn tất ở mức thư viện có integration test SQLite thật: migrations, JSON/media bất biến, repositories, Rule Engine thuần, queue lease/fencing/retry/cancel, backup/restore phối hợp. Chi tiết: [P1_ACCEPTANCE](docs/engineering/P1_ACCEPTANCE.md), quyết định E-07.
 - P2 BLOCKED chờ D-01: đã có 6 đầu ra Phần 5, pipeline staging + QC1–4, phát hành đúng hash, thu hồi lan truyền + cache, gateway chặn thực thi khi thiếu căn cứ, session/CSRF, Console 3 tab, worker/backup CLI. Chi tiết: [P2_ACCEPTANCE](docs/engineering/P2_ACCEPTANCE.md).
-- Chưa có luồng học, hồ sơ năng lực (chờ D-02) hay AI thật.
+- P3 IN_PROGRESS: đã xong P3-1 (khung học 5 màn, 3 chế độ guided/self_practice/exam, autosave server qua session/CSRF), P3-2 (vòng Writing khép kín với FakeAdapter + nội dung synthetic, xếp lịch 7B/Bước 9 và Opportunity-to-Use, giữ giới hạn D-02), P3-3 (gợi mở theo nấc chỉ lưu server, cắt quyền trước truy xuất, assistance_events idempotent, chỉ bản sửa mới mới kích hoạt chấm lại). Chi tiết: [P3_ACCEPTANCE](docs/engineering/P3_ACCEPTANCE.md), quyết định E-18. Còn thiếu P3-4 (Reading giải mù + audio mẫu) và đánh giá bằng adapter thật sau D-01. Chưa có hồ sơ năng lực được duyệt (chờ D-02) hay AI thật.
 - Git: nhánh `main` theo dõi [tnKiness/english-ai-platform](https://github.com/tnKiness/english-ai-platform); commit đầu `68a8557` (P0) đã push. `.gitattributes` chuẩn hóa LF.
 - Chưa đủ điều kiện bật adapter thật (D-01/D-04) hay công bố sẵn sàng sử dụng.
 - Phương án triển khai và ranh giới module: [PROJECT_STRUCTURE](docs/engineering/PROJECT_STRUCTURE.md). Kế hoạch chi tiết: [IMPLEMENTATION_PLAN](docs/engineering/IMPLEMENTATION_PLAN.md).
@@ -20,7 +20,7 @@ Cập nhật: 20/10/2026 — Asia/Bangkok.
 | TOOL-01 | Relay AI lập trình chuyển nền tảng khi hết quota | DONE | scripts/relay, tests/unit/relay.test.ts; chuyển codex → agy thật đạt; Claude CLI cần đăng nhập lại |
 | P1 | Nền dữ liệu, Rule Engine, queue | DONE | P1_ACCEPTANCE; `npm.cmd run check` 107/107 tests, spike 6/6; giới hạn: chưa API ghi/worker entrypoint/hồ sơ năng lực (D-02) |
 | P2 | Builder/QC + một adapter thật đủ điều kiện | BLOCKED | P2-1…P2-4 và E-11 mục 1–7 có code/tài liệu + test (P2_ACCEPTANCE; 163/163); chưa có provider thật được xác minh (D-01) — Fake-only chưa hoàn tất P2. E-14: collector ranh giới đọc có code + test (201/201); E-15/E-16: tắt công cụ + kiểm cấu hình, guard 3 ca OS + 2 ca cấu hình (203/203); probe thật FAIL (chưa khóa ACL; `unified_exec` không tắt được), chờ người dùng |
-| P3 | Vòng Writing + Reading giải mù + audio mẫu | TODO | Chưa triển khai |
+| P3 | Vòng Writing + Reading giải mù + audio mẫu | IN_PROGRESS | Đã xong P3-1…P3-3 với FakeAdapter + nội dung synthetic ([P3_ACCEPTANCE](docs/engineering/P3_ACCEPTANCE.md), `tests/integration/p3-learning.test.ts` 8/8 ca đạt; bộ test P0–P3 183/183 đạt); còn thiếu P3-4 (Reading giải mù + audio mẫu), đánh giá bằng adapter thật (D-01) và chính sách ngưỡng năng lực (D-02) |
 | P4 | Chịu lỗi, adapter bổ sung, đối chứng | TODO | Chưa triển khai |
 | P5 | Mở rộng, daily tracking, tối ưu | TODO | Chưa triển khai |
 
@@ -39,7 +39,7 @@ Trạng thái hợp lệ: TODO / IN_PROGRESS / BLOCKED / DONE. DONE cần đư�
 Các mục trên thuộc DOC-01. Kiểm tra của P0 ghi trong nhật ký bàn giao P0 bên dưới.
 
 ## Việc tiếp theo
-Người dùng đã đăng nhập Codex trong profile riêng, ghi xác nhận extra usage và thu báo cáo thật; xác nhận gói Plus trong chat. E-13 phát hiện probe chỉ chứng minh phản hồi/từ chối lệnh, chưa chứng minh ranh giới đọc. E-14 đã có collector `probe-boundary`; E-15 (người dùng chốt) và E-16 (áp dụng) đã có code: repo chỉ ghi nhận, 28 cờ `--disable`, kiểm cấu hình. Bước tiếp theo (người dùng, thứ tự trong [D01_CODEX_READ_BOUNDARY](docs/engineering/D01_CODEX_READ_BOUNDARY.md) "Phần bạn làm"): quyết định về `unified_exec` không tắt được; tạo `C:\se-runner\work`; icacls Deny cho `var/`, `%LOCALAPPDATA%\study-english`, `C:\se-runner`; probe tới PASS + công cụ đủ + cấu hình sạch; chạy lại `verify` (argv đổi); `evidence … --boundary …`; consent; status. Không sửa cờ thành VERIFIED bằng tay. Hoàn tất hồi quy E-13 trong môi trường cho phép rename/junction trước nghiệm thu. Sau D-01 mới chạy QC4/QC2–3 bằng provider đó trên gói synthetic và xét P2 DONE. Speaking giai đoạn đầu chỉ hỗ trợ văn bản; chưa code P3. Hồ sơ năng lực/chuyển mức chờ policy D-02; nội dung gói thật chờ D-05.
+Người dùng đã đăng nhập Codex trong profile riêng, ghi xác nhận extra usage và thu báo cáo thật; xác nhận gói Plus trong chat. E-13 phát hiện probe chỉ chứng minh phản hồi/từ chối lệnh, chưa chứng minh ranh giới đọc. E-14 đã có collector `probe-boundary`; E-15 (người dùng chốt) và E-16/E-17 (áp dụng) đã có code và ranh giới đọc OS đã PASS (`var/ai/probe-boundary-codex-2026-10-20T09-20-11-520Z.json`). Bước tiếp theo cho D-01/P2: chạy lại `verify` sau khi hết hạn mức ChatGPT, xác nhận gói/model trong evidence, `evidence … --boundary …`, consent, status; sau D-01 mới chạy QC4/QC2–3 bằng provider đó trên gói synthetic và xét P2 DONE. Ở P3: đã hoàn tất P3-1 (khung học), P3-2 (vòng Writing với FakeAdapter) và P3-3 (gợi mở theo nấc); bước tiếp theo của P3 là P3-4 (Reading giải mù + kiểm tra dẫn chứng + audio mẫu nội bộ theo D-06). Speaking giai đoạn đầu chỉ hỗ trợ văn bản (E-11). Hồ sơ năng lực/chuyển mức chờ policy D-02; nội dung gói thật chờ D-05.
 
 ## Nhật ký bàn giao
 ### 19/10/2026 — DOC-01
@@ -243,6 +243,49 @@ Người dùng đã đăng nhập Codex trong profile riêng, ghi xác nhận ex
 - Báo cáo đó sai lệch (INCONCLUSIVE/EXITED_BEFORE_STOP do quota) nên đã xóa `var/ai/evidence-2.json`.
 - Code: `verify-codex.ts` thêm `codexLimitMessage`; verify dừng sớm `QUOTA_OR_RATE_LIMIT: …` thay vì ghi kết quả sai. Test `tests/unit/verify-codex-limit.test.ts` dùng đúng dòng sự kiện quan sát được. `npm.cmd run check` 212/212.
 - Bước tiếp: chạy lại verify sau 18:49 ngày 20/10/2026 (giờ máy), rồi người dùng xác nhận gói/model trong evidence, nạp evidence với `var/ai/probe-boundary-codex-2026-10-20T09-20-11-520Z.json`, consent, status.
+
+### 20/10/2026 — TOOL-01: quyền lệnh cho Antigravity (agy) chạy headless
+- Lượt P3 đầu tiên bằng agy dừng sau 50s: ở chế độ `-p`, agy tự từ chối mọi `run_command` không có quy tắc cho phép ("a tool required the "command" permission that headless mode cannot prompt for"). Không dùng `--dangerously-skip-permissions`.
+- Người dùng đồng ý thêm danh sách hẹp vào `~/.gemini/antigravity-cli/settings.json` (cấu hình máy, không nằm trong repo; bản cũ lưu ở `settings.json.bak-relay-20261020`).
+- Quan sát trên agy 1.4.2 (Windows): `command(git status)` chỉ khớp đúng chuỗi `git status`; `command(git status *)` không có tác dụng; `command(regex:...)` có tác dụng. Quy tắc đang dùng: `npm(.cmd) run (check|lint|typecheck|test|build|spike)`, `npx(.cmd) (vitest|tsc)`, `git (status|diff|log|show)`, `node --version`; tham số chỉ gồm `[-\w./:=\\~^@]`. Đã thử thật: git status/log và `npm.cmd run typecheck` chạy được; `git push --dry-run` bị chặn.
+
+### 20/10/2026 — P3-1…P3-3 Khung học trên web, Vòng Writing với FakeAdapter, Gợi mở theo nấc / IN_PROGRESS (hoàn tất mục 1–3 của P3)
+- Ngày / mã công việc / trạng thái: 20/10/2026 — P3 (P3-1, P3-2, P3-3) — `IN_PROGRESS` (mục 1–3 DONE; còn P3-4 Reading/audio).
+- Nguồn yêu cầu và quyết định áp dụng: IMPLEMENTATION_PLAN mục P3; đặc tả 01 (§1, §3, §4, Bước 1–9), 02 (§2–3, §5), 03 (§II Writing), 06 (§1, §2, §4.C, §5.B–C, §6); DECISIONS E-07, E-10, E-11 (Speaking chỉ dạng văn bản ở giai đoạn đầu), D-02 (chưa có policy ngưỡng năng lực/Band), D-05 (chỉ nội dung synthetic); quyết định triển khai mới E-18.
+- File đã sửa và hành vi đã có thật:
+  1. **P3-1 Khung học trên web:**
+     - `migrations/0004_learning_p3.sql`: bảng `learner_goals`, `writing_diagnoses`, `writing_loop_states`, `error_hypotheses`, `scheduled_tasks` kèm trigger bất biến/append-only. Cập nhật kỳ vọng số migration (3 → 4) ở `tests/integration/p1-persistence.test.ts` và `p1-backup.test.ts`.
+     - `src/server/app.ts`: bổ sung nhóm route `/api/learning/*` bảo vệ bằng session/CSRF (`GET/POST /goals`, `GET /today`, `POST /attempts`, `GET /attempts/:id`, `POST /attempts/:id/autosave`, `POST /attempts/:id/input-support`, `POST /attempts/:id/submit`, `POST /attempts/:id/hints/unlock`, `POST /attempts/:id/step5/action`, `POST /attempts/:id/step6/complete`, `POST /attempts/:id/start-7a`, `GET /progress`, `GET /settings`).
+     - `src/web/learning.tsx`, `src/web/main.tsx`, `src/web/style.css`: 5 màn học tập theo 06 §2 (`Mục tiêu ban đầu`, `Học hôm nay`, `Workspace`, `Tiến độ`, `Cài đặt`) + giữ nguyên tab `Console kỹ thuật (P2)`. Workspace hỗ trợ 3 chế độ (`guided`, `self_practice`, `exam`), lưu nháp về server và hiển thị lỗi thật khi lưu thất bại (`500`/`403`), khôi phục đúng bản nháp và trạng thái sau khi tải lại. Màn Tiến độ chỉ hiển thị dữ liệu thật từ DB theo 4 thành phần năng lực, trạng thái `POLICY_NOT_APPROVED` và `band_reporting_enabled: false`.
+  2. **P3-2 Một vòng Writing với FakeAdapter:**
+     - `src/infrastructure/ai/fake-adapter.ts`: mở rộng `FakeQcScript` (`writingOutcome`, `repairOutcome`) và nhận diện marker `[SYNTHETIC_MET]` / `[SYNTHETIC_NOT_MET]` để kiểm thử deterministically các nhánh Bước 4–8 mà vẫn giữ mặc định `'inconclusive'` cho mọi test P0–P2.
+     - `src/application/learning/writing-workflow.ts`: hiện thực `LearningWorkflowService` khép kín từ tạo attempt → autosave → hỗ trợ đầu vào (có kiểm tra `canAccessExplanation` chặn lộ ở `exam`) → nộp bài gốc (`submitForAssessment` + `FakeAdapter`) → chẩn đoán ưu tiên tối đa 1–2 lỗi trọng tâm → Bước 5 tự sửa → Bước 6 micro-lesson + concept check (nhánh cần củng cố sau 2 lượt chưa đạt, hỏi lại điểm chưa rõ, hoặc mở bài giải thích trực tiếp có gắn cờ giảm trọng số) → Bước 7A tạo attempt chuyển giao mới hoàn toàn sạch (`mode: 'self_practice'`, `purpose: '7A'`) → Bước 8 cập nhật có điều kiện giả thuyết lỗi (`HOLD` → `TENTATIVE` → `CONSOLIDATED` hoặc `RELAPSED`) và xếp lịch 7B (+1 ngày) / Bước 9 (+3 ngày) qua hàm `clock` có thể giả lập thời gian trong test → Bước 9 kiểm tra `Opportunity-to-Use` (`observed` / `absent` → `AWAITING_OPPORTUNITY`). Mọi nhận định từ `FakeAdapter` đều gắn `synthetic: true`, không nâng hồ sơ năng lực thật và trả `POLICY_NOT_APPROVED` ("chưa đủ kết luận") theo D-02.
+  3. **P3-3 Gợi mở theo nấc:**
+     - `src/domain/learning/scaffold-hints.ts`: hàm thuần `verifyHintDisclosurePolicy` (bắt buộc mở tuần tự nấc 1 → 2 → 3, chặn chế độ `exam` và trạng thái ngoài vòng tự sửa), `sliceUnlockedHints` (cắt phần tử ở server trước khi trả DTO) và `decideStep6Branch`.
+     - Khi mở từng nấc qua `/hints/unlock`: tạo bản chụp `pre_assistance` trước nấc 1, ghi `assistance_events` idempotent theo khóa `(attempt_id, 'scaffold_hint_level_' + level)` (gọi lặp cùng nấc trả `idempotent: true`, không nhân bản dòng), và **không** tạo job chấm lại; chỉ khi nộp bản sửa mới qua `/submit` (`stage: 'repair'`) mới tạo revision + chạy `repair.assess`.
+  4. **Test và tài liệu:**
+     - `tests/integration/p3-learning.test.ts` (8 ca tích hợp kiểm tra đầu-cuối HTTP + SQLite + đồng hồ giả + kiểm tra rò rỉ HTTP payload ở mọi bước).
+     - `docs/engineering/P3_ACCEPTANCE.md` (mapping yêu cầu → code → test), cập nhật `IMPLEMENTATION_PLAN.md`, `DECISIONS.md` (thêm E-18), `PROJECT_STRUCTURE.md`, `README.md`.
+- Lệnh kiểm tra / kết quả / môi trường / giới hạn (Windows 11, Node 22.18.0, npm 10.9.3, chạy trong sandbox headless của agy):
+  - `npm.cmd run lint`: exit 0 (0 lỗi).
+  - `npm.cmd run typecheck`: exit 0 (0 lỗi).
+  - `npx.cmd vitest run tests/integration/p3-learning.test.ts`: **8/8 tests đạt** (1 file).
+  - `npx.cmd vitest run tests/contract tests/unit tests/spikes tests/integration/server.test.ts tests/integration/p1-persistence.test.ts tests/integration/p1-queue.test.ts tests/integration/p1-backup.test.ts tests/integration/p2-pipeline.test.ts tests/integration/p2-gateway.test.ts tests/integration/p2-console.test.ts tests/integration/p3-learning.test.ts`: **183/183 tests đạt** (20 file).
+  - `npm.cmd run build`: exit 0 (`tsc -p tsconfig.build.json && vite build` đạt, bundle web `dist/web/`).
+  - `npm.cmd run spike`: **6/6 tests đạt** (2 file).
+  - Giới hạn môi trường sandbox agy khi chạy `npm.cmd run check` toàn bộ không lọc file: 3 file test của P2/TOOL-02 (`tests/integration/relay-console.test.ts`, `tests/integration/probe-boundary.test.ts`, và 1 ca junction trong `tests/integration/p2-e11.test.ts` — 12/13 ca còn lại của `p2-e11.test.ts` đạt) bị môi trường sandbox Windows của agy chặn tạo kết nối TCP loopback `127.0.0.1` hoặc chặn `mklink /J` / `powershell` lồng nhau (đúng giới hạn sandbox Windows đã ghi nhận ở E-13). Không có bất kỳ file nào thuộc P2/relay bị sửa trong lượt này.
+- Điểm còn thiếu, quyết định mới, bước tiếp theo:
+  - Quyết định mới: **E-18** trong `docs/engineering/DECISIONS.md` (bảng trạng thái vòng học `0004_learning_p3.sql`, cắt gợi mở ở server và marker script hóa `FakeAdapter`).
+  - Còn thiếu để hoàn tất toàn bộ P3: P3-4 (Reading giải mù + kiểm tra dẫn chứng + audio mẫu nội bộ theo D-06), chạy với adapter thật sau khi đóng D-01, và chính sách ngưỡng năng lực/Band (D-02).
+
+### 20/10/2026 — D-01 đóng cho Codex (gateway READY)
+- Verify thật lúc 22:2x (sau khi hạn mức ChatGPT mở lại): đăng nhập `chatgpt`; lượt synthetic thoát 0, JSON đúng tại `item.text` của `agent_message` cuối; 5 probe phản hồi không lộ bí mật synthetic (vẫn chỉ là quan sát, không tính là ranh giới); timeout và cancel kết thúc cả cây 2 tiến trình. Báo cáo gốc giữ ở `var/ai/evidence-2.json`.
+- Người dùng xác nhận trong chat: gói **ChatGPT Plus** có Codex CLI; model `gpt-6-astra`; đồng ý đánh dấu envelope VERIFIED và `plugins_disabled: true` (căn cứ: config_inspection sạch trong probe PASS). Bản đã duyệt: `var/ai/evidence-3.json` (thêm mẫu lỗi đã thấy thật `hit your usage limit` → QUOTA_EXHAUSTED).
+- `npm.cmd run ai -- evidence var/ai/evidence-3.json --boundary var/ai/probe-boundary-codex-2026-10-20T09-20-11-520Z.json` → `codex: READY`; `consent codex approved grant` → 5 loại dữ liệu E-11, `learner_audio` luôn bị chặn; `status`: codex READY, extra usage xác nhận hạn tới 19/11/2026; claude-code và agy vẫn BLOCKED (chưa làm D-01).
+- Còn lại của P2: chạy QC4/QC2–3 thật bằng Codex trên gói synthetic theo pipeline P2 rồi xét P2 DONE.
+
+### 20/10/2026 — P3-1…P3-3 (relay, Antigravity) — kiểm lại độc lập
+- agy làm xong P3-1 khung học, P3-2 vòng Writing với FakeAdapter, P3-3 gợi mở theo nấc (P3_ACCEPTANCE, E-18, migration 0004). Sandbox agy không chạy được test cần socket loopback/junction nên agy chỉ chạy 183 test; chạy lại đầy đủ ngoài sandbox: `npm.cmd run check` 217/217 đạt. 2 test P1 chỉ đổi số migration 3→4.
 
 ### Mẫu cho lượt code tiếp theo
 - Ngày / mã công việc / trạng thái:

@@ -16,11 +16,11 @@ describe('P1-1 migrations', () => {
   it('applies versioned migrations once and reopens without change', async () => {
     const t = tempDir(); cleanups.push(t.cleanup);
     const db = await openDatabase(join(t.dir, 'a.db'));
-    expect(db.prepare('SELECT version, name FROM schema_migrations').all()).toEqual([{ version: 1, name: 'core' }, { version: 2, name: 'builder_qc' }, { version: 3, name: 'provider_agy' }]);
+    expect(db.prepare('SELECT version, name FROM schema_migrations').all()).toEqual([{ version: 1, name: 'core' }, { version: 2, name: 'builder_qc' }, { version: 3, name: 'provider_agy' }, { version: 4, name: 'learning_p3' }]);
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
     db.close();
     const again = await openDatabase(join(t.dir, 'a.db'));
-    expect((again.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get() as { n: number }).n).toBe(3);
+    expect((again.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get() as { n: number }).n).toBe(4);
     again.close();
   });
 

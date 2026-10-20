@@ -14,3 +14,5 @@ table { border-collapse: collapse; width: 100%; font-size: .85rem; } th, td { te
 .tag { font-size: .7rem; border: 1px solid #9fb8a6; border-radius: 6px; padding: 0 6px; margin-left: 6px; }
 .tag.active { background: #d9f0df; } .tag.suspended, .tag.retired { background: #f6dcd8; }
 .sev-high { border-color: #e2a59c; } .error { color: #a12a1f; } pre { white-space: pre-wrap; max-height: 50vh; overflow: auto; background: #f4f6f1; padding: 8px; }
+.workspace-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+select, textarea { font: inherit; padding: 4px 8px; border: 1px solid #9fb8a6; border-radius: 8px; background: #fff; }

@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
+import { LearningWorkflowService } from '../application/learning/writing-workflow.js';
 import { ConsoleService } from '../application/qc/console.js';
 import type { BuilderPipeline } from '../application/qc/pipeline.js';
+import type { Mode, Opportunity, Purpose } from '../domain/evidence/types.js';
 import { gatewayFor } from '../infrastructure/ai/gateway/compose.js';
 import { ConsoleQueries } from '../infrastructure/sqlite/console-queries.js';
 import { builderPipeline, type Store } from '../infrastructure/sqlite/store.js';
@@ -60,6 +62,7 @@ export function createApp(deps: AppDeps = {}) {
   const queries = new ConsoleQueries(store.db);
   const consoleService = new ConsoleService({ units: store.builder, json: store.json, items: queries, learning: store.learning, queue: store.queue,
     transaction: (fn) => store.builder.transaction(fn), contextPolicyVersion: 'context-policy-1' });
+  const learningWorkflow = new LearningWorkflowService(store);
   const gatewayStatus = deps.gatewayStatus ?? (() => gatewayFor(store).status());
 
   // Tab 1 "Gói tri thức": metadata, QC status and grants only — no unit content in list responses.
@@ -104,5 +107,74 @@ export function createApp(deps: AppDeps = {}) {
   // Tab 3 "Lần chạy": technical log; gateway shows why real providers are blocked.
   app.get('/api/console/runs', async () => queries.runs());
   app.get('/api/console/gateway', async () => gatewayStatus());
+
+  // ---- P3 Khung học, Vòng Writing & Gợi mở theo nấc (01, 02, 03, 06) -------------------------
+  const bandNum = { type: 'number', minimum: 0, maximum: 9 } as const;
+  app.get('/api/learning/goals', async () => ({ goal: learningWorkflow.getGoal() }));
+  app.post<{ Body: { target_band_overall: number; target_listening: number; target_reading: number; target_writing: number; target_speaking: number; exam_type: 'academic' | 'general_training'; exam_date: string | null; daily_minutes: number; weekly_minutes: number } }>('/api/learning/goals', {
+    schema: body({
+      target_band_overall: bandNum, target_listening: bandNum, target_reading: bandNum, target_writing: bandNum, target_speaking: bandNum,
+      exam_type: { enum: ['academic', 'general_training'] }, exam_date: { anyOf: [str, { type: 'null' }] },
+      daily_minutes: { type: 'integer', minimum: 5, maximum: 480 }, weekly_minutes: { type: 'integer', minimum: 15, maximum: 3360 },
+    }),
+  }, async (r) => ({ goal: learningWorkflow.saveGoal(r.body) }));
+
+  app.get<{ Querystring: { available_minutes?: string } }>('/api/learning/today', async (r) => {
+    const mins = r.query.available_minutes !== undefined ? Number(r.query.available_minutes) : undefined;
+    if (mins !== undefined && (!Number.isFinite(mins) || mins < 1 || mins > 480)) {
+      throw Object.assign(new Error('Invalid available_minutes'), { statusCode: 400 });
+    }
+    return learningWorkflow.todayView(mins);
+  });
+
+  app.post<{ Body: { request_key: string; item_id?: string; item_version?: string; rubric_id?: string; rubric_version?: string; mode: Mode; purpose: Purpose; task_id?: string; competency_id?: string } }>('/api/learning/attempts', {
+    schema: body({
+      request_key: str, item_id: str, item_version: str, rubric_id: str, rubric_version: str,
+      mode: { enum: ['guided', 'self_practice', 'exam'] }, purpose: { enum: ['lesson', 'practice', '7A', '7B', '9'] },
+      task_id: str, competency_id: str,
+    }, ['request_key', 'mode', 'purpose']),
+  }, async (r) => learningWorkflow.startAttempt(r.body));
+
+  app.get<{ Params: { id: string } }>('/api/learning/attempts/:id', async (r) => learningWorkflow.getWorkspaceView(r.params.id));
+
+  app.post<{ Params: { id: string }; Body: { content: string } }>('/api/learning/attempts/:id/autosave', {
+    schema: body({ content: { type: 'string', maxLength: 50_000 } }),
+  }, async (r) => learningWorkflow.autosave(r.params.id, r.body.content));
+
+  app.post<{ Params: { id: string }; Body: { request_key: string; current_draft_text: string } }>('/api/learning/attempts/:id/input-support', {
+    schema: body({ request_key: str, current_draft_text: { type: 'string', maxLength: 50_000 } }),
+  }, async (r) => learningWorkflow.requestInputSupport(r.params.id, r.body.request_key, r.body.current_draft_text));
+
+  app.post<{ Params: { id: string }; Body: { request_key: string; content: string; is_repair?: boolean; opportunity_override?: Opportunity } }>('/api/learning/attempts/:id/submit', {
+    schema: body({
+      request_key: str,
+      content: { type: 'string', minLength: 1, maxLength: 50_000 },
+      is_repair: { type: 'boolean' },
+      opportunity_override: { enum: ['observed', 'absent', 'unknown'] },
+    }, ['request_key', 'content']),
+  }, async (r) => learningWorkflow.submitWriting({ attempt_id: r.params.id, ...r.body }));
+
+  app.post<{ Params: { id: string }; Body: { level: 1 | 2 | 3; request_key: string; current_draft_text?: string } }>('/api/learning/attempts/:id/hints/unlock', {
+    schema: body({ level: { type: 'integer', enum: [1, 2, 3] }, request_key: str, current_draft_text: { type: 'string', maxLength: 50_000 } }, ['level', 'request_key']),
+  }, async (r) => learningWorkflow.unlockHint(r.params.id, r.body.level, r.body.request_key, r.body.current_draft_text ?? ''));
+
+  app.post<{ Params: { id: string }; Body: { action: 'try_more' | 'direct_explanation' | 'clarify'; request_key: string; current_draft_text?: string } }>('/api/learning/attempts/:id/step5/action', {
+    schema: body({ action: { enum: ['try_more', 'direct_explanation', 'clarify'] }, request_key: str, current_draft_text: { type: 'string', maxLength: 50_000 } }, ['action', 'request_key']),
+  }, async (r) => learningWorkflow.recordStep5Interaction(r.params.id, r.body.action, r.body.request_key, r.body.current_draft_text ?? ''));
+
+  app.post<{ Params: { id: string }; Body: { concept_check_answer: string } }>('/api/learning/attempts/:id/step6/complete', {
+    schema: body({ concept_check_answer: { type: 'string', minLength: 1, maxLength: 2000 } }),
+  }, async (r) => learningWorkflow.completeStep6(r.params.id, r.body.concept_check_answer));
+
+  app.post<{ Params: { id: string }; Body: { request_key: string } }>('/api/learning/attempts/:id/start-7a', {
+    schema: body({ request_key: str }),
+  }, async (r) => learningWorkflow.startStep7A(r.params.id, r.body.request_key));
+
+  app.get('/api/learning/progress', async () => learningWorkflow.progressView());
+  app.get('/api/learning/settings', async () => ({
+    goal: learningWorkflow.getGoal(),
+    gateway: await gatewayStatus(),
+    privacy_and_rights_note: 'Mọi dữ liệu học tập được lưu cục bộ trong SQLite + kho JSON bất biến. AI thật đang bị khóa bởi Gateway (chờ D-01); không có dữ liệu bài làm hay âm thanh nào được gửi ra ngoài.',
+  }));
   return app;
 }

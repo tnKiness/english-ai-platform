@@ -9,6 +9,9 @@ export interface FakeQcScript {
   blindAnswers?: Record<string, string>;
   verdict?: 'consistent' | 'conflict' | 'ambiguous';
   competing?: { question_id: string; answer: string; rationale: string }[];
+  /** Tùy chọn ghi đè hoặc kiểm thử luồng chấm Writing/Repair synthetic (mặc định tự suy từ nội dung bài nộp). */
+  writingOutcome?: 'met' | 'not_met' | 'inconclusive';
+  repairOutcome?: 'met' | 'not_met' | 'inconclusive';
 }
 
 const ERRORS: ProviderError[] = ['QUOTA_EXHAUSTED', 'RATE_LIMIT', 'AUTH_EXPIRED', 'BILLING_UNVERIFIED', 'NETWORK', 'TIMEOUT', 'INVALID_SCHEMA', 'REFUSAL', 'CAPABILITY_MISSING', 'CANCELLED'];
@@ -49,7 +52,11 @@ export class FakeAdapter implements ProviderAdapter {
     if (job.task_type === 'reading.verify') {
       return { ...base, verdict: this.qc.verdict ?? 'consistent', competing_answers: this.qc.competing ?? [], findings: ['Synthetic fixture verification; not a real audit.'] };
     }
-    return { ...base, processing: 'processed', outcome: 'inconclusive', evidence_refs: [], limitations: ['Synthetic fixture; not a learner assessment.'] };
+    const text = typeof context.payload.submission_text === 'string' ? context.payload.submission_text : '';
+    const scripted = job.task_type === 'repair.assess' ? this.qc.repairOutcome : this.qc.writingOutcome;
+    const outcome = scripted
+      ?? (text.includes('[SYNTHETIC_MET]') ? 'met' : text.includes('[SYNTHETIC_NOT_MET]') ? 'not_met' : 'inconclusive');
+    return { ...base, processing: 'processed', outcome, evidence_refs: text ? ['submission:paragraph_1'] : [], limitations: ['Synthetic fixture; not a learner assessment.'] };
   }
   normalizeResult(raw: unknown, taskType: TaskType = 'writing.assess'): AdapterResult {
     if (typeof raw !== 'object' || raw === null) return { ok: false, error: 'INVALID_SCHEMA' };
