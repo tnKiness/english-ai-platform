@@ -1,4 +1,7 @@
 import Fastify from 'fastify';
+import { ReadingWorkflow } from '../application/learning/reading-workflow.js';
+import type { ReadingAnswer } from '../domain/learning/reading.js';
+import { AudioWorkflow, AUDIO_MAX_BYTES } from '../application/learning/audio-workflow.js';
 import { LearningWorkflowService } from '../application/learning/writing-workflow.js';
 import { ConsoleService } from '../application/qc/console.js';
 import type { BuilderPipeline } from '../application/qc/pipeline.js';
@@ -63,6 +66,55 @@ export function createApp(deps: AppDeps = {}) {
   const consoleService = new ConsoleService({ units: store.builder, json: store.json, items: queries, learning: store.learning, queue: store.queue,
     transaction: (fn) => store.builder.transaction(fn), contextPolicyVersion: 'context-policy-1' });
   const learningWorkflow = new LearningWorkflowService(store);
+  const reading = new ReadingWorkflow(store);
+  const audio = new AudioWorkflow(store);
+  app.addHook('preHandler', async (request, reply) => {
+    const match = /^\/api\/learning\/attempts\/([^/?]+)/.exec(request.url);
+    if (match && store.db.prepare('SELECT attempt_id FROM reading_sessions WHERE attempt_id=? UNION SELECT attempt_id FROM audio_sessions WHERE attempt_id=?')
+      .get(decodeURIComponent(match[1]!), decodeURIComponent(match[1]!))) {
+      return reply.code(409).send({ error: 'USE_SKILL_WORKFLOW' });
+    }
+  });
+  app.addHook('onSend', async (request, reply) => {
+    if (request.url.startsWith('/api/learning/')) reply.header('cache-control', 'no-store');
+  });
+  app.get('/api/learning/reading', async () => reading.catalog());
+  app.get('/api/learning/audio', async () => audio.list());
+  app.post<{ Body: { request_key: string } }>('/api/learning/audio', { schema: body({ request_key: str }) }, async (r) => audio.start(r.body.request_key));
+  app.get<{ Params: { id: string } }>('/api/learning/audio/:id', async (r) => audio.view(r.params.id));
+  app.post<{ Params: { id: string }; Body: { request_key: string; data: string; media_type: string } }>('/api/learning/audio/:id/recordings', {
+    bodyLimit: Math.ceil(AUDIO_MAX_BYTES * 4 / 3) + 1024,
+    schema: body({ request_key: str, data: { type: 'string', maxLength: Math.ceil(AUDIO_MAX_BYTES * 4 / 3) }, media_type: { enum: ['audio/wav', 'audio/webm', 'audio/ogg'] } }),
+  }, async (r) => audio.upload(r.params.id, r.body.request_key, r.body.data, r.body.media_type));
+  app.get<{ Params: { id: string; recording: string } }>('/api/learning/audio/:id/recordings/:recording', async (r, reply) => {
+    const out = audio.playback(r.params.id, r.params.recording);
+    return reply.header('x-content-type-options', 'nosniff').type(out.type).send(out.data);
+  });
+  app.post<{ Params: { id: string }; Body: { content: string } }>('/api/learning/audio/:id/autosave', {
+    schema: body({ content: { type: 'string', maxLength: 20_000 } }),
+  }, async (r) => audio.saveDraft(r.params.id, r.body.content));
+  app.post<{ Params: { id: string }; Body: { recording_id: string; request_key: string; content: string } }>('/api/learning/audio/:id/transcripts', {
+    schema: body({ recording_id: str, request_key: str, content: { type: 'string', minLength: 1, maxLength: 20_000 } }),
+  }, async (r) => audio.transcript(r.params.id, r.body.recording_id, r.body.request_key, r.body.content));
+  app.post<{ Params: { id: string }; Body: { transcript_id: string } }>('/api/learning/audio/:id/review-text', {
+    schema: body({ transcript_id: str }),
+  }, async (r) => audio.review(r.params.id, r.body.transcript_id));
+  app.post<{ Body: { item_id: string; version: string; mode: Mode; request_key: string } }>('/api/learning/reading', {
+    schema: body({ item_id: str, version: str, mode: { enum: ['guided', 'self_practice', 'exam'] }, request_key: str }),
+  }, async (r) => reading.start(r.body.item_id, r.body.version, r.body.mode, r.body.request_key));
+  app.get<{ Params: { id: string } }>('/api/learning/reading/:id', async (r) => reading.view(r.params.id));
+  app.post<{ Params: { id: string }; Body: { content: string } }>('/api/learning/reading/:id/autosave', {
+    schema: body({ content: { type: 'string', maxLength: 50_000 } }),
+  }, async (r) => reading.save(r.params.id, r.body.content));
+  app.post<{ Params: { id: string }; Body: { request_key: string; answers: ReadingAnswer[] } }>('/api/learning/reading/:id/submit', {
+    schema: body({ request_key: str, answers: { type: 'array', maxItems: 100, items: {
+      type: 'object', additionalProperties: false, required: ['question_id', 'answer', 'rationale'],
+      properties: { question_id: str, answer: { type: 'string', maxLength: 500 }, rationale: { type: 'string', maxLength: 2000 } },
+    } } }),
+  }, async (r) => reading.submit(r.params.id, r.body.request_key, r.body.answers));
+  app.post<{ Params: { id: string }; Body: { level: number } }>('/api/learning/reading/:id/hints', {
+    schema: body({ level: { type: 'integer', minimum: 1, maximum: 3 } }),
+  }, async (r) => reading.unlock(r.params.id, r.body.level));
   const gatewayStatus = deps.gatewayStatus ?? (() => gatewayFor(store).status());
 
   // Tab 1 "Gói tri thức": metadata, QC status and grants only — no unit content in list responses.

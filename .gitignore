@@ -13,3 +13,4 @@ test-results/
 *.sqlite
 *.log
 *.tsbuildinfo
+.tmp-p3/

@@ -7,7 +7,7 @@ Cập nhật: 20/10/2026 — Asia/Bangkok.
 - P0 hoàn tất: skeleton Node/TypeScript/React/Vite/Fastify, schema v1 (15 definition), state guard, fake adapter, spike Windows runner và SQLite backup. Chi tiết: [P0_ACCEPTANCE](docs/engineering/P0_ACCEPTANCE.md), [P0_DATA_AND_STATE](docs/engineering/P0_DATA_AND_STATE.md), [README](README.md).
 - P1 hoàn tất ở mức thư viện có integration test SQLite thật: migrations, JSON/media bất biến, repositories, Rule Engine thuần, queue lease/fencing/retry/cancel, backup/restore phối hợp. Chi tiết: [P1_ACCEPTANCE](docs/engineering/P1_ACCEPTANCE.md), quyết định E-07.
 - P2 BLOCKED chờ D-01: đã có 6 đầu ra Phần 5, pipeline staging + QC1–4, phát hành đúng hash, thu hồi lan truyền + cache, gateway chặn thực thi khi thiếu căn cứ, session/CSRF, Console 3 tab, worker/backup CLI. Chi tiết: [P2_ACCEPTANCE](docs/engineering/P2_ACCEPTANCE.md).
-- P3 IN_PROGRESS: đã xong P3-1 (khung học 5 màn, 3 chế độ guided/self_practice/exam, autosave server qua session/CSRF), P3-2 (vòng Writing khép kín với FakeAdapter + nội dung synthetic, xếp lịch 7B/Bước 9 và Opportunity-to-Use, giữ giới hạn D-02), P3-3 (gợi mở theo nấc chỉ lưu server, cắt quyền trước truy xuất, assistance_events idempotent, chỉ bản sửa mới mới kích hoạt chấm lại). Chi tiết: [P3_ACCEPTANCE](docs/engineering/P3_ACCEPTANCE.md), quyết định E-18. Còn thiếu P3-4 (Reading giải mù + audio mẫu) và đánh giá bằng adapter thật sau D-01. Chưa có hồ sơ năng lực được duyệt (chờ D-02) hay AI thật.
+- P3 hoàn tất phần lát cắt học trên gói synthetic: P3-1 (khung học 5 màn, 3 chế độ guided/self_practice/exam, autosave server qua session/CSRF), P3-2 (vòng Writing khép kín với FakeAdapter + nội dung synthetic, xếp lịch 7B/Bước 9 và Opportunity-to-Use, giữ giới hạn D-02), P3-3 (gợi mở theo nấc chỉ lưu server, cắt quyền trước truy xuất, assistance_events idempotent, chỉ bản sửa mới mới kích hoạt chấm lại), P3-4 (Reading trong luồng học: chỉ cấp item đã qua QC4 + phát hành, đáp án cạnh tranh hợp lệ, Not Given đúng nghĩa, cắt quyền HTTP payload trước Nấc 3, thu hồi ngừng cấp phát ngay; Audio mẫu cục bộ theo D-06/E-11: thu/phát vào kho media có SHA-256, ASR unavailable, transcript người học tách biệt với audio gốc, không bao giờ gửi `learner_audio` vào job AI). Chi tiết: [P3_ACCEPTANCE](docs/engineering/P3_ACCEPTANCE.md), quyết định E-18, E-19. Chưa bật báo điểm Band hay hồ sơ năng lực chính thức (chờ D-02, D-05) và chưa chọn ASR/chấm phát âm (chờ D-06).
 - Git: nhánh `main` theo dõi [tnKiness/english-ai-platform](https://github.com/tnKiness/english-ai-platform); commit đầu `68a8557` (P0) đã push. `.gitattributes` chuẩn hóa LF.
 - Chưa đủ điều kiện bật adapter thật (D-01/D-04) hay công bố sẵn sàng sử dụng.
 - Phương án triển khai và ranh giới module: [PROJECT_STRUCTURE](docs/engineering/PROJECT_STRUCTURE.md). Kế hoạch chi tiết: [IMPLEMENTATION_PLAN](docs/engineering/IMPLEMENTATION_PLAN.md).
@@ -20,7 +20,7 @@ Cập nhật: 20/10/2026 — Asia/Bangkok.
 | TOOL-01 | Relay AI lập trình chuyển nền tảng khi hết quota | DONE | scripts/relay, tests/unit/relay.test.ts; chuyển codex → agy thật đạt; Claude CLI cần đăng nhập lại |
 | P1 | Nền dữ liệu, Rule Engine, queue | DONE | P1_ACCEPTANCE; `npm.cmd run check` 107/107 tests, spike 6/6; giới hạn: chưa API ghi/worker entrypoint/hồ sơ năng lực (D-02) |
 | P2 | Builder/QC + một adapter thật đủ điều kiện | DONE | P2_ACCEPTANCE (mục "QC thật bằng Codex"); D-01 đóng cho Codex (READY); QC1–QC4 thật trên gói synthetic → release → revoke có truy vết (`npm.cmd run qc:real`); check 217/217. Còn mở: D-01 cho claude-code/agy; QC2/QC3 ngữ nghĩa vẫn là xác nhận của người/AI lập trình trên nội dung synthetic |
-| P3 | Vòng Writing + Reading giải mù + audio mẫu | IN_PROGRESS | Đã xong P3-1…P3-3 với FakeAdapter + nội dung synthetic ([P3_ACCEPTANCE](docs/engineering/P3_ACCEPTANCE.md), `tests/integration/p3-learning.test.ts` 8/8 ca đạt; bộ test P0–P3 183/183 đạt); còn thiếu P3-4 (Reading giải mù + audio mẫu), đánh giá bằng adapter thật (D-01) và chính sách ngưỡng năng lực (D-02) |
+| P3 | Vòng Writing + Reading giải mù + audio mẫu | DONE | [P3_ACCEPTANCE](docs/engineering/P3_ACCEPTANCE.md) (E-18, E-19); P3-1…P3-4 đầy đủ trên gói synthetic (`tests/integration/p3-learning.test.ts` 5/5, `tests/integration/p3-reading.test.ts` 4/4; bộ test P0–P3 187/187 trong sandbox agy; lint/typecheck/build đạt). Phụ thuộc người dùng vẫn mở đúng quy định: D-02 (chính sách ngưỡng năng lực/Band), D-05 (gói nội dung thật & bộ đối chứng), D-06 (công cụ ASR/chấm phát âm) |
 | P4 | Chịu lỗi, adapter bổ sung, đối chứng | TODO | Chưa triển khai |
 | P5 | Mở rộng, daily tracking, tối ưu | TODO | Chưa triển khai |
 
@@ -39,7 +39,7 @@ Trạng thái hợp lệ: TODO / IN_PROGRESS / BLOCKED / DONE. DONE cần đư�
 Các mục trên thuộc DOC-01. Kiểm tra của P0 ghi trong nhật ký bàn giao P0 bên dưới.
 
 ## Việc tiếp theo
-Người dùng đã đăng nhập Codex trong profile riêng, ghi xác nhận extra usage và thu báo cáo thật; xác nhận gói Plus trong chat. E-13 phát hiện probe chỉ chứng minh phản hồi/từ chối lệnh, chưa chứng minh ranh giới đọc. E-14 đã có collector `probe-boundary`; E-15 (người dùng chốt) và E-16/E-17 (áp dụng) đã có code và ranh giới đọc OS đã PASS (`var/ai/probe-boundary-codex-2026-10-20T09-20-11-520Z.json`). Bước tiếp theo cho D-01/P2: chạy lại `verify` sau khi hết hạn mức ChatGPT, xác nhận gói/model trong evidence, `evidence … --boundary …`, consent, status; sau D-01 mới chạy QC4/QC2–3 bằng provider đó trên gói synthetic và xét P2 DONE. Ở P3: đã hoàn tất P3-1 (khung học), P3-2 (vòng Writing với FakeAdapter) và P3-3 (gợi mở theo nấc); bước tiếp theo của P3 là P3-4 (Reading giải mù + kiểm tra dẫn chứng + audio mẫu nội bộ theo D-06). Speaking giai đoạn đầu chỉ hỗ trợ văn bản (E-11). Hồ sơ năng lực/chuyển mức chờ policy D-02; nội dung gói thật chờ D-05.
+P0–P3 đã hoàn tất phần code và nghiệm thu trên gói synthetic (D-01 đã đóng cho Codex READY; `npm.cmd run qc:real` đã chạy QC1–4 thật). Bước tiếp theo theo kế hoạch là **P4 (Chịu lỗi, adapter bổ sung, đối chứng)**: hoàn tất bộ ca lỗi bắt buộc 04 §6.C / 06 §6.A.4 / 06A §10.B, xác minh D-01 riêng cho `claude-code`/`agy` nếu muốn bật failover đa hãng, kiểm tra khiếu nại/tái đánh giá/thu hồi hai chiều. Các điểm phụ thuộc quyết định nghiệp vụ của người dùng vẫn giữ mở: D-02 (bảng policy ngưỡng năng lực/Band), D-05 (nội dung thật & bộ đối chứng trước khi bật báo Band), D-06 (chọn công cụ ASR/TTS local).
 
 ## Nhật ký bàn giao
 ### 19/10/2026 — DOC-01
@@ -294,7 +294,49 @@ Người dùng đã đăng nhập Codex trong profile riêng, ghi xác nhận ex
 - Phát hiện của Codex khi đối chiếu: phần giải thích q1 trong fixture synthetic ghi "paragraph two" trong khi dẫn chứng nằm ở câu thứ hai — lỗi nhỏ của nội dung synthetic, chưa sửa.
 - `npm.cmd run check` 217/217.
 
+### 20/10/2026 — P3-4 Reading trong luồng học + Audio mẫu cục bộ + Nghiệm thu P3 / DONE
+- Ngày / mã công việc / trạng thái: 20/10/2026 — P3 (hoàn tất P3-4 và nghiệm thu P3-1…P3-4) — `DONE`.
+- Nguồn yêu cầu và quyết định áp dụng: IMPLEMENTATION_PLAN P3 bước 4; đặc tả 03 (§2 Speaking/Listening, §3 Reading), 04 (§2 giải mù/đối chiếu, cắt quyền trước truy xuất), 05 (§5–7 QC1–4, phát hành, thu hồi), 06 (§2.3, §5.B kho media cục bộ, §6); DECISIONS E-07, E-08, E-10, E-11 (Speaking dạng văn bản + không gửi `learner_audio`), E-18, quyết định triển khai mới E-19; giữ mở D-02, D-05, D-06.
+- File đã sửa và hành vi đã có thật (tiếp nối lượt Codex bị dừng vì QUOTA và hoàn tất kiểm thử + nghiệm thu):
+  1. **Mục 1 — Reading trong luồng học:**
+     - `migrations/0005_reading.sql`, `src/domain/learning/reading.ts`, `src/application/learning/reading-workflow.ts`, `src/server/app.ts` (`/api/learning/reading*`), `src/web/reading.tsx`, `scripts/seed-reading.ts`, `tests/fixtures/knowledge/reading-p3.ts`.
+     - Chỉ cấp phát gói synthetic `active` có `release_manifest` đạt `QC4 PASS` và quyền `practice`; đáp án cạnh tranh chưa phân giải làm `QC4 FAIL` và bị chặn phát hành.
+     - Đọc đề qua `scopedReader('blind_solver')` + `blindTaskView`; chấm câu hỏi bằng `scoreReading` theo key đã ghim (`key_hash`), chấp nhận đáp án cạnh tranh hợp lệ đã ghi nhận trước QC (`spring` / `in spring`), xử lý `NOT GIVEN` đúng nghĩa; `diagnostic_value` giữ `'inconclusive'`, `band_reporting_enabled: false`.
+     - Trước khi nộp và ở Nấc 1–2, server không mở khối `answer_key` (`knowledge`) và HTTP payload (`Cache-Control: no-store`) không chứa đáp án/giải thích/mục tiêu đo; mở Nấc 3 ghi `assistance_events` và `exposure` (`answer` + `explanation`), chặn ở chế độ `exam`; thu hồi (`revoke`) chặn ngay việc mở lại, nộp hoặc tạo lượt mới.
+  2. **Mục 2 — Audio mẫu cục bộ (D-06 vẫn mở, E-11):**
+     - `migrations/0006_audio_samples.sql`, `src/application/learning/audio-workflow.ts`, `src/server/app.ts` (`/api/learning/audio*`), `src/web/audio.tsx`.
+     - Kiểm tra magic bytes container (`audio/wav` RIFF/WAVE, `audio/webm`, `audio/ogg`, tối đa 8 MiB), lưu bản gốc (`original`) và bản thu lại (`retake`) vào kho media cục bộ (P1) có SHA-256, phát lại kèm `X-Content-Type-Options: nosniff` và `Cache-Control: no-store`.
+     - Cổng `ASR` để trạng thái `{ status: 'unavailable', transcript: null }` (chưa chọn công cụ theo D-06). Các phiên bản transcript do người học tự nhập/chỉnh (`source = 'learner_entered'`) lưu bất biến theo `revision`, tách biệt với bản thu gốc.
+     - Luồng nhận định Speaking dạng văn bản (`/review-text`) chỉ nạp văn bản vào `submitForAssessment` (`media_id = null`, `allowed_resource_ids = []`, `required_capabilities = ['text', 'structured_result']`), trả `SPEAKING_LIMITATION` ("Không có audio trực tiếp trong đánh giá… Không báo Band Speaking") và `band_reporting_enabled: false`; kết hợp `subscriptionGuard` chặn cứng `DATA_CLASS_NEVER_SENT_learner_audio`.
+  3. **Mục 3 — Kiểm thử E2E/integration & Nghiệm thu P3:**
+     - `tests/integration/p3-reading.test.ts` (4 ca: Reading blind HTTP + đáp án cạnh tranh + Not Given + gợi mở theo nấc + đóng/mở lại DB; exam + CSRF + revoke; đáp án cạnh tranh chưa phân giải chặn ở QC4; Audio mẫu cục bộ: từ chối file giả, lưu original/retake có SHA-256, phát lại nosniff, ASR unavailable, transcript tách biệt, không gửi `learner_audio` vào context/job AI + guard E-11 + đóng/mở lại DB).
+     - Cập nhật `tests/integration/p1-persistence.test.ts` và `p1-backup.test.ts` (số migration 4 → 6).
+     - Đồng bộ tài liệu nghiệm thu và kiến trúc: `docs/engineering/P3_ACCEPTANCE.md` (mapping đầy đủ P3-1…P3-4), `docs/engineering/DECISIONS.md` (thêm E-19), `docs/engineering/IMPLEMENTATION_PLAN.md`, `docs/engineering/PROJECT_STRUCTURE.md`, `README.md`.
+- Lệnh kiểm tra / kết quả / môi trường / giới hạn (Windows 11, Node 22.18.0, npm 10.9.3, chạy trong sandbox headless của Antigravity):
+  - `npm.cmd run lint`: exit 0 (0 lỗi).
+  - `npm.cmd run typecheck`: exit 0 (0 lỗi).
+  - `npx.cmd vitest run tests/integration/p3-reading.test.ts tests/integration/p3-learning.test.ts`: **9/9 tests đạt** (2 file: Reading + Audio 4/4, Writing + Khung học 5/5).
+  - `npx.cmd vitest run tests/contract tests/unit tests/spikes tests/integration/server.test.ts tests/integration/p1-persistence.test.ts tests/integration/p1-queue.test.ts tests/integration/p1-backup.test.ts tests/integration/p2-pipeline.test.ts tests/integration/p2-gateway.test.ts tests/integration/p2-console.test.ts tests/integration/p3-learning.test.ts tests/integration/p3-reading.test.ts`: **187/187 tests đạt** (21 file).
+  - `npm.cmd run build`: exit 0 (`tsc -p tsconfig.build.json && vite build` đạt).
+  - Giới hạn môi trường sandbox: như đã ghi ở các lượt trước, 3 file test công cụ P2/TOOL-02 (`relay-console.test.ts`, `probe-boundary.test.ts` và 1 ca junction trong `p2-e11.test.ts` — 12/13 ca còn lại của `p2-e11.test.ts` đạt) cần socket TCP loopback hoặc `mklink /J` / `powershell` ngoài repo bị sandbox Windows của CLI chặn; không có bất kỳ file nào thuộc relay hay gateway D-01 bị sửa trong lượt này.
+- Điểm còn thiếu, quyết định mới, bước tiếp theo:
+  - Quyết định mới: **E-19** trong `docs/engineering/DECISIONS.md`.
+  - Phụ thuộc người dùng vẫn giữ mở (đúng quy định không tự bịa ngưỡng/công cụ): D-02 (chính sách ngưỡng năng lực/Band), D-05 (gói nội dung thật & bộ đối chứng), D-06 (chọn công cụ ASR/TTS).
+  - Bước tiếp theo: P4 (Chịu lỗi, adapter bổ sung, đối chứng).
+
+### 20/10/2026 — P3-4 qua relay (Codex → Antigravity) — kiểm lại độc lập
+- Relay `--order codex,agy` (không dùng Claude theo yêu cầu người dùng): Codex làm ~15 phút rồi hết hạn mức ("try again at Oct 21st, 2026 3:26 AM"), relay chuyển sang agy, agy báo DONE (Reading trong luồng học, audio mẫu cục bộ, nghiệm thu P3; migration 0005/0006, E-19).
+- Kiểm lại ngoài sandbox: `npm.cmd run check` 222/222 (gồm test relay mới). Thay đổi nhạy cảm đã xem: `job-queue.ts` thêm lọc `jobId` tùy chọn khi claim; fixture synthetic chỉ thêm kiểu; `.gitignore` thêm `.tmp-p3/`.
+- Sửa relay: `parseResetTime` đọc dạng ngày "at Oct 21st, 2026 3:26 AM" (trước đó rơi về cooldown mặc định 1 giờ → 00:14). Đã chỉnh `var/relay/state.json` của codex về 03:26 21/10/2026.
+- Giới hạn: "E2E" của P3 là test HTTP tích hợp; chưa kiểm giao diện thật trên trình duyệt. P3 DONE trên nội dung synthetic; vận hành thật chờ D-02/D-05/D-06.
+
 ### Mẫu cho lượt code tiếp theo
+- 20/10/2026 — P3-4 mục 1 Reading: triển khai xong; kiểm tra toàn bộ PARTIAL do môi trường sandbox.
+- Nguồn: 03 §3–4, 04 §2, 05 §5–7, IMPLEMENTATION_PLAN P3-4; D-02/D-05 vẫn mở.
+- Code: migration 0005, `domain/learning/reading.ts`, `application/learning/reading-workflow.ts`, routes `/api/learning/reading`, `web/reading.tsx`, `scripts/seed-reading.ts`, fixture `reading-p3.ts`. Chỉ cấp bản synthetic active có manifest QC4 PASS/practice; dùng scoped-reader/blindTaskView; accepted alternatives được đưa vào key trước QC, cạnh tranh chưa phân giải bị P2 chặn. Gốc/sửa cùng evidence source; đúng câu không xác nhận năng lực hay lý giải tự sửa. Nấc 1–2 không có key, nấc 3 ghi assistance/exposure; exam chặn; revoke chặn cả đọc lại/nộp/retry; HTTP no-store.
+- Lệnh thực tế: `npm.cmd run check` lần 1 dừng typecheck (kiểu fixture `never[]`, đã sửa); lần 2 lint/typecheck đạt, 180/220 tests đạt, 40 lỗi chủ yếu EPERM lstat AppData của TEMP. Đổi TEMP/TMP chỉ cho tiến trình test sang `C:\Code\study-english\.tmp-p3` (gitignored, không thay quyền/sandbox): check đạt lint/typecheck, 199/220 tests; 21 lỗi ở p2-gateway/p2-e11/probe-boundary do fixture profile nằm trong repo nên guard `RUNNER_DIR_INSIDE_REPO` chặn đúng. Không sửa các guard hoặc test được bảo vệ.
+- `npx.cmd vitest run tests/integration/p3-reading.test.ts tests/integration/p3-learning.test.ts` với TEMP trên: 8/8 đạt (Reading 3, Writing 5); `npm.cmd run build` đạt. Chưa tuyên bố full check PASS. Tiếp tục phần audio độc lập; cổng full check cần môi trường TEMP được phép đọc ngoài repo.
+
 - Ngày / mã công việc / trạng thái:
 - Nguồn yêu cầu và quyết định áp dụng:
 - File đã sửa và hành vi đã có thật:

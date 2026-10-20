@@ -111,7 +111,7 @@ export class SqliteJobQueue implements JobQueuePort {
       if (this.db.prepare("SELECT 1 FROM ai_jobs WHERE state IN ('RUNNING', 'VALIDATING') LIMIT 1").get()) return null;
       const scopes = options.scopes ?? ['learner', 'dry_run'];
       const job = this.db.prepare(`SELECT * FROM ai_jobs WHERE state = 'QUEUED' AND available_at <= ? AND scope IN (${scopes.map(() => '?').join(', ')})
-        ORDER BY available_at, created_at LIMIT 1`).get(now, ...scopes) as JobRow | undefined;
+        AND (? IS NULL OR job_id = ?) ORDER BY available_at, created_at LIMIT 1`).get(now, ...scopes, options.jobId ?? null, options.jobId ?? null) as JobRow | undefined;
       if (!job) return null;
       if (remainingExecutions(job) <= 0) { this.setState(job, 'FAILED', 'EXECUTION_BUDGET_EXHAUSTED'); return null; }
       const generation = job.generation + 1;

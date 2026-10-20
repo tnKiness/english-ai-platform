@@ -11,7 +11,7 @@ async function session(): Promise<string> {
 
 async function parse<T>(r: Response): Promise<T> {
   const data: unknown = await r.json().catch(() => ({}));
-  if (!r.ok && r.status !== 409) throw new Error((data as { message?: string; error?: string }).message ?? (data as { error?: string }).error ?? `HTTP ${r.status}`);
+  if (!r.ok && (r.status !== 409 || (typeof data === 'object' && data !== null && 'error' in data))) throw new Error((data as { message?: string; error?: string }).message ?? (data as { error?: string }).error ?? `HTTP ${r.status}`);
   return data as T;
 }
 

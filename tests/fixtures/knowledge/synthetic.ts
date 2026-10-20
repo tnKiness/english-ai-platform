@@ -70,7 +70,7 @@ export function answerKey(version = 'v1', itemVersion = 'v1') {
         { question_id: 'q2', accepted: ['NOT GIVEN'], explanation: 'SYNTHETIC-KEY: membership size is never stated', evidence_locator: 'stimulus sentence 3' },
       ],
       measurement_targets: ['syn.reading.tfng.contradiction'],
-      competing_answers_considered: [],
+      competing_answers_considered: [] as string[],
     },
   };
 }

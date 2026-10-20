@@ -23,7 +23,8 @@
     "ai": "tsx src/cli/ai.ts",
     "worker": "tsx src/worker/main.ts",
     "backup": "tsx src/cli/backup.ts",
-    "qc:real": "tsx scripts/qc-real-synthetic.ts"
+    "qc:real": "tsx scripts/qc-real-synthetic.ts",
+    "seed:reading": "tsx scripts/seed-reading.ts"
   },
   "dependencies": {
     "ajv": "8.20.0",

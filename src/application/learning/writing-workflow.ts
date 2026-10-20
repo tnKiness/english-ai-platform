@@ -308,7 +308,7 @@ export class LearningWorkflowService {
 
     // Bài đang làm dở (DRAFT, SUBMITTED, REPAIRING) của scope learner để tiếp tục ngay.
     const inProgress = this.store.db.prepare(`SELECT attempt_id, item_id, item_version, mode, purpose, state, updated_at
-      FROM attempts WHERE scope = 'learner' AND state IN ('DRAFT', 'SUBMITTED', 'REPAIRING') ORDER BY updated_at DESC`).all() as {
+      FROM attempts WHERE scope = 'learner' AND attempt_id NOT IN (SELECT attempt_id FROM reading_sessions UNION SELECT attempt_id FROM audio_sessions) AND state IN ('DRAFT', 'SUBMITTED', 'REPAIRING') ORDER BY updated_at DESC`).all() as {
       attempt_id: string; item_id: string; item_version: string; mode: Mode; purpose: Purpose; state: string; updated_at: string;
     }[];
 
@@ -401,6 +401,7 @@ export class LearningWorkflowService {
   startAttempt(input: { request_key: string; item_id?: string; item_version?: string; rubric_id?: string; rubric_version?: string; mode: Mode; purpose: Purpose; task_id?: string; competency_id?: string }): AttemptWorkspaceView {
     this.ensureSyntheticWritingCatalog();
     const itemId = input.item_id ?? SYNTHETIC_ITEM_LESSON_ID;
+    if (!SYNTHETIC_ITEMS.some((m) => m.id === itemId)) throw Object.assign(new Error('Unsupported Writing item'), { statusCode: 409 });
     const itemVersion = input.item_version ?? 'v1';
     const rubricId = input.rubric_id ?? SYNTHETIC_WRITING_RUBRIC_ID;
     const rubricVersion = input.rubric_version ?? 'v1';

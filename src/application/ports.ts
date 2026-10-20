@@ -60,7 +60,7 @@ export type CommitOutcome =
 
 export type RunProvider = 'fake' | CliProvider;
 /** P2: a fake-only worker restricts itself to dry-run scope so synthetic output never reaches learner evidence. */
-export interface ClaimOptions { scopes?: Scope[]; cli_version?: string | null; model?: string | null }
+export interface ClaimOptions { scopes?: Scope[]; cli_version?: string | null; model?: string | null; jobId?: string }
 
 export interface JobQueuePort {
   enqueue(job: NewJob): JobRecord;
