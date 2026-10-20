@@ -8,7 +8,7 @@ import {
   PROVIDERS, applyFailure, buildPrompt, decideOutcome, earliestReset, emptyState, pickProvider, subscriptionEnv,
   type Handoff, type ProviderId, type RelayState,
 } from './core.js';
-import { providerSpecs } from './providers.js';
+import { DEFAULT_MODELS, providerSpecs } from './providers.js';
 import { runCli } from './run-process.js';
 
 const ROOT = resolve(import.meta.dirname, '..', '..');
@@ -71,7 +71,8 @@ function preflight(order: ProviderId[]): Set<ProviderId> {
     const spec = specs[id];
     const check = spec.checkSubscription(env);
     const mark = check.ok === false ? 'CHẶN' : check.ok === null ? 'CHƯA XÁC MINH GÓI' : 'OK';
-    console.log(`${id.padEnd(7)} ${mark.padEnd(18)} ${check.detail}${spec.bin ? `  [${spec.bin}]` : ''}`);
+    const m = DEFAULT_MODELS[id]; const model = 'effort' in m ? `${m.model}/${m.effort}` : m.model;
+    console.log(`${id.padEnd(7)} ${mark.padEnd(18)} ${model.padEnd(24)} ${check.detail}${spec.bin ? `  [${spec.bin}]` : ''}`);
     if (check.ok !== false) ok.add(id);
   }
   return ok;

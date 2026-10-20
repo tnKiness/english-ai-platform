@@ -37,6 +37,14 @@ function run(bin: string, args: string[], env: NodeJS.ProcessEnv) {
   return { code: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}`.trim() };
 }
 
+// Default model per provider (user choice 20/10/2026): Opus 5.5 Medium → GPT-6 Astra Medium → Gemini 4 Argon Medium.
+// Override with RELAY_<PROVIDER>_MODEL / RELAY_<PROVIDER>_EFFORT.
+export const DEFAULT_MODELS = {
+  claude: { model: process.env.RELAY_CLAUDE_MODEL ?? 'claude-opus-5-5', effort: process.env.RELAY_CLAUDE_EFFORT ?? 'medium' },
+  codex: { model: process.env.RELAY_CODEX_MODEL ?? 'gpt-6-astra', effort: process.env.RELAY_CODEX_EFFORT ?? 'medium' },
+  agy: { model: process.env.RELAY_AGY_MODEL ?? 'gemini-4-argon-medium' }, // agy encodes effort in the model id
+} as const;
+
 const READ_TOOLS = ['Read', 'Glob', 'Grep'];
 const WORK_TOOLS = [...READ_TOOLS, 'Edit', 'Write', 'Bash(npm.cmd run:*)', 'Bash(npm run:*)', 'Bash(npx.cmd tsx:*)',
   'Bash(git status:*)', 'Bash(git diff:*)', 'Bash(git log:*)', 'Bash(node --version)'];
@@ -50,7 +58,7 @@ export function providerSpecs(): Record<ProviderId, ProviderSpec> {
           '--permission-mode', mode === 'work' ? 'acceptEdits' : 'default',
           '--allowedTools', ...(mode === 'work' ? WORK_TOOLS : READ_TOOLS),
           '--disallowedTools', 'Bash(git commit:*)', 'Bash(git push:*)',
-          ...(process.env.RELAY_CLAUDE_MODEL ? ['--model', process.env.RELAY_CLAUDE_MODEL] : [])],
+          '--model', DEFAULT_MODELS.claude.model, '--effort', DEFAULT_MODELS.claude.effort],
         stdin: prompt,
       }),
       checkSubscription(env) {
@@ -67,7 +75,7 @@ export function providerSpecs(): Record<ProviderId, ProviderSpec> {
       id: 'codex', label: 'Codex (ChatGPT)', bin: firstExisting(process.env.RELAY_CODEX_BIN, newestCodex(), where('codex.exe')[0]),
       invocation: (_prompt, { cwd, mode, lastMessageFile }) => ({
         args: ['exec', '--sandbox', mode === 'work' ? 'workspace-write' : 'read-only', '-C', cwd, '--color', 'never',
-          '-o', lastMessageFile, ...(process.env.RELAY_CODEX_MODEL ? ['-m', process.env.RELAY_CODEX_MODEL] : []), '-'],
+          '-o', lastMessageFile, '-m', DEFAULT_MODELS.codex.model, '-c', `model_reasoning_effort="${DEFAULT_MODELS.codex.effort}"`, '-'],
         stdin: _prompt, lastMessageFile,
       }),
       checkSubscription(env) {
@@ -81,7 +89,7 @@ export function providerSpecs(): Record<ProviderId, ProviderSpec> {
       id: 'agy', label: 'Antigravity (Gemini)', bin: firstExisting(process.env.RELAY_AGY_BIN, join(LOCAL, 'agy', 'bin', 'agy.exe'), where('agy.exe')[0]),
       invocation: (prompt, { mode }) => ({
         args: ['-p', prompt, '--output-format', 'text', '--sandbox', '--mode', mode === 'work' ? 'accept-edits' : 'plan',
-          ...(process.env.RELAY_AGY_MODEL ? ['--model', process.env.RELAY_AGY_MODEL] : [])],
+          '--model', DEFAULT_MODELS.agy.model],
         stdin: null,
       }),
       checkSubscription(env) {
