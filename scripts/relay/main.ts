@@ -116,7 +116,7 @@ async function relay(order: ProviderId[], task: TaskFile) {
     }
     const spec = specs[id];
     say(`\n=== [${local(now)}] Lượt ${runs + 1}/${maxRuns}: ${spec.label} ===`);
-    const run = await execute({ provider: id, spec, prompt: buildPrompt(task.task, task.handoffs), mode: 'work',
+    const run = await execute({ provider: id, spec, prompt: [buildPrompt(task.task, task.handoffs), spec.promptNote].filter(Boolean).join('\n\n'), mode: 'work',
       userLabel: `${title}${task.handoffs.length ? ` (tiếp nối lần ${task.handoffs.length})` : ''}`, timeoutMs, env, signal: abort.signal,
       onEvent: (e) => { if (e.kind === 'progress' && !values.quiet) console.log(`  ${e.text}`); } });
     if (abort.signal.aborted) { save('STOPPED'); return 130; }

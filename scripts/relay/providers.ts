@@ -11,6 +11,8 @@ export interface ProviderSpec {
    * `resume` continues that native session of the same CLI (verified 20/10/2026 for agy; claude/codex per --help).
    */
   invocation(prompt: string, opts: { cwd: string; mode: 'work' | 'read'; lastMessageFile: string; resume?: string | null }): Invocation;
+  /** Provider-specific rules appended to every prompt (e.g. which tools work headless). */
+  promptNote?: string;
   /** Proves the CLI is logged in through a subscription, not an API key. null = cannot be checked. */
   checkSubscription(env: NodeJS.ProcessEnv): { ok: boolean | null; detail: string };
 }
@@ -98,6 +100,14 @@ export function providerSpecs(): Record<ProviderId, ProviderSpec> {
       },
     },
     agy: {
+      // agy -p aborts the whole turn on the first shell command that has no allow rule (seen 20/10/2026), so steer it to
+      // its own file tools and to exactly the commands allowed in ~/.gemini/antigravity-cli/settings.json.
+      promptNote: [
+        '## Quy tắc công cụ cho Antigravity (chế độ headless)',
+        'Duyệt và đọc file bằng công cụ có sẵn: list_dir, find_by_name, grep_search, view_file; sửa bằng replace_file_content, multi_replace_file_content, write_to_file.',
+        'run_command CHỈ dùng cho đúng các lệnh: `npm.cmd run check|lint|typecheck|test|build|spike` (có thể thêm tham số), `npx.cmd vitest ...`, `npx.cmd tsc ...`, `git status|diff|log|show ...`, `node --version`.',
+        'Không dùng Get-ChildItem, Get-Content, Select-String, cat, ls, dir, pipe `|`, `;`, `&&` hay lệnh nào khác: lệnh ngoài danh sách bị từ chối và làm dừng cả lượt.',
+      ].join('\n'),
       id: 'agy', label: 'Antigravity (Gemini)', bin: firstExisting(process.env.RELAY_AGY_BIN, join(LOCAL, 'agy', 'bin', 'agy.exe'), where('agy.exe')[0]),
       invocation: (prompt, { mode, resume }) => ({
         args: ['-p', prompt, '--output-format', 'stream-json', ...(resume ? ['--conversation', resume] : []), '--sandbox', '--mode', mode === 'work' ? 'accept-edits' : 'plan',

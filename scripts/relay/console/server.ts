@@ -106,7 +106,7 @@ export function createConsole(opts: ConsoleOptions) {
         broadcast('state', {});
         const emit = (e: EngineEvent | { kind: 'error' | 'fallback'; text: string }) => broadcast('run', { threadId, provider: current, ...e });
         appendLive(`\n=== Console · ${specs[current].label} · ${resume ? 'tiếp phiên' : 'phiên mới'} ===`);
-        const run = await execute({ provider: current, spec: specs[current], prompt: buildChatPrompt(message, missed, !resume), mode, resume,
+        const run = await execute({ provider: current, spec: specs[current], prompt: [buildChatPrompt(message, missed, !resume), resume ? '' : specs[current].promptNote].filter(Boolean).join('\n\n'), mode, resume,
           userLabel: message, expectMarker: false, timeoutMs: opts.chatTimeoutMs ?? 60 * 60_000, env, signal: chatAbort.signal,
           onEvent: (e) => { if (e.kind === 'session') touchThread(threadId, { provider: current, sessionId: e.sessionId }); emit(e); } });
         touchThread(threadId);
