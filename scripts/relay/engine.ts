@@ -78,6 +78,8 @@ export interface RunRequest {
   onEvent?: (event: EngineEvent) => void;
   /** Write progress to live.log (off for smoke runs). */
   live?: boolean;
+  /** Relay tasks must end with a RELAY_STATUS marker; a plain chat turn that exits 0 with an answer is complete. */
+  expectMarker?: boolean;
 }
 export interface Execution { outcome: Outcome; facts: StreamFacts; exitCode: number | null; seconds: number }
 
@@ -116,8 +118,9 @@ export async function execute(req: RunRequest): Promise<Execution> {
   // Codex also writes its last message to a file; prefer it when the stream ended without one.
   if (!facts.finalText && inv.lastMessageFile && existsSync(inv.lastMessageFile)) facts.finalText = readFileSync(inv.lastMessageFile, 'utf8');
   facts.sessionId ??= sessionId;
-  const outcome = decideOutcome({ exitCode: r.exitCode, timedOut: r.timedOut, finalText: facts.finalText,
+  let outcome = decideOutcome({ exitCode: r.exitCode, timedOut: r.timedOut, finalText: facts.finalText,
     diagnostics: facts.diagnostics.join('\n'), quota: facts.quota }, new Date());
+  if (req.expectMarker === false && outcome.kind === 'STOP' && r.exitCode === 0 && facts.finalText.trim()) outcome = { kind: 'DONE' };
   if (facts.finalText.trim()) { record('assistant', facts.finalText.trim()); req.onEvent?.({ kind: 'final', text: facts.finalText.trim() }); }
   const label = outcome.kind === 'SWITCH' ? outcome.failure : outcome.kind;
   record('status', `${label} · thoát ${r.exitCode ?? '-'} · ${Math.round((Date.now() - started) / 1000)}s`);

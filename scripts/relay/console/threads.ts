@@ -50,7 +50,8 @@ export function buildChatPrompt(message: string, missed: readonly ThreadEntry[],
   const parts: string[] = [];
   if (isNewSession) {
     parts.push('Bạn đang làm việc trong repository hiện tại qua Relay Console (giao diện chat chung cho Claude Code, Codex và Antigravity).',
-      'Trước khi sửa code: đọc AGENTS.md và tuân thủ. Không commit/push, không dùng cờ bỏ qua sandbox/quyền, không đọc credential.');
+      'Trước khi sửa code: đọc AGENTS.md và tuân thủ. Không commit/push, không dùng cờ bỏ qua sandbox/quyền, không đọc credential.',
+      'Trả lời bằng ngôn ngữ người dùng đang dùng (mặc định tiếng Việt).');
   }
   if (missed.length) {
     let block = missed.map((e) => `[${LABEL[e.provider]} · ${e.role === 'user' ? 'người dùng' : 'AI'}] ${e.text}`).join('\n\n');

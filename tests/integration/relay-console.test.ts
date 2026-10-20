@@ -11,7 +11,7 @@ process.env.RELAY_STATE_DIR = stateDir;
 const { createConsole } = await import('../../scripts/relay/console/server.js');
 
 const fake = resolve('tests/fixtures/fake-relay-cli.mjs');
-const behaviour: Record<ProviderId, 'ok' | 'quota'> = { claude: 'ok', codex: 'ok', agy: 'ok' };
+const behaviour: Record<ProviderId, 'ok' | 'quota' | 'plain'> ={ claude: 'ok', codex: 'ok', agy: 'ok' };
 const spec = (id: ProviderId): ProviderSpec => ({
   id, label: id, bin: process.execPath,
   invocation: (prompt, { resume }) => ({ args: [fake, id, behaviour[id], resume ?? ''], stdin: prompt }),
@@ -91,6 +91,16 @@ describe('Relay Console chat', () => {
     const after = (await call(`/api/thread?id=${r.body.threadId}`)).body;
     expect(after.thread.segments).toHaveLength(2);
     expect(after.entries.filter((e: { role: string }) => e.role === 'assistant').at(-1).text).toContain('missed=true|resumed=true');
+  });
+
+  it('treats a normal chat answer without RELAY_STATUS as a completed turn (seen live 20/10: it was logged as STOP)', async () => {
+    behaviour.codex = 'plain';
+    const r = await call('/api/chat', { json: { provider: 'codex', message: 'câu thường', mode: 'read' } });
+    await idle();
+    const t = (await call(`/api/thread?id=${r.body.threadId}`)).body;
+    expect(t.entries.at(-1)).toMatchObject({ role: 'status' });
+    expect(t.entries.at(-1).text).toMatch(/^DONE/);
+    behaviour.codex = 'ok';
   });
 
   it('refuses a second writer while a run holds the lock', async () => {

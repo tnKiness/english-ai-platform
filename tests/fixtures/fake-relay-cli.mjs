@@ -9,7 +9,8 @@ process.stdin.on('data', (c) => { prompt += c; });
 process.stdin.on('end', () => {
   const out = (o) => process.stdout.write(`${JSON.stringify(o)}\n`);
   const last = prompt.trim().split('\n').at(-1);
-  const answer = `echo:${last}|missed=${prompt.includes('Trong lúc bạn vắng')}|resumed=${Boolean(resume)}\nRELAY_STATUS: DONE`;
+  // 'plain' answers like a normal chat turn, without the relay's RELAY_STATUS marker.
+  const answer = `echo:${last}|missed=${prompt.includes('Trong lúc bạn vắng')}|resumed=${Boolean(resume)}${behaviour === 'plain' ? '' : '\nRELAY_STATUS: DONE'}`;
   if (provider === 'claude') {
     out({ type: 'system', subtype: 'init', session_id: sid, model: 'fake' });
     out({ type: 'assistant', session_id: sid, message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: 'package.json' } }] } });
