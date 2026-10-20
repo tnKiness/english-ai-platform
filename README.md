@@ -4,6 +4,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-22-339933?logo=node.js&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-217%20passing-brightgreen)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
 A local-first **IELTS learning system** that uses AI to build study material and give feedback — designed so the AI can never see answer keys it shouldn't, never leak credentials, and never claim a band score it can't justify.
 
@@ -100,4 +101,4 @@ scripts/        tooling, incl. a relay that hands coding tasks between AI coding
 
 ## Author
 
-Built by [@tnKiness](https://github.com/tnKiness).
+Built by [@tnKiness](https://github.com/tnKiness). Licensed under the [MIT License](LICENSE).
