@@ -1,6 +1,6 @@
 # Cấu trúc triển khai
 
-Trạng thái: P0 đã triển khai khung theo quyết định kỹ thuật E-05 ngày 19/10/2026. Cây bên dưới vẫn là cây đích toàn dự án; chỉ tạo các module thực sự có code. Hiện có domain/jobs, application/ai/context, infrastructure/ai/contracts, server, web, contracts, tests và scripts; chưa có worker bền vững/migrations/policies.
+Trạng thái: P0 đã triển khai khung theo quyết định kỹ thuật E-05 ngày 19/10/2026. Cây bên dưới vẫn là cây đích toàn dự án; chỉ tạo các module thực sự có code. Hiện có domain/{jobs,evidence,knowledge,learning,scheduling}, application/{ai,context,learning} + ports.ts, infrastructure/{ai,contracts,files,sqlite,backup}, worker (bước xử lý + vòng lặp, chưa có entrypoint thường trực), migrations, server, web, contracts, tests và scripts (P1, E-07); chưa có policies/ vì chưa có chính sách sư phạm được duyệt (D-02).
 
 ## Phương án mặc định cho P0
 TypeScript cho web/backend/worker; React + Vite cho web, Node.js + Fastify cho backend; SQLite và JSON Schema cho hợp đồng. npm với một lockfile; Vitest cho unit/integration. P0 đã khóa dependency trong package.json/package-lock.json và kiểm chứng better-sqlite3 13.0.3 với Node 22.18.0 trên Windows (transaction/online backup/restore). Playwright dự kiến ở giai đoạn luồng UI, chưa cài ở P0. Audio local có thể cần tiến trình Python riêng qua adapter, chưa bắt buộc công cụ cụ thể.

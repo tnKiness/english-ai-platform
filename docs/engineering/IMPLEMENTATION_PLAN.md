@@ -52,17 +52,17 @@ Ngày lập: 19/10/2026. Đây là kế hoạch, không phải báo cáo đã tr
 **Đạt khi:** gói mở rộng đáp ứng 8 câu nghiệm thu Phần 5; lịch không gây nợ phút hoặc tự hạ năng lực; restore thực nghiệm thành công.
 
 ## Mapping yêu cầu → phần triển khai → nghiệm thu
-Các đường dẫn module dưới đây là đích dự kiến; bổ sung file/test thật khi code.
-| ID | Nguồn | Module dự kiến | Điều kiện quan sát |
-|---|---|---|---|
-| R-01 | 01 §1–5; 02 §2–3 | domain/evidence, competencies | Xem lời giải/tự sửa không thành độc lập; một nguồn không tăng tin cậy lặp |
-| R-02 | 02 §5; 06A §9 | domain/scheduling | Lọc trước xếp hạng; nghỉ học không hạ năng lực; proposal cũ không commit |
-| R-03 | 03 §1–3 | domain/learning; application/workflows | Phạm vi Writing, audio/ASR, NG, nấc hỗ trợ đúng giới hạn |
-| R-04 | 04 §2; 05 §6 | application/context | Blind context, payload UI, cache không lộ đáp án/mục tiêu ẩn |
-| R-05 | 04 §4–5; 06 §5 | infrastructure/sqlite; application/jobs | Idempotency, fencing, retry budgets, pinning và tái đánh giá |
-| R-06 | 05 §5,7–8; 06 §3–4 | application/qc; infrastructure/files | QC đúng hash, revocation, exposure dùng chung, dry-run riêng |
-| R-07 | 06A §3–8 | infrastructure/ai; worker | Subscription-only, isolation, timeout, 12 ca lỗi bắt buộc |
-| R-08 | 06 §2,5 | web; infrastructure/backup | Autosave/reload, backup DB+JSON+media và restore |
+Các đường dẫn module dưới đây là đích dự kiến; bổ sung file/test thật khi code. Chi tiết P1: [P1_ACCEPTANCE](P1_ACCEPTANCE.md).
+| ID | Nguồn | Module dự kiến | Điều kiện quan sát | Code/test thật (đến P1) |
+|---|---|---|---|---|
+| R-01 | 01 §1–5; 02 §2–3 | domain/evidence, competencies | Xem lời giải/tự sửa không thành độc lập; một nguồn không tăng tin cậy lặp | P1: `src/domain/evidence/*`; tests/unit/rule-engine, p1-queue (re-evaluation). Hồ sơ năng lực chờ D-02 |
+| R-02 | 02 §5; 06A §9 | domain/scheduling | Lọc trước xếp hạng; nghỉ học không hạ năng lực; proposal cũ không commit | P1 phần lọc: `src/domain/scheduling/eligibility.ts`, `markOverdue`; xếp hạng/proposal chưa làm |
+| R-03 | 03 §1–3 | domain/learning; application/workflows | Phạm vi Writing, audio/ASR, NG, nấc hỗ trợ đúng giới hạn | P1 nền: `src/domain/learning/*`, `signal.ts`; luồng kỹ năng là P3 |
+| R-04 | 04 §2; 05 §6 | application/context | Blind context, payload UI, cache không lộ đáp án/mục tiêu ẩn | P0 `blind-context.ts`; P1 manifest assessor không chứa đáp án (p1-queue) |
+| R-05 | 04 §4–5; 06 §5 | infrastructure/sqlite; application/jobs | Idempotency, fencing, retry budgets, pinning và tái đánh giá | P1: `src/infrastructure/sqlite/job-queue.ts`, `src/worker/worker.ts`, `src/domain/jobs/budget.ts`; tests/integration/p1-queue |
+| R-06 | 05 §5,7–8; 06 §3–4 | application/qc; infrastructure/files | QC đúng hash, revocation, exposure dùng chung, dry-run riêng | P1: `src/infrastructure/files/*`, `knowledge-repository.ts`, revocation/novelty; p1-persistence. QC là P2 |
+| R-07 | 06A §3–8 | infrastructure/ai; worker | Subscription-only, isolation, timeout, 12 ca lỗi bắt buộc | P1: worker timeout/cancel/fencing với FakeAdapter (ca 2, 6, 7, 8 ở mức fake); adapter thật P2 |
+| R-08 | 06 §2,5 | web; infrastructure/backup | Autosave/reload, backup DB+JSON+media và restore | P1: `src/infrastructure/backup/backup.ts`; tests/integration/p1-backup. Autosave UI là P3 |
 
 ## Quy tắc nhận việc
 Mỗi lượt chọn một hạng mục đủ nhỏ để nghiệm thu, ghi mã P/R trong PROGRESS. Không coi làm xong giao diện là xong nghiệp vụ. Không bỏ cổng lỗi để chạy demo; không cần chờ toàn sản phẩm hoàn chỉnh mới kiểm thử lát cắt.

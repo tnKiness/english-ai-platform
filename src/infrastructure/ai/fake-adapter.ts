@@ -1,18 +1,32 @@
 import type { AdapterResult, Assessment, Context, Job, ProviderAdapter, ProviderError } from '../../application/ai/provider-adapter.js';
 import { validateContract } from '../contracts/validate.js';
 
+export type FakeScenario = 'success' | 'malformed' | ProviderError;
+/** One scripted execution; `delayMs` simulates a slow or hung provider and is cut short by cancel(). */
+export interface FakeStep { scenario: FakeScenario; delayMs?: number }
+
 export class FakeAdapter implements ProviderAdapter {
   private cancelled = new Set<string>();
-  constructor(private scenario: 'success' | 'malformed' | ProviderError = 'success') {}
+  private wake = new Map<string, () => void>();
+  private steps: FakeStep[];
+  readonly executed: string[] = [];
+  constructor(script: FakeScenario | FakeStep[] = 'success') {
+    this.steps = Array.isArray(script) ? [...script] : [{ scenario: script }];
+  }
   async inspectAuth() { return { authenticated: false, synthetic: true }; }
   async inspectEntitlement() { return { verified: false, billing: 'unverified' as const, synthetic: true }; }
   async readQuotaIfSupported() { return { remaining: null, observed_at: new Date().toISOString(), source: 'fake:no-provider-observation' }; }
-  async cancel(runId: string) { this.cancelled.add(runId); }
+  async cancel(runId: string) { this.cancelled.add(runId); this.wake.get(runId)?.(); }
   async execute(runId: string, job: Job, context: Context): Promise<unknown> {
+    this.executed.push(runId);
+    // The last step repeats, so a single scenario behaves like the P0 adapter.
+    const step = (this.steps.length > 1 ? this.steps.shift() : this.steps[0]) ?? { scenario: 'success' };
+    if (step.delayMs) await new Promise<void>((resolve) => { const t = setTimeout(resolve, step.delayMs); this.wake.set(runId, () => { clearTimeout(t); resolve(); }); });
+    this.wake.delete(runId);
     if (this.cancelled.has(runId)) return { error: 'CANCELLED' };
     if (context.manifest_id !== job.context_manifest_id) return { error: 'INVALID_SCHEMA' };
-    if (this.scenario === 'malformed') return 'not JSON';
-    if (this.scenario !== 'success') return { error: this.scenario };
+    if (step.scenario === 'malformed') return 'not JSON';
+    if (step.scenario !== 'success') return { error: step.scenario };
     return { result: { schema_version: '1', job_id: job.job_id, context_manifest_id: context.manifest_id,
       processing: 'processed', outcome: 'inconclusive', evidence_refs: [],
       limitations: ['Synthetic fixture; not a learner assessment.'], synthetic: true } };

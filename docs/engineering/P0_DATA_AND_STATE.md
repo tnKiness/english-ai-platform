@@ -1,6 +1,6 @@
 # P0 — Hợp đồng dữ liệu, trạng thái và phục hồi
 
-Ngày: 19/10/2026. Quyết định triển khai E-05; nguồn: 02 §2–5, 04 §2/4/5, 05 §4–6, 06 §5, 06A §5–10. Đây là thiết kế logic và schema v1, **chưa có migrations hoặc queue bền vững P1**.
+Ngày: 19/10/2026. Quyết định triển khai E-05; nguồn: 02 §2–5, 04 §2/4/5, 05 §4–6, 06 §5, 06A §5–10. Đây là thiết kế logic và schema v1. **Cập nhật 20/10/2026:** P1 đã hiện thực các bảng, khóa, trạng thái và transaction boundaries dưới đây trong `migrations/0001_core.sql` và `src/infrastructure/sqlite/*` (E-07, [P1_ACCEPTANCE](P1_ACCEPTANCE.md)); attempt/release có persistence, profile và proposal vẫn chỉ là thiết kế.
 
 ## ERD logic
 ```mermaid
