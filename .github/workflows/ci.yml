@@ -20,14 +20,13 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
-      # better-sqlite3 13 always compiles from source; the node-gyp bundled with
-      # npm 10.9 cannot detect the runner's Visual Studio 2026, so use a current one.
-      - name: Use current node-gyp
-        shell: bash
-        run: |
-          npm install -g node-gyp@latest
-          echo "npm_config_node_gyp=$(npm root -g)/node-gyp/bin/node-gyp.js" >> "$GITHUB_ENV"
-      - run: npm ci
+      # better-sqlite3 13 always compiles from source, and the node-gyp bundled with
+      # npm 10.9 cannot detect the runner's Visual Studio 2026. Install without scripts,
+      # then build the native module with a current node-gyp.
+      - run: npm ci --ignore-scripts
+      - name: Build better-sqlite3
+        working-directory: node_modules/better-sqlite3
+        run: npx --yes node-gyp@12.4.0 rebuild --release
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
