@@ -34,14 +34,15 @@ function evidence(over: Partial<ProviderEvidence> = {}): ProviderEvidence {
     entitlement: { plan: 'synthetic', applies_to_cli: true, source: 'synthetic', checked_at: NOW.toISOString(), expect_pattern: 'v' },
     extra_usage: { disabled_confirmed: true, confirmed_at: NOW.toISOString(), next_confirmation_due: '2026-11-20T00:00:00.000Z' },
     models_allowed: ['synthetic-model'],
-    isolation: { mechanism: 'CLAUDE_CONFIG_DIR', file_scope_test: { passed: true, cases: ['absolute_path', 'dotdot', 'symlink_junction', 'inherited_config', 'plugins_hooks'], run_at: NOW.toISOString(),
-      method: 'enforced_boundary', enforcement_evidence_ref: 'synthetic fixture only: not real CLI evidence' }, plugins_disabled: true },
+    isolation: { mechanism: 'CLAUDE_CONFIG_DIR', file_scope_test: { passed: true, cases: ['absolute_path', 'dotdot', 'symlink_junction'], run_at: NOW.toISOString(),
+      method: 'enforced_boundary', enforcement_evidence_ref: 'synthetic fixture only: not real CLI evidence',
+      config_cases: ['inherited_config', 'plugins_hooks'], config_method: 'config_inspection' }, plugins_disabled: true },
     process_control: { timeout_cancel_test_passed: true, run_at: NOW.toISOString() },
     output_contract: { envelope_verified: true, test_passed: true, run_at: NOW.toISOString() },
     capabilities: ['text', 'structured_result'], ...over,
   };
 }
-const okObserved: GuardInput['observed'] = { cli_version: 'synthetic-1.0', entrypoint_sha256: nodeSha, entrypoint_issues: [], auth_subscription: true, entitlement_verified: true, isolation_issues: [] };
+const okObserved: GuardInput['observed'] = { cli_version: 'synthetic-1.0', entrypoint_sha256: nodeSha, entrypoint_issues: [], auth_subscription: true, entitlement_verified: true, isolation_issues: [], enforcement_issues: [] };
 const guardInput = (over: Partial<GuardInput> = {}): GuardInput => ({
   provider: 'claude-code', adapter_status: 'VERIFIED', account: { state: 'READY' }, evidence: evidence(), observed: okObserved, env: { leaked_billing_names: [] },
   job: { billing_policy: 'subscription_only', required_capabilities: ['text'], data_classes: ['synthetic_fixture'], model: 'synthetic-model' },
@@ -77,7 +78,11 @@ describe('subscriptionGuard (06A §8, D-01)', () => {
       ['EXTRA_USAGE_NOT_CONFIRMED_OFF', { evidence: evidence({ extra_usage: { disabled_confirmed: false, confirmed_at: NOW.toISOString(), next_confirmation_due: '2027-01-01T00:00:00.000Z' } }) }],
       ['EXTRA_USAGE_CONFIRMATION_OVERDUE', { now: new Date('2026-12-01T00:00:00.000Z') }],
       ['PLUGINS_NOT_DISABLED', { evidence: evidence({ isolation: { ...evidence().isolation, plugins_disabled: false } }) }],
-      ['FILE_SCOPE_TEST_INCOMPLETE:symlink_junction', { evidence: evidence({ isolation: { ...evidence().isolation, file_scope_test: { passed: true, cases: ['absolute_path', 'dotdot', 'inherited_config', 'plugins_hooks'], run_at: NOW.toISOString() } } }) }],
+      ['FILE_SCOPE_TEST_INCOMPLETE:symlink_junction', { evidence: evidence({ isolation: { ...evidence().isolation, file_scope_test: { ...evidence().isolation.file_scope_test, cases: ['absolute_path', 'dotdot'] } } }) }],
+      // E-15 (3): config cases never count as an OS boundary, and need the config_inspection method.
+      ['FILE_SCOPE_TEST_INCOMPLETE:inherited_config,plugins_hooks', { evidence: evidence({ isolation: { ...evidence().isolation, file_scope_test: { ...evidence().isolation.file_scope_test,
+        cases: ['absolute_path', 'dotdot', 'symlink_junction', 'inherited_config', 'plugins_hooks'], config_cases: undefined } } }) }],
+      ['FILE_SCOPE_TEST_INCOMPLETE:inherited_config,plugins_hooks', { evidence: evidence({ isolation: { ...evidence().isolation, file_scope_test: { ...evidence().isolation.file_scope_test, config_method: undefined } } }) }],
       ['CLI_VERSION_CHANGED_SINCE_VERIFICATION', { observed: { ...okObserved, cli_version: 'synthetic-2.0' } }],
       ['ENTRYPOINT_CHANGED_SINCE_VERIFICATION', { observed: { ...okObserved, entrypoint_sha256: 'b'.repeat(64) } }],
       ['ENTRYPOINT_SHIM_OR_SCRIPT', { observed: { ...okObserved, entrypoint_issues: ['SHIM_OR_SCRIPT'] } }],

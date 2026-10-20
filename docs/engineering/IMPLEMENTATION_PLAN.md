@@ -66,6 +66,6 @@ Các đường dẫn module dưới đây là đích dự kiến; bổ sung file
 | R-08 | 06 §2,5 | web; infrastructure/backup | Autosave/reload, backup DB+JSON+media và restore | P1: `src/infrastructure/backup/backup.ts`; tests/integration/p1-backup. Autosave UI là P3 |
 
 ## Quy tắc nhận việc
-R-07 / E-13: `verify-codex.ts` tách quan sát phản hồi khỏi bằng chứng ranh giới đọc; `subscription-guard.ts` từ chối evidence cũ/model_reply/thiếu tham chiếu thực thi. Hồi quy: `tests/integration/p2-e11.test.ts` (không dùng tool, tool bị policy chặn, rò rỉ, lỗi/empty) và `p2-gateway.test.ts` (legacy/method/reference). Chưa có collector kiểm chứng quyền đọc độc lập trên runner thật; P2 vẫn BLOCKED D-01.
+R-07 / E-13: `verify-codex.ts` tách quan sát phản hồi khỏi bằng chứng ranh giới đọc; `subscription-guard.ts` từ chối evidence cũ/model_reply/thiếu tham chiếu thực thi. Hồi quy: `tests/integration/p2-e11.test.ts` (không dùng tool, tool bị policy chặn, rò rỉ, lỗi/empty) và `p2-gateway.test.ts` (legacy/method/reference). E-14: collector `probe-boundary` (`gateway/probe-boundary.ts`, `tests/integration/probe-boundary.test.ts`) và gateway đọc lại báo cáo; probe thật 20/10/2026 FAIL (D01_CODEX_READ_BOUNDARY), P2 vẫn BLOCKED D-01.
 
 Mỗi lượt chọn một hạng mục đủ nhỏ để nghiệm thu, ghi mã P/R trong PROGRESS. Không coi làm xong giao diện là xong nghiệp vụ. Không bỏ cổng lỗi để chạy demo; không cần chờ toàn sản phẩm hoàn chỉnh mới kiểm thử lát cắt.

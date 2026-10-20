@@ -6,7 +6,7 @@ import type { CliProvider } from '../../../application/ai/subscription-guard.js'
 import { runBoundedProcess, type ProcessRequest } from '../bounded-process.js';
 import { buildChildEnv } from './env-allowlist.js';
 import { parseEnvelope, type EnvelopeSpec } from './envelope.js';
-import { createRunSandbox } from './isolation.js';
+import { CODEX_SANDBOX_GROUP, createRunSandbox, grantSandboxGroupRead, type SandboxGrant } from './isolation.js';
 import { DATA_POLICY } from '../../../application/context/scoped-reader.js';
 
 export interface CliDescriptor {
@@ -25,8 +25,41 @@ const unverified = (source: string, format: EnvelopeSpec['format'], result: stri
 /**
  * Codex candidate argv used by `npm run ai -- verify codex` (flags from the relay's codex exec call plus --json;
  * --skip-git-repo-check only lets exec start in the non-git sandbox — it is not a permission bypass). Unverified.
+ * E-14: windows.sandbox="elevated" — probe-boundary 20/10/2026 showed the default sandbox runs model commands under the
+ * user's own token (no ACL can separate it); elevated runs them as CodexSandboxOffline, which ACLs can restrict.
+ * E-15 (2): every model tool that can read, write or reach the network is disabled; data goes through stdin.
  */
-export const CODEX_CANDIDATE_ARGV = ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--color', 'never', '-'];
+/**
+ * E-15 (2): names taken from `codex features list` of codex-cli 0.163.0-alpha.10.2 (20/10/2026); each was checked with
+ * `codex --disable <name> features list` (unknown names exit 1). Only features that are not "removed" are listed.
+ * `unified_exec` stays enabled under --disable on this build: the probe reports it as NOT_EFFECTIVE and keeps blocking.
+ */
+export const CODEX_DISABLED_FEATURES = [
+  'shell_tool', 'unified_exec', 'unified_exec_tty', 'shell_snapshot', 'code_mode_host',
+  'browser_use', 'browser_use_external', 'browser_use_full_cdp_access', 'browser_annotation_api', 'computer_use', 'in_app_browser', 'in_app_local_automation',
+  'apps', 'plugins', 'remote_plugin', 'plugin_sharing', 'hooks', 'skill_mcp_dependency_install', 'skill_search', 'tool_suggest', 'tool_call_mcp_elicitation',
+  'multi_agent', 'image_generation', 'view_image', 'workspace_dependencies', 'worktrees', 'memories', 'standalone_web_search',
+] as const;
+
+export const CODEX_CANDIDATE_ARGV = ['exec', '--json', '--sandbox', 'read-only', '-c', 'windows.sandbox="elevated"',
+  ...CODEX_DISABLED_FEATURES.flatMap((f) => ['--disable', f]), '--skip-git-repo-check', '--color', 'never', '-'];
+
+/**
+ * E-15 (2): problems with the tool-disable part of a recorded Codex argv. Every required feature needs its own
+ * `--disable`; anything that re-enables a feature (--enable, -c features.*=true) is refused.
+ */
+export function codexToolDisableIssues(argv: string[]): string[] {
+  const disabled = new Set<string>();
+  const issues: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--disable') disabled.add(argv[++i] ?? '');
+    else if (argv[i] === '--enable') issues.push(`FEATURE_ENABLED:${argv[++i] ?? ''}`);
+    else if ((argv[i] === '-c' || argv[i] === '--config') && /^features\./.test(argv[i + 1] ?? '')) issues.push(`FEATURE_CONFIG_OVERRIDE:${argv[++i]}`);
+  }
+  const missing = CODEX_DISABLED_FEATURES.filter((f) => !disabled.has(f));
+  if (missing.length) issues.push(`TOOLS_NOT_DISABLED:${missing.join(',')}`);
+  return issues;
+}
 
 export const CLI_DESCRIPTORS: Record<CliProvider, CliDescriptor> = {
   'claude-code': {
@@ -54,6 +87,8 @@ export const CLI_DESCRIPTORS: Record<CliProvider, CliDescriptor> = {
 /** Issued by the gateway per run after subscriptionGuard passed; carries only verified, recorded values. */
 export interface ExecutionPermit {
   provider: CliProvider; entrypoint: string; argv: string[]; envelope: EnvelopeSpec; profileEnv: Record<string, string>;
+  /** Per-run sandbox root; the enforced_boundary report was collected under this same root. */
+  sandboxRoot: string;
   timeoutMs: number; maxOutputBytes: number; model: string; cli_version: string;
 }
 
@@ -61,7 +96,9 @@ export class CliProviderAdapter implements ProviderAdapter {
   private permits = new Map<string, ExecutionPermit>();
   private envelopes = new Map<string, EnvelopeSpec>();
   private aborts = new Map<string, AbortController>();
-  constructor(readonly descriptor: CliDescriptor, private run: (r: ProcessRequest) => Promise<{ stdout: string; code: number | null }> = runBoundedProcess) {}
+  constructor(readonly descriptor: CliDescriptor, private run: (r: ProcessRequest) => Promise<{ stdout: string; code: number | null }> = runBoundedProcess,
+    /** Test seam for the Codex sandbox-group grant on per-run dirs (default: icacls, E-17). */
+    private sandboxGrant?: SandboxGrant) {}
 
   /** Gateway-only: allow exactly one execution of runId with these verified parameters. */
   authorize(runId: string, permit: ExecutionPermit): void { this.permits.set(runId, permit); }
@@ -76,7 +113,8 @@ export class CliProviderAdapter implements ProviderAdapter {
     const permit = this.permits.get(runId);
     this.permits.delete(runId);
     if (!permit || permit.provider !== this.descriptor.provider) return { error: 'BILLING_UNVERIFIED' satisfies ProviderError };
-    const sandbox = createRunSandbox(runId.replace(/[^A-Za-z0-9_-]/g, ''), []);
+    const sandbox = createRunSandbox(runId.replace(/[^A-Za-z0-9_-]/g, ''), [], permit.sandboxRoot,
+      this.descriptor.provider === 'codex' ? { grant: this.sandboxGrant ?? grantSandboxGroupRead(CODEX_SANDBOX_GROUP) } : {});
     const abort = new AbortController();
     this.aborts.set(runId, abort);
     try {

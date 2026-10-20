@@ -35,6 +35,9 @@ export interface ProviderEvidence {
       method?: 'model_reply' | 'enforced_boundary';
       /** Reference to independently reviewed enforcement evidence, not model output. */
       enforcement_evidence_ref?: string;
+      /** E-15 (3): inherited_config/plugins_hooks rest on config inspection + disabled tools, never on an OS boundary. */
+      config_cases?: string[];
+      config_method?: 'config_inspection';
     };
     plugins_disabled: boolean;
   };
@@ -49,7 +52,9 @@ export interface GuardInput {
   account: { state: AccountState } | undefined;
   evidence: ProviderEvidence | undefined;
   /** Live observations right before execution (not copied from evidence). */
-  observed: { cli_version: string | null; entrypoint_sha256: string | null; entrypoint_issues: string[]; auth_subscription: boolean | null; entitlement_verified: boolean | null; isolation_issues: string[] };
+  observed: { cli_version: string | null; entrypoint_sha256: string | null; entrypoint_issues: string[]; auth_subscription: boolean | null; entitlement_verified: boolean | null; isolation_issues: string[];
+    /** Re-validation of the referenced enforced_boundary report against this run (E-13); null = not checked. */
+    enforcement_issues: string[] | null };
   env: { leaked_billing_names: string[] };
   /** Latest "extra usage is off" confirmation recorded after the evidence (extra_usage_confirmations), if any. */
   extra_usage_confirmed_at?: string | null;
@@ -63,6 +68,10 @@ export type GuardDecision = { allowed: true } | { allowed: false; error: GuardEr
 
 /** Files a run may not be denied for: case names the file-scope test must cover (QUALITY_AND_DATA case 3, 06A ca 11). */
 export const FILE_SCOPE_CASES = ['absolute_path', 'dotdot', 'symlink_junction', 'inherited_config', 'plugins_hooks'] as const;
+/** E-15 (3): cases proven by an enforced OS boundary (`cases`, method enforced_boundary)… */
+export const OS_BOUNDARY_CASES = ['absolute_path', 'dotdot', 'symlink_junction'] as const;
+/** …and cases resting on config inspection + disabled tools (`config_cases`, config_method config_inspection). */
+export const CONFIG_INSPECTION_CASES = ['inherited_config', 'plugins_hooks'] as const;
 /** Flags that bypass the CLI's own safety controls are never acceptable (AGENTS.md, 06A §5.C.4). */
 const BYPASS = /(dangerously|skip-permissions|bypass|--yolo|full-auto|no-sandbox|--bare\b)/i;
 
@@ -98,11 +107,17 @@ export function subscriptionGuard(g: GuardInput): GuardDecision {
     // Chốt 5: plugins/extensions that could call paid services are off.
     if (!e.isolation.plugins_disabled) billing.push('PLUGINS_NOT_DISABLED');
     // D-01 isolation, process control and output contract.
-    const missingCases = FILE_SCOPE_CASES.filter((c) => !e.isolation.file_scope_test.cases.includes(c));
+    const scope = e.isolation.file_scope_test;
+    const configCases = scope.config_method === 'config_inspection' ? scope.config_cases ?? [] : [];
+    const missingCases = [...OS_BOUNDARY_CASES.filter((c) => !scope.cases.includes(c)), ...CONFIG_INSPECTION_CASES.filter((c) => !configCases.includes(c))];
     if (!e.isolation.file_scope_test.passed || missingCases.length > 0) billing.push(`FILE_SCOPE_TEST_INCOMPLETE${missingCases.length ? `:${missingCases.join(',')}` : ''}`);
     if (e.isolation.file_scope_test.method !== 'enforced_boundary' ||
       typeof e.isolation.file_scope_test.enforcement_evidence_ref !== 'string' ||
       !e.isolation.file_scope_test.enforcement_evidence_ref.trim()) billing.push('READ_BOUNDARY_UNVERIFIED');
+    // A reference alone is not evidence: the report must exist and match this binary, profile, workspace and sandbox config.
+    else if (g.observed.enforcement_issues === null || g.observed.enforcement_issues.length > 0) {
+      billing.push('READ_BOUNDARY_UNVERIFIED', ...(g.observed.enforcement_issues ?? ['NOT_CHECKED']).map((i) => `BOUNDARY_${i}`));
+    }
     if (!e.process_control.timeout_cancel_test_passed) billing.push('TIMEOUT_CANCEL_UNVERIFIED');
     if (!e.output_contract.envelope_verified || !e.output_contract.test_passed) billing.push('OUTPUT_CONTRACT_UNVERIFIED');
     for (const c of g.job.required_capabilities) if (!e.capabilities.includes(c)) capability.push(`CAPABILITY_${c}`);

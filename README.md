@@ -28,7 +28,7 @@ npm.cmd run backup -- create       # restore <backup> <thư mục mới> ; promo
 ```
 
 ## Kiểm tra
-E-11 chọn Codex để xác minh D-01 đầu tiên. Hướng dẫn từng lệnh đăng nhập profile CODEX_HOME riêng, xác nhận extra usage (30 ngày), `npm.cmd run ai -- verify codex --profile <dir>`, duyệt evidence và cấp đúng 5 loại dữ liệu ở [P2_ACCEPTANCE](docs/engineering/P2_ACCEPTANCE.md). `verify` gọi prompt synthetic bằng quota thuê bao và chỉ dành cho người dùng tự chạy; test tự động dùng CLI giả. agy thay gemini-cli, vẫn NEEDS_VERIFICATION; learner_audio luôn bị chặn. P2 vẫn BLOCKED cho tới khi có bằng chứng thật và QC thật.
+E-11 chọn Codex để xác minh D-01 đầu tiên. Hướng dẫn từng lệnh đăng nhập profile CODEX_HOME riêng, xác nhận extra usage (30 ngày), `npm.cmd run ai -- verify codex --profile <dir>`, duyệt evidence và cấp đúng 5 loại dữ liệu ở [P2_ACCEPTANCE](docs/engineering/P2_ACCEPTANCE.md). `verify` gọi prompt synthetic bằng quota thuê bao và chỉ dành cho người dùng tự chạy; test tự động dùng CLI giả. Ranh giới đọc file chứng minh bằng `npm.cmd run ai -- probe-boundary codex --profile <dir>` (chạy `codex sandbox`, không gọi model; hướng dẫn và kết quả ở [D01_CODEX_READ_BOUNDARY](docs/engineering/D01_CODEX_READ_BOUNDARY.md)). agy thay gemini-cli, vẫn NEEDS_VERIFICATION; learner_audio luôn bị chặn. P2 vẫn BLOCKED cho tới khi có bằng chứng thật và QC thật.
 
 ```powershell
 npm.cmd run check

@@ -1,5 +1,6 @@
 // Profile isolation and per-run sandbox (06A §3.B, §5.C.3). A clean directory is NOT a read boundary: the guard
 // still requires the recorded file-scope test. These checks only prevent obvious mistakes in layout.
+import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
@@ -32,12 +33,38 @@ export function profileIsolationIssues(runnerDir: string, forbidden: { repo: str
   return issues;
 }
 
-const CONFIG_FILES = /^(AGENTS|CLAUDE|GEMINI)\.md$|^\.(claude|codex|gemini|agy|antigravity|git)$|\.(db|sqlite|db-wal|db-shm)$/i;
+/** D01_CODEX_READ_BOUNDARY: user-created per-run root outside the repo, var/ and the user profile. */
+export const DEFAULT_RUNNER_WORKSPACE = 'C:\\se-runner\\work';
+/** The runner workspace once the user created it; otherwise the old %TEMP% root, which no boundary report matches. */
+export function runnerWorkspace(): string {
+  return existsSync(DEFAULT_RUNNER_WORKSPACE) ? DEFAULT_RUNNER_WORKSPACE : join(tmpdir(), 'study-english-sandbox');
+}
+
+const CONFIG_FILES =/^(AGENTS|CLAUDE|GEMINI)\.md$|^\.(claude|codex|gemini|agy|antigravity|git)$|\.(db|sqlite|db-wal|db-shm)$/i;
 
 export interface RunSandbox { dir: string; tempDir: string; homeDir: string; dispose(): void }
 
+/** Codex's elevated Windows sandbox runs model commands as members of this local group (probe, 20/10/2026). */
+export const CODEX_SANDBOX_GROUP = 'CodexSandboxUsers';
+
+/**
+ * Explicit read grant for the sandbox group on this run's own dirs. E-17 puts an inheritable Deny on the runner root;
+ * Codex does not grant the cwd in read-only mode, so without this the sandbox cannot even start
+ * (CreateProcessWithLogonW 267, seen 20/10/2026). The run dir itself stays denied, so `..` remains blocked.
+ */
+export type SandboxGrant = (dirs: string[]) => void;
+export function grantSandboxGroupRead(group: string, system = process.env.SystemRoot ?? 'C:\\Windows'): SandboxGrant {
+  return (dirs) => {
+    for (const d of dirs) {
+      const r = spawnSync(join(system, 'System32', 'icacls.exe'), [d, '/grant', `${group}:(OI)(CI)(RX)`], { encoding: 'utf8', shell: false, windowsHide: true, timeout: 30_000 });
+      if (r.status !== 0) throw new Error(`SANDBOX_GRANT_FAILED: ${d}: ${(r.stdout + r.stderr).trim().slice(0, 200)}`);
+    }
+  };
+}
+
 /** Fresh empty directory per run holding only the allowed files; refuses config/DB/answer-bank names. */
-export function createRunSandbox(runId: string, files: { name: string; content: string }[], root = join(tmpdir(), 'study-english-sandbox')): RunSandbox {
+export function createRunSandbox(runId: string, files: { name: string; content: string }[], root = join(tmpdir(), 'study-english-sandbox'),
+  opts: { grant?: SandboxGrant } = {}): RunSandbox {
   if (!/^[A-Za-z0-9_-]{1,80}$/.test(runId)) throw new Error('Unsafe run id for sandbox');
   const dir = join(root, runId);
   if (existsSync(dir)) throw new Error('Sandbox already exists for this run');
@@ -45,6 +72,7 @@ export function createRunSandbox(runId: string, files: { name: string; content: 
   const tempDir = join(dir, 'tmp');
   const homeDir = join(dir, 'home');
   for (const d of [work, tempDir, homeDir]) mkdirSync(d, { recursive: true });
+  try { opts.grant?.([work, tempDir, homeDir]); } catch (error) { rmSync(dir, { recursive: true, force: true }); throw error; }
   for (const f of files) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/.test(f.name) || CONFIG_FILES.test(f.name)) throw new Error(`File not allowed in sandbox: ${f.name}`);
     writeFileSync(join(work, f.name), f.content, { flag: 'wx' });

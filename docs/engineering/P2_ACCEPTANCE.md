@@ -45,6 +45,8 @@ Mapping bổ sung E-11/E-12 (kết quả từng lượt trong PROGRESS):
 | 5 | E-11.3 / 03 §2 và IMPLEMENTATION_PLAN P3 | Đối chiếu tài liệu; chỉ hỗ trợ văn bản, không code P3/chấm audio |
 | 6 | D-01 / QUALITY_AND_DATA ca 3–4: `verify-codex.ts`, `bounded-process.ts`, `envelope.ts`, CLI verify | p2-e11 + fake-codex: contained/leaky, empty/failed, API-key login bị chặn trước prompt, timeout/cancel kết thúc root + child, thiếu process table không PASS; runner spike |
 | 7 | E-11 / hướng dẫn Codex bên dưới | Đối chiếu với argv thật của CLI ứng dụng và kiểu ProviderEvidence; chưa chạy CLI Codex thật |
+| E-15/E-16 | E-15 (người dùng chốt) / 06A §5.C.3, §10.B ca 11: `cli-adapters.ts` (`CODEX_DISABLED_FEATURES`, argv 28 `--disable`, `codexToolDisableIssues`), `probe-boundary.ts` (`repo_agents` info, junction → `var/`, `inspectCodexTools`, `inspectCodexConfig`, `config_cases`, schema v2), `verify-codex.ts` (`observations.tools`), `subscription-guard.ts` (3 ca OS + 2 ca `config_inspection`), `gateway.ts` (chặn argv thiếu cờ, kiểm lại cấu hình), `src/cli/ai.ts` | probe-boundary (13 ca): repo/LOCALAPPDATA đọc được vẫn PASS khi đủ cờ; thiếu cờ hoặc `unified_exec` không hiệu lực → LOCALAPPDATA bắt buộc, không có config_cases; cấu hình bẩn liệt kê không lộ giá trị; báo cáo khớp/lệch `--disable`; gateway chặn argv thiếu cờ + AGENTS.md thêm sau probe. p2-gateway: ca cấu hình đặt trong `cases` không được tính. p2-e11: argv verify có 28 cờ, `tools.ok`. Thật 20/10: `features list`, 1 lượt `codex exec` (NO_TOOL), probe FAIL (D01) |
+| E-14 | E-13 / 06A §5.C.3, §10.B ca 11: `gateway/probe-boundary.ts` (collector + `boundaryReportIssues`), `subscription-guard.ts` (`enforcement_issues`), `gateway.ts` (đọc lại báo cáo, permit mang sandboxRoot), `isolation.ts` (`C:\se-runner\work`), `cli-adapters.ts` (argv elevated), `src/cli/ai.ts` (`probe-boundary`, `evidence --boundary`) | tests/integration/probe-boundary (11 ca, fake-codex `sandbox`): PASS/FAIL/INCONCLUSIVE, gợi ý sửa theo danh tính, dọn mồi/junction, không ghi đè, workspace thiếu, argv không tái tạo được, khớp/lệch báo cáo, guard + gateway default observe; probe thật 20/10 FAIL (D01) |
 
 - `npm.cmd run check`: lint, typecheck, 149 tests/15 file, build backend + web đạt.
 - `npm.cmd run ai -- status`, `npm.cmd run worker -- --once` (exit 3), `npm.cmd run worker -- --fake --once`, `npm.cmd run backup -- create`, `npm.cmd run backup -- restore <backup> <scratch>`; HTTP smoke tới `127.0.0.1:4317`: health 200, session cookie đúng thuộc tính, packages 401/200, ghi thiếu CSRF 403, gateway 3 provider BILLING_UNVERIFIED.
@@ -53,7 +55,9 @@ Mapping bổ sung E-11/E-12 (kết quả từng lượt trong PROGRESS):
 
 **Cập nhật E-13:** Đã có lượt Codex thật do người dùng chạy ngày 20/10/2026: login ChatGPT, JSON hợp lệ, timeout/cancel có cây 2 tiến trình. Rà soát log cho thấy các lệnh đọc thử bị `blocked by policy` trước khi thực thi; không đủ để công nhận ranh giới đọc. Profile riêng không có config.toml/MCP/plugin/hook tùy chỉnh trong các vị trí đã kiểm tra; người dùng xác nhận gói Plus. Báo cáo gốc được giữ nguyên trong `var/ai/evidence.json`, chưa nạp thành VERIFIED.
 
-Verifier sau E-13 ghi probe phản hồi là `EXPECTED_REPLY_READ_BOUNDARY_UNVERIFIED`, không báo ĐẠT file-scope và trả exit 2. Gateway chặn báo cáo cũ thiếu phương pháp kiểm chứng bằng `READ_BOUNDARY_UNVERIFIED`, kể cả đã ghi `passed: true`. Cần collector/kiểm tra thực thi độc lập chứng minh phạm vi đọc (gồm ca được phép đọc làm đối chứng, ca ngoài phạm vi và các đường công cụ/cấu hình kế thừa) trên đúng runner trước khi xét `enforced_boundary` và tham chiếu bằng chứng. Chưa có collector đó; không yêu cầu người dùng chạy lại cùng cấu hình hoặc sửa cờ bằng tay. Các bước 4–6 dưới đây chỉ tiếp tục khi điều kiện này được giải quyết.
+Verifier sau E-13 ghi probe phản hồi là `EXPECTED_REPLY_READ_BOUNDARY_UNVERIFIED`, không báo ĐẠT file-scope và trả exit 2. Gateway chặn báo cáo cũ thiếu phương pháp kiểm chứng bằng `READ_BOUNDARY_UNVERIFIED`, kể cả đã ghi `passed: true`.
+
+**Cập nhật E-14:** đã có collector độc lập `npm.cmd run ai -- probe-boundary codex` (chạy `codex sandbox`, không gọi model). Probe thật 20/10/2026: **FAIL** — sandbox mặc định chạy dưới chính tài khoản người dùng và đọc được mọi file mồi; với `windows.sandbox="elevated"` (argv ứng viên mới) chỉ gốc `%USERPROFILE%` bị chặn. Bước file-scope nay là **bước 3b** (thay cho probe file-scope qua model); gateway chỉ hết `READ_BOUNDARY_UNVERIFIED` khi báo cáo PASS khớp entrypoint/version/profile/workspace/cấu hình sandbox. Vì argv đổi theo E-14, evidence cũ (`var/ai/evidence.json`) không còn khớp: cần chạy lại bước 3. Các bước 4–6 chỉ tiếp tục khi 3b PASS.
 
 E-11 chọn **Codex qua ChatGPT** trước. Chạy từ root repository trong **terminal riêng do người dùng mở**, không qua relay. Không đọc/copy file auth, không đưa token/cookie vào evidence. `CODEX_HOME` chỉ là cơ chế ứng viên; `read-only` không giới hạn phạm vi đọc. Nếu probe đọc được bí mật synthetic thì giữ BLOCKED và cần cơ chế giới hạn đọc mạnh hơn trước khi thử lại.
 
@@ -88,7 +92,14 @@ npm.cmd run ai -- verify codex --profile "$codexProfile" --profile-id codex-main
 
 Lệnh không ghi đè file đã có; khi chạy lại dùng tên mới như `var/ai/evidence-2.json`. Nó thực hiện các bước thu thập 1/4/5/6 của quy trình D-01: phiên bản + SHA-256 executable; `codex login status` với đúng CODEX_HOME (chỉ lưu loại đăng nhập); một prompt synthetic quan sát JSONL/envelope; 5 probe absolute path, `..`, junction, AGENTS.md kế thừa, công cụ/plugin/hook; timeout và cancel qua supervisor. Khoảng 8 prompt dùng quota thuê bao, không dùng dữ liệu học. Sandbox và bí mật synthetic được dọn sau khi chạy.
 
-`observations.file_scope` chỉ ghi kết quả probe; tất cả probe dựa trên phản hồi giữ `passed: false`, kể cả không lộ bí mật. Phải đối chiếu cơ chế quyền thực tế: không coi lời từ chối hay không xuất bí mật là chứng minh sandbox chặn đọc. Probe lỗi/empty không được tính đạt. Process-control cần thấy ít nhất root + child và cả hai đã chết; CIM bị từ chối hoặc không thấy child thì giữ chưa đạt, không bỏ qua quyền để chạy. Nếu cần cấu hình argv khác, lưu mảng JSON vào file và truyền `--argv` theo CLI; không dùng cờ bỏ qua sandbox/quyền. Cấu hình thay đổi phải thu bằng chứng lại.
+`observations.file_scope` chỉ ghi kết quả probe qua model (quan sát hành vi, luôn `passed: false`); bằng chứng ranh giới đọc lấy ở bước 3b, không lấy từ đây. Process-control cần thấy ít nhất root + child và cả hai đã chết; CIM bị từ chối hoặc không thấy child thì giữ chưa đạt, không bỏ qua quyền để chạy. Nếu cần cấu hình argv khác, lưu mảng JSON vào file và truyền `--argv` theo CLI; không dùng cờ bỏ qua sandbox/quyền. Cấu hình thay đổi phải thu bằng chứng lại.
+
+3b. **Ranh giới đọc + tắt công cụ + cấu hình (E-13/E-14/E-15)** — làm theo "Phần bạn làm (thứ tự cuối cùng)" trong [D01_CODEX_READ_BOUNDARY](D01_CODEX_READ_BOUNDARY.md), tóm tắt:
+   1. Tạo `C:\se-runner\work` (`New-Item -ItemType Directory -Force C:\se-runner\work | Out-Null`); gateway tự dùng thư mục này khi nó tồn tại.
+   2. `icacls … /deny "CodexSandboxUsers:(OI)(CI)(R)"` lần lượt cho `C:\Code\study-english\var`, `%LOCALAPPDATA%\study-english`, `C:\se-runner` (mỗi lệnh có lệnh hoàn tác `/remove:d CodexSandboxUsers`).
+   3. `npm.cmd run ai -- probe-boundary codex --profile "$codexProfile"` (không gọi model) tới khi `Kết luận ranh giới OS: PASS`, `Công cụ: đã tắt đủ`, `Cấu hình: sạch`. Repo (AGENTS.md) đọc được là chấp nhận (E-15.1); `%LOCALAPPDATA%` còn lại chỉ được chấp nhận khi công cụ tắt đủ (E-15.2). Hiện `unified_exec` không tắt được trên 0.163.0-alpha.10.2 → còn chờ bạn quyết định (D01 "Còn chờ người dùng").
+   4. Không sửa báo cáo bằng tay; gateway đọc lại và so khớp (cả danh sách `--disable` và cấu hình).
+   Vì argv đổi (E-14 + E-15), bước 3 (`verify`) phải chạy lại sau khi 3b đạt; `observations.tools.ok` phải là `true`.
 
 4. Xem báo cáo không bí mật:
 
@@ -99,14 +110,14 @@ notepad var/ai/evidence.json
 Định dạng gồm `evidence: ProviderEvidence`, `envelope`, `observations` và `pending_user_confirmation`. Script **không tự đặt VERIFIED**, không tự xác nhận extra usage, gói hay plugins. Chỉ khi có căn cứ thực tế và mọi ca đạt, người dùng cập nhật:
 
 - `evidence.entitlement.plan`, `source`, `checked_at`, `applies_to_cli: true` theo gói thực tế; `models_allowed` đúng model đã thử.
-- `evidence.isolation.plugins_disabled: true` chỉ sau xác nhận profile không nạp MCP/plugin/hook; giữ bằng chứng cơ chế giới hạn đọc đã kiểm tra. Không sửa ca fail thành pass bằng tay.
+- `evidence.isolation.plugins_disabled: true` chỉ sau xác nhận profile không nạp MCP/plugin/hook. Không sửa `file_scope_test` bằng tay: bước 5 lấy nó từ báo cáo probe PASS.
 - Kiểm tra layout từ `observations.synthetic_run` và `envelope`; bổ sung `error_patterns` từ lỗi thực tế nếu có (không bịa hoặc cố đốt quota). Chỉ khi đúng hợp đồng mới đặt `envelope.status: "VERIFIED"`, `evidence.output_contract.envelope_verified: true`. Lỗi chưa biết vẫn chặn BILLING_UNVERIFIED.
 - Giữ `extra_usage` trong báo cáo ở trạng thái chưa xác nhận; gateway dùng bản ghi người dùng đã tạo ở bước 2. `auth.observed` chỉ có phương thức đăng nhập.
 
-5. Nạp evidence, sau khi gateway công nhận READY mới cấp đúng 5 loại dữ liệu E-11:
+5. Nạp evidence (sau probe PASS và verify mới), sau khi gateway công nhận READY mới cấp đúng 5 loại dữ liệu E-11:
 
 ```powershell
-npm.cmd run ai -- evidence var/ai/evidence.json
+npm.cmd run ai -- evidence var/ai/evidence-2.json --boundary var/ai/probe-boundary-codex-<thời điểm PASS>.json
 npm.cmd run ai -- consent codex approved grant
 npm.cmd run ai -- status
 ```

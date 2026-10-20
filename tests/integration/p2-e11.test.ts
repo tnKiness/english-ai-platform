@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { EXTRA_USAGE_RECONFIRM_MS, subscriptionGuard, USER_APPROVED_DATA_CLASSES, type GuardInput, type ProviderEvidence } from '../../src/application/ai/subscription-guard.js';
 import { validateContract } from '../../src/infrastructure/contracts/validate.js';
 import { parseEnvelope } from '../../src/infrastructure/ai/gateway/envelope.js';
+import { CODEX_DISABLED_FEATURES } from '../../src/infrastructure/ai/gateway/cli-adapters.js';
 import { AiExecutionGateway, type GatewayDeps } from '../../src/infrastructure/ai/gateway/gateway.js';
 import { classifyCodexLogin, verifyCodex, type VerifyCodexOptions } from '../../src/infrastructure/ai/gateway/verify-codex.js';
 import { migrate, openDatabase } from '../../src/infrastructure/sqlite/database.js';
@@ -28,17 +29,19 @@ const VERIFIED = { status: 'VERIFIED' as const, source: 'synthetic', format: 'js
 function evidence(over: Partial<ProviderEvidence> = {}): ProviderEvidence {
   return {
     provider: 'codex', profile_id: 'syn-codex', cli_version: 'synthetic-1.0', entrypoint: { path: process.execPath, sha256: nodeSha, kind: 'native_executable' },
-    argv: [resolve('tests/fixtures/fake-cli.mjs')],
+    // fake-cli ignores its arguments; the --disable list is what the gateway requires of a Codex argv (E-15 (2)).
+    argv: [resolve('tests/fixtures/fake-cli.mjs'), ...CODEX_DISABLED_FEATURES.flatMap((f) => ['--disable', f])],
     auth: { mode: 'subscription_login', observed: 'synthetic', checked_at: NOW.toISOString(), probe_argv: ['--version'], expect_pattern: 'v' },
     entitlement: { plan: 'synthetic', applies_to_cli: true, source: 'synthetic', checked_at: NOW.toISOString(), expect_pattern: 'v' },
     extra_usage: { disabled_confirmed: true, confirmed_at: NOW.toISOString(), next_confirmation_due: '' }, models_allowed: ['synthetic-model'],
-    isolation: { mechanism: 'CODEX_HOME', file_scope_test: { passed: true, cases: ALL_CASES, run_at: NOW.toISOString(),
-      method: 'enforced_boundary', enforcement_evidence_ref: 'synthetic fixture only: not real CLI evidence' }, plugins_disabled: true },
+    isolation: { mechanism: 'CODEX_HOME', file_scope_test: { passed: true, cases: ['absolute_path', 'dotdot', 'symlink_junction'], run_at: NOW.toISOString(),
+      method: 'enforced_boundary', enforcement_evidence_ref: 'synthetic fixture only: not real CLI evidence',
+      config_cases: ['inherited_config', 'plugins_hooks'], config_method: 'config_inspection' }, plugins_disabled: true },
     process_control: { timeout_cancel_test_passed: true, run_at: NOW.toISOString() }, output_contract: { envelope_verified: true, test_passed: true, run_at: NOW.toISOString() },
     capabilities: ['text', 'structured_result'], ...over,
   };
 }
-const observed: GuardInput['observed'] = { cli_version: 'synthetic-1.0', entrypoint_sha256: nodeSha, entrypoint_issues: [], auth_subscription: true, entitlement_verified: true, isolation_issues: [] };
+const observed: GuardInput['observed'] = { cli_version: 'synthetic-1.0', entrypoint_sha256: nodeSha, entrypoint_issues: [], auth_subscription: true, entitlement_verified: true, isolation_issues: [], enforcement_issues: [] };
 const guardInput = (over: Partial<GuardInput> = {}): GuardInput => ({ provider: 'codex', adapter_status: 'VERIFIED', account: { state: 'READY' }, evidence: evidence(), observed,
   env: { leaked_billing_names: [] }, job: { billing_policy: 'subscription_only', required_capabilities: ['text'], data_classes: ['synthetic_fixture'], model: 'synthetic-model' },
   consents: new Set(['synthetic_fixture']), now: NOW, ...over });
@@ -252,7 +255,10 @@ describe('npm run ai -- verify codex (fake codex via node.exe; no inference)', (
       isolation: { mechanism: 'CODEX_HOME', file_scope_test: { passed: false, cases: [], method: 'model_reply' }, plugins_disabled: false },
       process_control: { timeout_cancel_test_passed: true }, output_contract: { envelope_verified: false, test_passed: true },
       extra_usage: { disabled_confirmed: false }, entitlement: { applies_to_cli: false }, auth: { expect_pattern: 'Logged in using ChatGPT' } });
-    expect(e.argv.slice(1)).toEqual(['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '--color', 'never', '-m', 'synthetic-model', '-']);
+    expect(e.argv.slice(1)).toEqual(['exec', '--json', '--sandbox', 'read-only', '-c', 'windows.sandbox="elevated"', ...CODEX_DISABLED_FEATURES.flatMap((x) => ['--disable', x]),
+      '--skip-git-repo-check', '--color', 'never', '-m', 'synthetic-model', '-']);
+    // E-15 (2): the verifier records how the CLI resolves the --disable flags (fixture: all effective).
+    expect(report.observations.tools).toMatchObject({ argv_issues: [], not_effective: [], ok: true });
     expect(report.envelope).toMatchObject({ status: 'NEEDS_VERIFICATION', format: 'jsonl_last_object', result_path: ['item', 'text'], line_select: { path: ['item', 'type'], equals: 'agent_message' } });
     expect(report.pending_user_confirmation.join('\n')).toMatch(/confirm-extra-usage codex off/);
     expect(JSON.stringify(report)).not.toMatch(/SYNTHETIC-SECRET|synthetic-never-passed/);

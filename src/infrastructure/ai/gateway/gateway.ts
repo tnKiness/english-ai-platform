@@ -3,16 +3,19 @@
 import type { AdapterResult, Context, Job, ProviderAdapter, ProviderError, TaskType } from '../../../application/ai/provider-adapter.js';
 import { subscriptionGuard, type AccountState, type Capability, type CliProvider, type DataClass, type GuardDecision, type GuardInput, type ProviderEvidence } from '../../../application/ai/subscription-guard.js';
 import { runBoundedProcess } from '../bounded-process.js';
-import { CLI_DESCRIPTORS, CliProviderAdapter, type ExecutionPermit } from './cli-adapters.js';
+import { CLI_DESCRIPTORS, CliProviderAdapter, codexToolDisableIssues, type ExecutionPermit } from './cli-adapters.js';
 import { buildChildEnv } from './env-allowlist.js';
 import type { EnvelopeSpec } from './envelope.js';
 import { verifyEntrypoint } from './entrypoint.js';
-import { createRunSandbox, ISOLATION_MECHANISMS, profileIsolationIssues } from './isolation.js';
+import { CODEX_SANDBOX_GROUP, createRunSandbox, grantSandboxGroupRead, ISOLATION_MECHANISMS, profileIsolationIssues, type SandboxGrant } from './isolation.js';
+import { boundaryReportIssues, inspectCodexConfig } from './probe-boundary.js';
 
 export interface GatewayJob { billing_policy: string; required_capabilities: Capability[]; data_classes: DataClass[] }
 export type Observation = GuardInput['observed'];
 
 export interface GatewayDeps {
+  /** Test seam for the Codex sandbox-group grant on per-run dirs (default: icacls, E-17). */
+  sandboxGrant?: SandboxGrant;
   adapters?: Partial<Record<CliProvider, CliProviderAdapter>>;
   evidence(provider: CliProvider): { evidence: ProviderEvidence; envelope: EnvelopeSpec } | undefined;
   account(provider: CliProvider): { profile_id: string; runner_ref: string; state: AccountState } | undefined;
@@ -27,7 +30,7 @@ export interface GatewayDeps {
   limits?: { timeoutMs: number; maxOutputBytes: number };
 }
 
-const NOTHING_OBSERVED: Observation = { cli_version: null, entrypoint_sha256: null, entrypoint_issues: [], auth_subscription: null, entitlement_verified: null, isolation_issues: [] };
+const NOTHING_OBSERVED: Observation = { cli_version: null, entrypoint_sha256: null, entrypoint_issues: [], auth_subscription: null, entitlement_verified: null, isolation_issues: [], enforcement_issues: null };
 
 export class AiExecutionGateway {
   readonly adapters: Record<CliProvider, CliProviderAdapter>;
@@ -56,7 +59,9 @@ export class AiExecutionGateway {
     const mechanism = ISOLATION_MECHANISMS[provider];
     // A candidate mechanism counts only when the recorded evidence was collected with that same mechanism.
     const mismatch = mechanism && recorded && recorded.evidence.isolation.mechanism !== mechanism.env ? ['EVIDENCE_MECHANISM_MISMATCH'] : [];
-    const isolation = [...observed.isolation_issues, ...(mechanism ? mismatch : ['NO_RECORDED_MECHANISM']),
+    // E-15 (2): a Codex run must disable every model tool; the recorded argv is what the adapter executes.
+    const tools = provider === 'codex' && recorded ? codexToolDisableIssues(recorded.evidence.argv) : [];
+    const isolation = [...observed.isolation_issues, ...tools, ...(mechanism ? mismatch : ['NO_RECORDED_MECHANISM']),
       ...(account ? profileIsolationIssues(account.runner_ref, { repo: this.d.roots.repo, data: this.d.roots.data, sandboxRoot: this.d.roots.sandboxRoot }) : [])];
     const probeEnv = buildChildEnv(this.d.parentEnv, { tempDir: this.d.roots.sandboxRoot, homeDir: this.d.roots.sandboxRoot });
     const model = recorded?.evidence.models_allowed[0] ?? null;
@@ -68,7 +73,7 @@ export class AiExecutionGateway {
     if (!decision.allowed || !recorded || !account || !mechanism || !model) return { decision };
     const limits = this.d.limits ?? { timeoutMs: 180_000, maxOutputBytes: 1_000_000 };
     return { decision, permit: { provider, entrypoint: recorded.evidence.entrypoint.path, argv: recorded.evidence.argv, envelope: recorded.envelope,
-      profileEnv: { [mechanism.env]: account.runner_ref }, timeoutMs: limits.timeoutMs, maxOutputBytes: limits.maxOutputBytes, model, cli_version: recorded.evidence.cli_version } };
+      profileEnv: { [mechanism.env]: account.runner_ref }, sandboxRoot: this.d.roots.sandboxRoot, timeoutMs: limits.timeoutMs, maxOutputBytes: limits.maxOutputBytes, model, cli_version: recorded.evidence.cli_version } };
   }
 
   /** First eligible provider whose guard passes, in the job's order. Failover never reaches a paid route. */
@@ -98,9 +103,17 @@ function defaultObserve(d: GatewayDeps) {
     if (!e) return NOTHING_OBSERVED;
     const entry = verifyEntrypoint(e.entrypoint.path, { forbiddenRoots: [d.roots.repo, d.roots.data] });
     if (!entry.ok) return { ...NOTHING_OBSERVED, entrypoint_sha256: entry.sha256, entrypoint_issues: entry.issues };
+    // E-13: only Codex has a boundary collector; other providers claiming enforced_boundary stay unverified.
+    const scope = e.isolation.file_scope_test;
+    const enforcement = scope.method !== 'enforced_boundary' || !scope.enforcement_evidence_ref?.trim() ? null
+      : provider !== 'codex' ? ['NO_COLLECTOR_FOR_PROVIDER']
+        : [...boundaryReportIssues(scope.enforcement_evidence_ref, { evidence: e, runnerDir, workspace: d.roots.sandboxRoot }),
+          // E-15 (3): config added to CODEX_HOME or above the workspace after the probe also invalidates config_inspection.
+          ...(scope.config_cases?.length && runnerDir ? inspectCodexConfig(runnerDir, d.roots.sandboxRoot).findings.map((f) => `CONFIG_${f}`) : [])];
     const mechanism = ISOLATION_MECHANISMS[provider];
     const probe = async (args: string[]) => {
-      const sandbox = createRunSandbox(`probe-${provider}-${Date.now()}`, [], d.roots.sandboxRoot);
+      const sandbox = createRunSandbox(`probe-${provider}-${Date.now()}`, [], d.roots.sandboxRoot,
+        provider === 'codex' ? { grant: d.sandboxGrant ?? grantSandboxGroupRead(CODEX_SANDBOX_GROUP) } : {});
       try {
         const env = buildChildEnv(d.parentEnv, sandbox, mechanism && runnerDir ? { [mechanism.env]: runnerDir } : {});
         // Some CLIs print status to stderr; both streams are matched against the recorded pattern, never stored.
@@ -115,7 +128,7 @@ function defaultObserve(d: GatewayDeps) {
       entrypoint_sha256: entry.sha256, entrypoint_issues: [],
       auth_subscription: auth === null ? null : new RegExp(e.auth.expect_pattern).test(auth),
       entitlement_verified: auth === null ? null : new RegExp(e.entitlement.expect_pattern).test(auth),
-      isolation_issues: runnerDir ? [] : ['NO_RUNNER_DIR'],
+      isolation_issues: runnerDir ? [] : ['NO_RUNNER_DIR'], enforcement_issues: enforcement,
     };
   };
 }

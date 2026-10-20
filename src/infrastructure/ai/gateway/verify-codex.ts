@@ -12,7 +12,8 @@ import { CODEX_CANDIDATE_ARGV } from './cli-adapters.js';
 import { verifyEntrypoint } from './entrypoint.js';
 import { buildChildEnv } from './env-allowlist.js';
 import type { EnvelopeSpec } from './envelope.js';
-import { createRunSandbox, profileIsolationIssues } from './isolation.js';
+import { CODEX_SANDBOX_GROUP, createRunSandbox, grantSandboxGroupRead, profileIsolationIssues, type SandboxGrant } from './isolation.js';
+import { inspectCodexTools, type ToolDisableCheck } from './probe-boundary.js';
 import { containsSecretLike, redact } from './redaction.js';
 
 const BYPASS = /(dangerously|skip-permissions|bypass|--yolo|full-auto|no-sandbox|--bare\b)/i;
@@ -20,6 +21,8 @@ export type LoginMethod = 'chatgpt' | 'api_key' | 'not_logged_in' | 'unknown';
 export interface ProcessRow { pid: number; ppid: number }
 
 export interface VerifyCodexOptions {
+  /** Test seam: how the sandbox group gets read access to the run dirs (default: icacls grant, E-17). */
+  grant?: SandboxGrant;
   entrypoint: string;
   profileId: string;
   /** CODEX_HOME for this profile: logged in by the user beforehand, outside repo/var/workRoot. */
@@ -48,6 +51,8 @@ export interface VerifyCodexReport {
     synthetic_run: { exit_code: number | null; format: string; event_types: string[]; marker_path: string[] | null; inner_json_ok: boolean; stderr_head: string } | null;
     file_scope: CaseResult[];
     process_control: CaseResult[];
+    /** E-15 (2): `--disable` flags of the argv as resolved by `codex features list` (no model call). */
+    tools: ToolDisableCheck | null;
   };
   pending_user_confirmation: string[];
 }
@@ -132,6 +137,18 @@ export function assessFileScopeProbe(name: string, result: { ok: boolean; code: 
     detail: leaked ? 'SECRET_LEAKED' : expected ? 'EXPECTED_REPLY_READ_BOUNDARY_UNVERIFIED' : 'INCONCLUSIVE_OR_PROCESS_ERROR' };
 }
 
+/** The message of a Codex JSONL `error`/`turn.failed` event that reports a usage/rate limit, if any. */
+export function codexLimitMessage(stdout: string): string | null {
+  for (const line of stdout.split(/\r?\n/)) {
+    let e: { type?: string; message?: string; error?: { message?: string } };
+    try { e = JSON.parse(line) as typeof e; } catch { continue; }
+    if (e.type !== 'error' && e.type !== 'turn.failed') continue;
+    const msg = e.message ?? e.error?.message ?? '';
+    if (/hit your (usage )?limit|usage limit|rate[ _]?limit|quota|too many requests|\b429\b/i.test(msg)) return msg;
+  }
+  return null;
+}
+
 export async function verifyCodex(o: VerifyCodexOptions): Promise<VerifyCodexReport> {
   const now = o.now ?? (() => new Date());
   const t = o.timeouts ?? { probeMs: 30_000, runMs: 180_000, longTaskMs: 8_000 };
@@ -153,7 +170,7 @@ export async function verifyCodex(o: VerifyCodexOptions): Promise<VerifyCodexRep
   mkdirSync(sandboxRoot);
 
   const run = async (id: string, args: string[], input: string, timeoutMs: number, setup?: (s: { dir: string; parent: string }) => void, control?: { signal?: AbortSignal; onSpawn?: (pid: number) => void }) => {
-    const sandbox = createRunSandbox(`${id}-${nonce}`.slice(0, 80), [], sandboxRoot);
+    const sandbox = createRunSandbox(`${id}-${nonce}`.slice(0, 80), [], sandboxRoot, { grant: o.grant ?? grantSandboxGroupRead(CODEX_SANDBOX_GROUP) });
     try {
       setup?.({ dir: sandbox.dir, parent: join(sandbox.dir, '..') });
       const env = buildChildEnv(o.parentEnv, sandbox, { CODEX_HOME: o.profileDir });
@@ -165,7 +182,7 @@ export async function verifyCodex(o: VerifyCodexOptions): Promise<VerifyCodexRep
     } finally { sandbox.dispose(); }
   };
 
-  const report: VerifyCodexReport = { aborted: null, evidence: null, envelope: null, observations: { login_method: null, synthetic_run: null, file_scope: [], process_control: [] },
+  const report: VerifyCodexReport = { aborted: null, evidence: null, envelope: null, observations: { login_method: null, synthetic_run: null, file_scope: [], process_control: [], tools: null },
     pending_user_confirmation: [] };
   try {
     // Step 1: version + entrypoint hash.
@@ -177,6 +194,7 @@ export async function verifyCodex(o: VerifyCodexOptions): Promise<VerifyCodexRep
     const method = login.ok && login.code === 0 ? classifyCodexLogin(`${login.stdout}\n${login.stderr}`) : 'unknown';
     report.observations.login_method = method;
     if (method !== 'chatgpt') { report.aborted = `LOGIN_NOT_CHATGPT:${method}`; return report; }
+    report.observations.tools = await inspectCodexTools((args) => run('features', args, '', t.probeMs), prefix, base);
 
     // Step 4 (envelope): one synthetic prompt in an empty sandbox.
     const startedAt = now().toISOString();
@@ -188,6 +206,10 @@ export async function verifyCodex(o: VerifyCodexOptions): Promise<VerifyCodexRep
     report.observations.synthetic_run = { exit_code: synthetic.code, format: derived.format, event_types: derived.event_types, marker_path: derived.marker_path, inner_json_ok: outputOk,
       stderr_head: redact(synthetic.ok ? synthetic.stderr : synthetic.error, 300) };
     report.envelope = derived.spec;
+    // A quota/rate-limit failure makes every later probe meaningless (20/10/2026: all 8 runs failed with
+    // "You’ve hit your usage limit" and were reported as INCONCLUSIVE / EXITED_BEFORE_STOP). Stop and say so.
+    const limit = codexLimitMessage(synthetic.ok ? synthetic.stdout : '');
+    if (limit) { report.aborted = `QUOTA_OR_RATE_LIMIT: ${redact(limit, 300)}`; return report; }
 
     // Step 5: behavioral probes only. Even an expected refusal or a tool-policy rejection cannot
     // establish OS read confinement. A separate enforcement test/review is required (06A §5.C.3).
@@ -254,6 +276,7 @@ export async function verifyCodex(o: VerifyCodexOptions): Promise<VerifyCodexRep
       'extra_usage: xác nhận trên ChatGPT rằng mua thêm credit/auto-recharge đang TẮT rồi chạy `npm run ai -- confirm-extra-usage codex off` (hạn 30 ngày, E-11).',
       'entitlement: ghi tên gói ChatGPT vào entitlement.plan và đặt applies_to_cli=true nếu gói bao gồm Codex CLI.',
       'isolation.plugins_disabled: đặt true chỉ khi profile CODEX_HOME không có MCP server/plugin/hook.',
+      ...(report.observations.tools?.ok ? [] : [`tools (E-15): chưa tắt đủ công cụ — ${[...(report.observations.tools?.argv_issues ?? []), ...(report.observations.tools?.not_effective.length ? [`NOT_EFFECTIVE:${report.observations.tools.not_effective.join(',')}`] : [])].join('; ') || 'không đọc được features list'}.`]),
       'envelope: xem observations.synthetic_run, thêm error_patterns đã thấy (quota/đăng nhập), rồi đặt envelope.status="VERIFIED" và output_contract.envelope_verified=true.',
       ...(o.model ? [] : ['models_allowed: chạy lại với --model <model trong gói> (gateway chỉ dùng model đã ghi).']),
       'file-scope: các probe chỉ quan sát phản hồi, chưa chứng minh ranh giới đọc. Cần kiểm tra cơ chế thực thi độc lập; không sửa passed/method bằng tay để mở gateway. Chạy lại cùng cấu hình không giải quyết điểm thiếu này.',
