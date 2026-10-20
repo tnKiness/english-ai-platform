@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # The app targets Windows (process-tree handling, paths); test on the same OS.
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      # better-sqlite3 13 always compiles from source, and the node-gyp bundled with
+      # npm 10.9 cannot detect the runner's Visual Studio 2026. Install without scripts,
+      # then build the native module with a current node-gyp.
+      - run: npm ci --ignore-scripts
+      - name: Build better-sqlite3
+        working-directory: node_modules/better-sqlite3
+        run: npx --yes node-gyp@12.4.0 rebuild --release
+      # Gateway integration tests grant read access to the group Codex's Windows sandbox uses.
+      - name: Create Codex sandbox group
+        run: net localgroup CodexSandboxUsers /add
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

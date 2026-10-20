@@ -31,6 +31,6 @@
 6. Bàn giao: đã làm, đã kiểm tra, còn thiếu, bước kế tiếp. Không tự commit/push/publish nếu chưa có yêu cầu tương ứng.
 
 ## Tình trạng lệnh
-P0 đã có Node 22.18.0/npm 10.9.3 và dependency khóa exact. `npm.cmd run check` chạy lint → typecheck → tests → build. `npm.cmd run spike` kiểm thử Windows runner/SQLite; `npm.cmd run inventory` chỉ đọc executable CLI trên PATH. `npm.cmd run dev:server` và `npm.cmd run dev` chạy khung local. Xem README và báo cáo P0 trước khi suy luận về chức năng: chưa có DB vận hành/queue/AI thật. Chạy từ root repository để nạp schema.
+P0 đã có Node 22.18.0/npm 10.9.3 và dependency khóa exact. `npm.cmd run check` chạy lint → typecheck → tests → build. `npm.cmd run spike` kiểm thử Windows runner/SQLite; `npm.cmd run inventory` chỉ đọc executable CLI trên PATH. `npm.cmd run dev:server` và `npm.cmd run dev` chạy khung local. Xem [docs/README.vi.md](docs/README.vi.md) (README chi tiết tiếng Việt; `README.md` ở root là bản tiếng Anh công khai — cập nhật cả hai khi đổi cách cài/chạy) và báo cáo P0 trước khi suy luận về chức năng: chưa có DB vận hành/queue/AI thật. Chạy từ root repository để nạp schema.
 
 Nếu công cụ AI không tự nạp AGENTS.md, người chạy phải cung cấp file này trong ngữ cảnh bắt đầu; không giả định mọi mô hình tự đọc được.
