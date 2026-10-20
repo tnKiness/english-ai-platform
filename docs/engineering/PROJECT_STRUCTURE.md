@@ -1,8 +1,10 @@
 # Cấu trúc triển khai
 
-Trạng thái: P0 đã triển khai khung theo quyết định kỹ thuật E-05 ngày 19/10/2026. Cây bên dưới vẫn là cây đích toàn dự án; chỉ tạo các module thực sự có code. Hiện có domain/{jobs,evidence,knowledge,learning,scheduling}, application/{ai,context,learning} + ports.ts, infrastructure/{ai,contracts,files,sqlite,backup}, worker (bước xử lý + vòng lặp, chưa có entrypoint thường trực), migrations, server, web, contracts, tests và scripts (P1, E-07); chưa có policies/ vì chưa có chính sách sư phạm được duyệt (D-02).
+Trạng thái: P0 đã triển khai khung theo quyết định kỹ thuật E-05 ngày 19/10/2026. Cây bên dưới vẫn là cây đích toàn dự án; chỉ tạo các module thực sự có code. Hiện có domain/{jobs,evidence,knowledge,learning,scheduling}, application/{ai,context,learning,qc} + ports.ts, infrastructure/{ai (+ gateway/),contracts,files,sqlite,backup}, worker (vòng lặp + entrypoint `main.ts`), cli/ (ai, backup), migrations 0001–0003, server (session/CSRF, API Console), web (Console 3 tab), contracts (core.v1, provider.v2, knowledge.v1, knowledge/), tests và scripts (P1 E-07, P2 E-08…E-10); chưa có policies/ vì chưa có chính sách sư phạm được duyệt (D-02).
 
 ## Phương án mặc định cho P0
+E-11/E-12 bổ sung `migrations/0003_provider_agy.sql`, `contracts/provider.v2.schema.json`, `gateway/verify-codex.ts`, `tests/integration/p2-e11.test.ts` và CLI giả `tests/fixtures/fake-codex.mjs`. Profile CODEX_HOME nằm ngoài repo/var; báo cáo không bí mật mặc định ở `var/ai/`. Hiện có 3 migration; provider hiện hành codex/claude-code/agy đều chưa xác minh D-01.
+
 TypeScript cho web/backend/worker; React + Vite cho web, Node.js + Fastify cho backend; SQLite và JSON Schema cho hợp đồng. npm với một lockfile; Vitest cho unit/integration. P0 đã khóa dependency trong package.json/package-lock.json và kiểm chứng better-sqlite3 13.0.3 với Node 22.18.0 trên Windows (transaction/online backup/restore). Playwright dự kiến ở giai đoạn luồng UI, chưa cài ở P0. Audio local có thể cần tiến trình Python riêng qua adapter, chưa bắt buộc công cụ cụ thể.
 
 ## Cây đích (tạo khi có chức năng, không tạo hàng loạt file rỗng)

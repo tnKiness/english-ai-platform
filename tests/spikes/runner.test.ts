@@ -7,7 +7,7 @@ const base = { executable: process.execPath, cwd: process.cwd(), input: '', env:
 const fixture = resolve('tests/fixtures/process-child.mjs');
 it('uses literal stdin and EOF without shell interpretation', async () => {
   const input = '$(echo unsafe) & | `quote` tiếng Việt';
-  expect(await runBoundedProcess({ ...base, args: [fixture, 'echo'], input })).toEqual({ stdout: input, code: 0 });
+  expect(await runBoundedProcess({ ...base, args: [fixture, 'echo'], input })).toEqual({ stdout: input, stderr: '', code: 0 });
 });
 it('times out even after stdin closes', async () => {
   await expect(runBoundedProcess({ ...base, timeoutMs: 300, args: [fixture, 'hang'] })).rejects.toThrow('TIMEOUT');

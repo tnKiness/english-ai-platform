@@ -36,6 +36,10 @@ export class MediaStore {
     return ref;
   }
 
+  exists(mediaId: string): boolean {
+    return !!this.db.prepare('SELECT 1 FROM media_assets WHERE media_id = ?').get(mediaId);
+  }
+
   read(mediaId: string): Buffer {
     const ref = this.db.prepare('SELECT rel_path, sha256 FROM media_assets WHERE media_id = ?').get(mediaId) as { rel_path: string; sha256: string } | undefined;
     if (!ref) throw new Error(`Unknown media ${mediaId}`);

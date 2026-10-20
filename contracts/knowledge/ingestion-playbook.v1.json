@@ -1,0 +1,48 @@
+{
+  "schema_version": "1",
+  "playbook_version": "playbook-1",
+  "steps": [
+    {
+      "step": 1, "name": "Chọn nguồn và xác định quyền sử dụng",
+      "inputs": ["package_request", "source_record (candidate)"],
+      "outputs": ["source_record approved/rejected theo từng tài liệu hoặc nhóm tài liệu"],
+      "exit_criteria": ["Mọi nguồn dùng cho trích xuất có rights.status = determined và registry_state = approved"],
+      "blocking_conditions": ["Quyền Chưa rõ: chỉ giữ liên kết, không nạp tài sản (D-05)", "Duyệt theo tên miền thay vì tài liệu cụ thể"]
+    },
+    {
+      "step": 2, "name": "Thu thập, trích xuất và lưu căn cứ",
+      "inputs": ["source_record approved"],
+      "outputs": ["locator (trang/mục), đoạn căn cứ được phép lưu, checksum nguồn"],
+      "exit_criteria": ["Mỗi căn cứ có source_id@version + locator; checksum khi được lưu bản sao"],
+      "blocking_conditions": ["rights.store_copy = false mà định lưu bản sao", "Bảng PDF chưa kiểm tra lệch hàng/cột"]
+    },
+    {
+      "step": 3, "name": "Phân loại phát biểu, đối chiếu và biên soạn",
+      "inputs": ["căn cứ đã lưu", "Phần 1–4 cho chính sách sản phẩm"],
+      "outputs": ["knowledge_unit draft với đúng 1 trong 6 loại phát biểu", "knowledge_gaps"],
+      "exit_criteria": ["Không có phát biểu thiếu căn cứ; thiếu thì ghi Knowledge Gap"],
+      "blocking_conditions": ["AI tự bịa từ trí nhớ rồi gắn dẫn chứng gần giống", "Lấy tài liệu ngoài thay chính sách Phần 1–4"]
+    },
+    {
+      "step": 4, "name": "Chuẩn hóa schema, mã và liên kết; đóng băng bản QC",
+      "inputs": ["knowledge_unit draft", "coverage_manifest"],
+      "outputs": ["JSON bất biến theo version", "package_manifest với bundle_hash", "package draft trong SQLite"],
+      "exit_criteria": ["JSON theo schema là nguồn chuẩn duy nhất; Markdown chỉ sinh từ JSON"],
+      "blocking_conditions": ["Sửa một version đã đóng băng (phải tạo version mới)"]
+    },
+    {
+      "step": 5, "name": "Cổng QC 4 tầng và kiểm tra bao phủ",
+      "inputs": ["package draft + bundle_hash", "qc_spec"],
+      "outputs": ["qc_results gắn bundle_hash + qc_spec_version"],
+      "exit_criteria": ["QC1–QC4 PASS trên đúng bundle_hash sẽ phát hành"],
+      "blocking_conditions": ["Kết quả QC của hash/version/chính sách QC khác", "Giải mù nhìn thấy đáp án"]
+    },
+    {
+      "step": 6, "name": "Đóng gói, phát hành theo gói và lập chỉ mục",
+      "inputs": ["qc_results PASS", "approved bundle hash do người phát hành nêu"],
+      "outputs": ["release_manifest", "package active", "điểm quay lui"],
+      "exit_criteria": ["Phát hành cả gói, đủ phụ thuộc, đúng quyền, có rollback"],
+      "blocking_conditions": ["Hash nêu khi phát hành khác nội dung đã QC", "Nguồn bị thu hồi hoặc quyền đổi sang Chưa rõ"]
+    }
+  ]
+}

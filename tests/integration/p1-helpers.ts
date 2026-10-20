@@ -20,11 +20,11 @@ export function tempDir(prefix = 'ielts-p1-'): { dir: string; cleanup(): void } 
 export interface Fixture { store: Store; clock: Clock; root: string; item: JsonRef; rubric: JsonRef; pkg: JsonRef; cleanup(): void }
 
 /** Seeds one synthetic package with one item and one rubric; activates it unless `active` is false. */
-export async function fixture(options: { root?: string; active?: boolean; clock?: Clock } = {}): Promise<Fixture> {
+export async function fixture(options: { root?: string; active?: boolean; clock?: Clock; migrationsDir?: string } = {}): Promise<Fixture> {
   const tmp = options.root ? undefined : tempDir();
   const root = options.root ?? tmp!.dir;
   const c = options.clock ?? clock();
-  const store = await openStore(dataPaths(root), { now: c.now });
+  const store = await openStore(dataPaths(root), { now: c.now, migrationsDir: options.migrationsDir });
   const item = store.json.put('item', 'synthetic-item-1', 'v1', { synthetic: true, prompt: 'Synthetic writing prompt', answer: 'synthetic-secret' });
   const rubric = store.json.put('rubric', 'synthetic-rubric', 'v1', { synthetic: true, criteria: ['synthetic'] });
   const pkg = store.json.put('package', 'synthetic-pkg', 'v1', { synthetic: true, items: [item.id] });

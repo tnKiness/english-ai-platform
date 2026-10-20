@@ -1,4 +1,5 @@
 // Ports used by application use cases and the worker; infrastructure/sqlite implements them.
+import type { CliProvider } from './ai/subscription-guard.js';
 import type { JobFailure } from '../domain/jobs/budget.js';
 import type { JobState } from '../domain/jobs/state.js';
 import type { Mode, Outcome, Purpose, Scope, SupportImpact, MeasurementQuality, Opportunity, Processing } from '../domain/evidence/types.js';
@@ -34,7 +35,7 @@ export interface NewJob {
   idempotency_key: string; attempt_id: string; submission_id: string; snapshot_version: number; attempt_generation: number;
   task_type: 'writing.assess' | 'reading.blind_solve' | 'reading.verify' | 'repair.assess';
   phase: 'assessment' | 'blind_solve' | 'verification' | 'repair'; context_manifest_id: string; rubric_version: string;
-  required_capabilities: ('text' | 'structured_result' | 'direct_audio')[]; eligible_providers: ('codex' | 'claude-code' | 'gemini-cli')[];
+  required_capabilities: ('text' | 'structured_result' | 'direct_audio')[]; eligible_providers: CliProvider[];
   limits: { max_attempts_total: number; timeout_seconds: number }; workflow_id?: string;
 }
 export interface JobRecord extends NewJob {
@@ -57,10 +58,14 @@ export type CommitOutcome =
   | { status: 'ALREADY_COMMITTED'; run_id: string; observation_ids: string[] }
   | { status: 'REJECTED'; reason: FenceRejection | 'DEPENDENCY_REVOKED' | 'INVALID_OBSERVATION' | 'PIN_MISMATCH' };
 
+export type RunProvider = 'fake' | CliProvider;
+/** P2: a fake-only worker restricts itself to dry-run scope so synthetic output never reaches learner evidence. */
+export interface ClaimOptions { scopes?: Scope[]; cli_version?: string | null; model?: string | null }
+
 export interface JobQueuePort {
   enqueue(job: NewJob): JobRecord;
   recoverExpired(): { job_id: string; to: JobState }[];
-  claim(owner: string, leaseMs: number, provider: 'fake'): ClaimedRun | null;
+  claim(owner: string, leaseMs: number, provider: RunProvider, options?: ClaimOptions): ClaimedRun | null;
   heartbeat(fence: RunFence, leaseMs: number): boolean;
   recordOutput(fence: RunFence, output: unknown): { accepted: true } | { accepted: false; reason: FenceRejection };
   fail(fence: RunFence, failure: JobFailure, detail?: string, retryAfterMs?: number): { accepted: true; to: JobState } | { accepted: false; reason: FenceRejection };

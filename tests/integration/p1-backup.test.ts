@@ -34,7 +34,7 @@ describe('P1-4 coordinated backup and restore', () => {
 
     const target = join(base, 'restored');
     const report = restoreBackup(backup.dir, target);
-    expect(report).toMatchObject({ root: target, files: 4, migrations: 1 });
+    expect(report).toMatchObject({ root: target, files: 4, migrations: 3 });
     const restored = await openStore(dataPaths(target));
     try {
       for (const t of tables) {

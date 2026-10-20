@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ClaimedRun, CommitOutcome, FenceRejection, JobQueuePort, JobRecord, NewJob, ObservationDraft, RunFence } from '../../application/ports.js';
+import type { ClaimedRun, ClaimOptions, CommitOutcome, FenceRejection, JobQueuePort, JobRecord, NewJob, ObservationDraft, RunFence, RunProvider } from '../../application/ports.js';
 import { decideAfterFailure, MAX_WORKFLOW_REGEN_ROUNDS, remainingExecutions, type JobFailure } from '../../domain/jobs/budget.js';
 import { transitionJob, type JobState } from '../../domain/jobs/state.js';
 import { checkPinned } from '../../domain/learning/pinning.js';
@@ -50,7 +50,7 @@ export class SqliteJobQueue implements JobQueuePort {
         return toRecord(prior);
       }
       const jobId = randomUUID();
-      const contract = { schema_version: '1', job_id: jobId, idempotency_key: job.idempotency_key, attempt_id: job.attempt_id, snapshot_version: job.snapshot_version,
+      const contract = { schema_version: '2', job_id: jobId, idempotency_key: job.idempotency_key, attempt_id: job.attempt_id, snapshot_version: job.snapshot_version,
         attempt_generation: job.attempt_generation, billing_policy: 'subscription_only', task_type: job.task_type, phase: job.phase, context_manifest_id: job.context_manifest_id,
         rubric_version: job.rubric_version, required_capabilities: job.required_capabilities, eligible_providers: job.eligible_providers,
         limits: { max_attempts_total: job.limits.max_attempts_total, timeout_seconds: job.limits.timeout_seconds } };
@@ -103,13 +103,15 @@ export class SqliteJobQueue implements JobQueuePort {
     }).immediate();
   }
 
-  claim(owner: string, leaseMs: number, provider: 'fake'): ClaimedRun | null {
+  claim(owner: string, leaseMs: number, provider: RunProvider, options: ClaimOptions = {}): ClaimedRun | null {
     return this.db.transaction(() => {
       this.recoverExpired();
       const now = this.iso();
       // MVP: one AI job at a time across the whole database (06 §5.B.3).
       if (this.db.prepare("SELECT 1 FROM ai_jobs WHERE state IN ('RUNNING', 'VALIDATING') LIMIT 1").get()) return null;
-      const job = this.db.prepare("SELECT * FROM ai_jobs WHERE state = 'QUEUED' AND available_at <= ? ORDER BY available_at, created_at LIMIT 1").get(now) as JobRow | undefined;
+      const scopes = options.scopes ?? ['learner', 'dry_run'];
+      const job = this.db.prepare(`SELECT * FROM ai_jobs WHERE state = 'QUEUED' AND available_at <= ? AND scope IN (${scopes.map(() => '?').join(', ')})
+        ORDER BY available_at, created_at LIMIT 1`).get(now, ...scopes) as JobRow | undefined;
       if (!job) return null;
       if (remainingExecutions(job) <= 0) { this.setState(job, 'FAILED', 'EXECUTION_BUDGET_EXHAUSTED'); return null; }
       const generation = job.generation + 1;
@@ -122,7 +124,7 @@ export class SqliteJobQueue implements JobQueuePort {
         lease_owner = ?, lease_expires_at = ?, current_run_id = ?, updated_at = ? WHERE job_id = ?`)
         .run(generation, executionIndex, purpose === 'format_repair' ? 1 : 0, owner, leaseExpiresAt, runId, now, job.job_id);
       this.db.prepare(`INSERT INTO ai_runs (run_id, job_id, generation, execution_index, purpose, lease_owner, lease_expires_at, state, provider, cli_version, model, started_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'RUNNING', ?, NULL, NULL, ?)`).run(runId, job.job_id, generation, executionIndex, purpose, owner, leaseExpiresAt, provider, now);
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'RUNNING', ?, ?, ?, ?)`).run(runId, job.job_id, generation, executionIndex, purpose, owner, leaseExpiresAt, provider, options.cli_version ?? null, options.model ?? null, now);
       return { job_id: job.job_id, run_id: runId, generation, lease_owner: owner, execution_index: executionIndex, purpose, lease_expires_at: leaseExpiresAt, job: toRecord(this.row(job.job_id)!) };
     }).immediate();
   }
@@ -275,7 +277,15 @@ export class SqliteJobQueue implements JobQueuePort {
   }
 
   runs(jobId: string) {
-    return this.db.prepare('SELECT run_id, generation, execution_index, purpose, state, error FROM ai_runs WHERE job_id = ? ORDER BY execution_index').all(jobId) as
-      { run_id: string; generation: number; execution_index: number; purpose: string; state: string; error: string | null }[];
+    return this.db.prepare('SELECT run_id, generation, execution_index, purpose, state, error, provider FROM ai_runs WHERE job_id = ? ORDER BY execution_index').all(jobId) as
+      { run_id: string; generation: number; execution_index: number; purpose: string; state: string; error: string | null; provider: RunProvider }[];
+  }
+
+  /** Committed business result of a job, or undefined if it never committed. */
+  result(jobId: string): unknown {
+    const row = this.db.prepare('SELECT result_json, result_hash FROM job_results WHERE job_id = ?').get(jobId) as { result_json: string; result_hash: string } | undefined;
+    if (!row) return undefined;
+    if (sha256(row.result_json) !== row.result_hash) throw new Error('Job result checksum mismatch');
+    return JSON.parse(row.result_json);
   }
 }

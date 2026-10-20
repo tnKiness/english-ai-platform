@@ -63,10 +63,18 @@ export async function migrate(db: Db, options: OpenOptions = {}): Promise<number
   if (applied.length > 0 && options.beforeMigrate) await options.beforeMigrate(db, pending);
   const now = options.now ?? (() => new Date());
   for (const m of pending) {
-    db.transaction(() => {
+    // 0003 rebuilds referenced tables using legacy ALTER TABLE. Foreign keys must be
+    // disabled OUTSIDE the transaction, otherwise SQLite rewrites child references
+    // to the temporary names even with legacy_alter_table enabled.
+    const rebuild = m.version === 3;
+    if (rebuild) db.pragma('foreign_keys = OFF');
+    try { db.transaction(() => {
       db.exec(m.sql);
+      if ((db.pragma('foreign_key_check') as unknown[]).length) throw new Error(`Migration ${m.version} broke foreign keys`);
       db.prepare('INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)').run(m.version, m.name, m.checksum, now().toISOString());
-    }).immediate();
+    }).immediate(); } finally {
+      if (rebuild) { db.pragma('legacy_alter_table = OFF'); db.pragma('foreign_keys = ON'); }
+    }
   }
   return pending.map((m) => m.version);
 }

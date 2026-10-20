@@ -1,0 +1,55 @@
+{
+  "schema_version": "1",
+  "qc_spec_version": "qc-spec-1",
+  "stages": [
+    {
+      "stage": "QC1",
+      "name": "Cấu trúc, toàn vẹn, định lượng và bao phủ (05 §5.C lớp B)",
+      "rules": [
+        { "code": "QC1_SCHEMA_INVALID", "description": "Đơn vị không khớp knowledge.v1 hoặc package_manifest", "method": "deterministic", "severity": "blocking", "applies_to": ["package", "foundation_language", "foundation_policy", "competency_spec", "rubric", "diagnostic_card", "generation_spec", "micro_lesson", "scaffold", "task_item", "answer_key"] },
+        { "code": "QC1_INTEGRITY", "description": "Nội dung đóng băng (JSON/media) khác checksum đã lưu", "method": "deterministic", "severity": "blocking", "applies_to": ["package"] },
+        { "code": "QC1_DUPLICATE_ID", "description": "Trùng định danh đơn vị trong gói", "method": "deterministic", "severity": "blocking", "applies_to": ["package"] },
+        { "code": "QC1_IDENTITY_MISMATCH", "description": "governance.identity khác khóa lưu trữ hoặc unit_type không hợp với kind", "method": "deterministic", "severity": "blocking", "applies_to": ["package"] },
+        { "code": "QC1_DEPENDENCY_MISSING", "description": "Phụ thuộc không có trong gói và không phải bản đang phát hành", "method": "deterministic", "severity": "blocking", "applies_to": ["package"] },
+        { "code": "QC1_MEDIA_INVALID", "description": "Media được tham chiếu không có trong kho hoặc sai checksum", "method": "deterministic", "severity": "blocking", "applies_to": ["task_item", "package"] },
+        { "code": "QC1_STATUS_NOT_DRAFT", "description": "Đơn vị staging phải ở trạng thái draft trên cả validity và trục vòng đời", "method": "deterministic", "severity": "blocking", "applies_to": ["package"] },
+        { "code": "QC1_PERMISSION_INVALID", "description": "Quyền cấp phát sai: đáp án/giải thích cấp cho người học hoặc giải mù, đề không cấp cho giải mù", "method": "deterministic", "severity": "blocking", "applies_to": ["task_item", "answer_key", "scaffold"] },
+        { "code": "QC1_SOURCE_UNREGISTERED", "description": "Căn cứ trỏ tới nguồn không có hoặc chưa approved trong Source Registry", "method": "deterministic", "severity": "blocking", "applies_to": ["source"] },
+        { "code": "QC1_SOURCE_RIGHTS_UNCLEAR", "description": "Nguồn có quyền sử dụng Chưa rõ: chặn phát hành (D-05)", "method": "deterministic", "severity": "blocking", "applies_to": ["source"] },
+        { "code": "QC1_SOURCE_USE_NOT_PERMITTED", "description": "Mục đích dùng (lưu bản sao / xử lý AI / hiển thị người học) vượt quyền đã ghi nhận", "method": "deterministic", "severity": "blocking", "applies_to": ["source"] },
+        { "code": "QC1_ANSWER_KEY_MISSING", "description": "Nhiệm vụ thiếu answer_key hoặc thiếu câu", "method": "deterministic", "severity": "blocking", "applies_to": ["task_item"] },
+        { "code": "QC1_COVERAGE_GAP", "description": "Thiếu nhóm ca bao phủ bắt buộc; chỉ chặn vai trò sử dụng phụ thuộc", "method": "deterministic", "severity": "function_blocking", "applies_to": ["package"] },
+        { "code": "QC1_ANSWER_LEAK_PRELIMINARY", "description": "Bộ lọc chuỗi sơ bộ: đáp án tự luận xuất hiện nguyên văn trong phần người học thấy; cần QC4 xét ngữ nghĩa", "method": "preliminary_filter", "severity": "warning", "applies_to": ["task_item"] }
+      ]
+    },
+    {
+      "stage": "QC2",
+      "name": "Trung thực với nguồn (05 §5.C lớp A)",
+      "rules": [
+        { "code": "QC2_BASIS_MISSING", "description": "Đơn vị trích xuất/diễn giải không có căn cứ nguồn", "method": "deterministic", "severity": "blocking", "applies_to": ["package"] },
+        { "code": "QC2_OFFICIAL_LABEL_UNSUPPORTED", "description": "Gắn Quy định chính thức nhưng căn cứ không phải nguồn official", "method": "deterministic", "severity": "blocking", "applies_to": ["package"] },
+        { "code": "QC2_SOURCE_SUPPORT", "description": "Nguồn thực sự hỗ trợ phát biểu, đúng phạm vi, không bỏ ngoại lệ, đúng hàng/cột", "method": "semantic", "severity": "blocking", "applies_to": ["package"] }
+      ]
+    },
+    {
+      "stage": "QC3",
+      "name": "Tuân thủ chính sách Phần 1–4 (05 §5.C lớp C-P1)",
+      "rules": [
+        { "code": "QC3_POLICY_REF_MISSING", "description": "Phát biểu chính sách sản phẩm không trỏ về Phần 1–4", "method": "deterministic", "severity": "blocking", "applies_to": ["foundation_policy"] },
+        { "code": "QC3_MECHANICAL_RULE_SUSPECT", "description": "Bộ lọc từ khóa sơ bộ cho luật đếm cơ học tự chế; chỉ gợi ý xem xét", "method": "preliminary_filter", "severity": "warning", "applies_to": ["rubric", "scaffold", "micro_lesson", "generation_spec"] },
+        { "code": "QC3_POLICY_COMPLIANCE", "description": "Khớp Rule Engine, không kết luận vượt bằng chứng, giữ ranh giới hỗ trợ", "method": "semantic", "severity": "blocking", "applies_to": ["package"] }
+      ]
+    },
+    {
+      "stage": "QC4",
+      "name": "Kiểm thử tác động và giải mù độc lập (05 §5.C lớp C-P2/D1)",
+      "rules": [
+        { "code": "QC4_NOT_RUN", "description": "Ca kiểm thử hoặc lượt giải mù/đối chiếu chưa hoàn tất", "method": "deterministic", "severity": "blocking", "applies_to": ["package"] },
+        { "code": "QC4_BLIND_SOLVE_MISMATCH", "description": "Giải mù độc lập không khớp đáp án (so sánh do ứng dụng thực hiện)", "method": "deterministic", "severity": "blocking", "applies_to": ["task_item"] },
+        { "code": "QC4_COMPETING_ANSWER", "description": "Đối chiếu tìm thấy đáp án cạnh tranh hợp lý hoặc đề mơ hồ", "method": "deterministic", "severity": "blocking", "applies_to": ["task_item"] },
+        { "code": "QC4_TEST_CASE_FAILED", "description": "Kết quả chạy ca kiểm thử khác kỳ vọng có căn cứ", "method": "deterministic", "severity": "blocking", "applies_to": ["package"] },
+        { "code": "QC4_SYNTHETIC_ONLY", "description": "Kết quả từ FakeAdapter chỉ hợp lệ cho gói synthetic_fixture", "method": "deterministic", "severity": "blocking", "applies_to": ["package"] }
+      ]
+    }
+  ]
+}

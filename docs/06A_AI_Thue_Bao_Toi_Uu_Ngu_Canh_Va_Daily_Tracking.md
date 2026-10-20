@@ -8,7 +8,7 @@
 
 ## 1. Quyết định Cốt lõi và Giới hạn Vận hành
 
-1. **Mô hình thực thi:** Người học thao tác hoàn toàn trên giao diện Web của ứng dụng; Backend tạo tác vụ vào hàng đợi bền vững; Worker gọi các công cụ **CLI chính thức đã đăng nhập bằng gói thuê bao** (`codex`, `claude-code`, `gemini-cli`); kết quả được kiểm tra và trả về Web.
+1. **Mô hình thực thi:** Người học thao tác hoàn toàn trên giao diện Web của ứng dụng; Backend tạo tác vụ vào hàng đợi bền vững; Worker gọi các công cụ **CLI chính thức đã đăng nhập bằng gói thuê bao** (`codex`, `claude-code`, `agy`); kết quả được kiểm tra và trả về Web.
 2. **Định nghĩa "Token thuê bao":** Chỉ sử dụng quyền lợi CLI nằm trong gói thuê bao đã xác minh. "Token thuê bao" là hạn mức sử dụng (quota) của từng hãng, không phải một ví tiền/token chung có thể chuyển đổi qua lại giữa các hãng.
 3. **Chính sách Không Phí Phát Sinh (`subscription_only`):**
    - **Không dùng API key** (kể cả API Free Tier có nguy cơ gắn với tài khoản thanh toán); không dùng Vertex AI, AWS Bedrock hay bất kỳ đường gọi tính tiền theo lượt nào.
@@ -31,7 +31,7 @@
 | Hạng mục trước đây | Thiết kế chuẩn hóa tại Phụ lục 06A |
 | :--- | :--- |
 | Custom GPT là giao diện đồng hành chính | **Web học IELTS là giao diện chính duy nhất**; AI chạy phía sau qua các Adapter CLI thuê bao. |
-| `chatgptCompanionBridge` riêng lẻ | Thay bằng **`aiExecutionGateway` trung lập nhà cung cấp** (`codex`, `claude-code`, `gemini-cli`). |
+| `chatgptCompanionBridge` riêng lẻ | Thay bằng **`aiExecutionGateway` trung lập nhà cung cấp** (`codex`, `claude-code`, `agy`). |
 | Custom GPT Actions đọc/ghi trực tiếp vào App | **Hoãn khỏi MVP**; Worker nội bộ tự xử lý nên không cần mở cổng Endpoint Actions ra ngoài. |
 | Dựa vào ChatGPT Scheduled Tasks để gọi GPTs | **Bỏ giả định này** (do Scheduled Tasks hiện không hỗ trợ Custom GPTs [S9]); dùng `Scheduler` nội bộ của ứng dụng để điều phối nhật ký và nhắc học. |
 | Copy/paste thủ công là cầu nối chính | Chỉ giữ làm **phương án dự phòng cuối cùng (Manual Fallback)** khi mọi CLI đều lỗi; dữ liệu dán vào vẫn phải qua `resultValidator` kiểm tra trước khi lưu. |
@@ -46,12 +46,18 @@
 
 ## 3. Ba Adapter CLI Thuê bao, Xác thực và Cô lập Tài khoản
 
-### A. Bảng Cấu hình Ba Adapter Chính thức
+### A. Bảng Cấu hình Ba Adapter
 | Adapter | Cơ chế xác thực được chọn | Lệnh gọi chuẩn (Non-interactive) | Điều kiện bắt buộc trước khi chuyển sang `READY` |
 | :--- | :--- | :--- | :--- |
 | **`codex`** | `Sign in with ChatGPT` | `codex exec` *(nâng cấp dùng `app-server` khi cần đọc telemetry hạn mức [S11])* | CLI báo đúng tài khoản và quyền truy cập theo đường thuê bao ChatGPT, không dùng `OPENAI_API_KEY` [S1, S2]. |
 | **`claude-code`** | Đăng nhập tài khoản `claude.ai` của người dùng | `claude -p` | Xác nhận gói Pro/Max hợp lệ, không đi qua Console/API hay cloud provider khác; **không dùng cờ `--bare`** (vì `--bare` bỏ qua đăng nhập thuê bao [S4]). |
-| **`gemini-cli`** | `Sign in with Google` | `gemini -p` | Xác minh quyền lợi thuê bao (như Google AI Pro/Ultra hoặc tương đương [S10]) thực sự áp dụng cho CLI [S6, S7]. |
+| **`agy` (Antigravity CLI)** | Đăng nhập Google, loại gói chưa xác minh | `agy -p --output-format json --sandbox --mode <mode> --model <model>` (ứng viên) | Theo E-11 thay gemini-cli; native `%LOCALAPPDATA%\agy\bin\agy.exe`. `agy models` chỉ chứng minh đăng nhập, không chứng minh loại gói/quyền lợi. Giữ NEEDS_VERIFICATION cho tới khi D-01 riêng đạt. |
+
+**Cập nhật E-11 (20/10/2026):** agy thay gemini-cli trong danh sách provider hiện hành. S6/S7/S10 chỉ là tham chiếu lịch sử của Gemini CLI, không phải bằng chứng cho agy. Dữ liệu gemini-cli và hợp đồng v1 cũ vẫn được giữ; hợp đồng provider v2 và migration 0003 thêm agy.
+
+Theo E-11, quyền nhận dữ liệu ghi riêng cho từng provider đã xác minh D-01, đúng 5 loại: `synthetic_fixture`, `knowledge_content`, `answer_key`, `learner_submission`, `learner_profile`; chặn `learner_audio` ngay cả khi có bản ghi consent. Xác nhận extra usage/auto-recharge đang tắt có hiệu lực 30 ngày; quá 30 ngày gateway chặn tới khi người dùng xác nhận lại.
+
+Speaking giai đoạn đầu theo E-11 chỉ hỗ trợ ý tưởng/dàn ý/từ vựng dạng văn bản như Writing; chưa chấm audio, phát âm hay Band Speaking. Các yêu cầu audio bên dưới là phạm vi giai đoạn sau (D-06 và quyền dữ liệu mới).
 
 - **Không gán cứng (hard-code) thông số quảng cáo:** Không gán cứng tên model, số lượt còn lại hay giờ reset từ tài liệu quảng cáo. Hệ thống lưu `entitlement` thực tế quan sát được, phiên bản CLI đã chốt, danh sách model khả dụng và ngày xác minh gần nhất.
 - **Đánh giá năng lực thực nghiệm (bao gồm Audio cho Speaking):**
@@ -59,6 +65,7 @@
   - **Quy tắc riêng cho Speaking & Đa phương thức:** Chế độ headless qua `stdin` của các CLI lập trình chủ yếu xử lý văn bản (và hình ảnh trong thư mục được cấp). Do đó, hệ thống sử dụng công cụ xử lý âm thanh cục bộ (như `faster-whisper` chạy local miễn phí) để lấy bản chép lời, thời gian từng từ (word timestamps) và độ tự tin âm thanh; chỉ bật nhận định sâu về **Phát âm (`Pronunciation`)** qua Adapter khi đã xác minh thực nghiệm Adapter đó có đường nhận và phân tích trực tiếp file audio gốc. Khi chưa có đường audio trực tiếp vào model, hệ thống chỉ cảnh báo các vị trí từ có tín hiệu nhận diện không rõ để bạn tự nghe lại đối chiếu với audio gốc, giữ nhận định phát âm ở mức `Chưa đủ khả năng kết luận sâu`.
 
 ### B. Quy trình Đăng nhập 5 Bước và Cô lập Hồ sơ Thực thi (Profile Isolation)
+Ứng viên Codex theo E-11: `CODEX_HOME` riêng ngoài repo và ngoài `var/`, chưa đủ để chứng minh giới hạn đọc file. Quy trình CLI hiện có ở [P2_ACCEPTANCE](engineering/P2_ACCEPTANCE.md); UI onboarding dưới đây là thiết kế.
 1. Bạn bấm **“Thêm / Xác minh tài khoản”** trong trang `Cài đặt AI` trên Web local.
 2. Backend khởi tạo yêu cầu onboarding; mở luồng đăng nhập chính thức của CLI để bạn trực tiếp đăng nhập trên trình duyệt/terminal.
 3. Worker chạy kiểm tra danh tính (`inspectAuth`), loại quyền lợi (`inspectEntitlement`) và chạy 1 tác vụ mẫu nhỏ để xác nhận đường thuê bao hoạt động.
@@ -106,7 +113,7 @@
   "snapshot_version": 1,
   "billing_policy": "subscription_only",
   "required_capabilities": ["text", "structured_result"],
-  "eligible_providers": ["codex", "claude-code", "gemini-cli"],
+  "eligible_providers": ["codex", "claude-code", "agy"],
   "context_manifest_id": "ctx_001",
   "rubric_version": "writing_v1",
   "schema_version": "assessment_v1",
@@ -216,7 +223,7 @@ Trước mỗi lần đẩy job vào Adapter CLI, `subscriptionGuard` thực thi
 `ai_accounts` *(không lưu mật khẩu/token)*, `provider_capabilities`, `quota_observations`, `ai_jobs`, `ai_runs`, `context_manifests`, `result_cache`, `daily_study_logs`, `replan_proposals`, và `notification_outbox`.
 
 ### B. Năm Bước Nghiệm Thu & 12 Tình Huống Kiểm Thử Bắt Buộc
-1. **Bước 1:** Xác minh 3 CLI (`codex`, `claude-code`, `gemini-cli`) và onboard từng tài khoản qua luồng đăng nhập thuê bao chính thức.
+1. **Bước 1:** Xác minh 3 CLI (`codex`, `claude-code`, `agy`) và onboard từng tài khoản qua luồng đăng nhập thuê bao chính thức.
 2. **Bước 2:** Chạy thông suốt 1 vòng học Writing end-to-end với 1 Adapter, `Durable Job Queue`, `subscriptionGuard`, kiểm tra Schema và commit chống trùng.
 3. **Bước 3:** Tích hợp 2 Adapter còn lại; kiểm thử chuyển hãng khi hết quota bằng dữ liệu giả lập (`fixture/mock`), không cố tình đốt hết quota thật để test.
 4. **Bước 4:** Chạy bộ bài đối chứng dùng chung để đo và so sánh chất lượng chấm/gợi mở thực tế giữa các model trước khi bật làm phương án dự phòng.

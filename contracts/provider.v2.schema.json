@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://study-english.local/contracts/provider.v2",
+  "$comment": "E-11 (20/10/2026): schema_version 2 of the three contracts that name a CLI provider. Identical to core.v1 profile/job/run except the provider enum: agy replaces gemini-cli. core.v1 stays frozen so documents written before E-11 keep validating as version 1.",
+  "$defs": {
+    "cli_provider": {
+      "type": "string",
+      "enum": ["codex", "claude-code", "agy"]
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "const": "2" },
+        "profile_id": { "type": "string", "minLength": 1 },
+        "provider": { "$ref": "#/$defs/cli_provider" },
+        "label": { "type": "string", "minLength": 1 },
+        "runner_ref": { "type": "string", "minLength": 1 },
+        "state": {
+          "type": "string",
+          "enum": ["NEEDS_LOGIN", "NEEDS_VERIFICATION", "READY", "BUSY", "COOLDOWN", "QUOTA_EXHAUSTED", "DISABLED"]
+        }
+      },
+      "required": ["schema_version", "profile_id", "provider", "label", "runner_ref", "state"]
+    },
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "const": "2" },
+        "job_id": { "type": "string", "minLength": 1 },
+        "idempotency_key": { "type": "string", "minLength": 1 },
+        "attempt_id": { "type": "string", "minLength": 1 },
+        "snapshot_version": { "type": "integer", "minimum": 0 },
+        "attempt_generation": { "type": "integer", "minimum": 1 },
+        "billing_policy": { "const": "subscription_only" },
+        "task_type": { "type": "string", "enum": ["writing.assess", "reading.blind_solve", "reading.verify", "repair.assess"] },
+        "phase": { "type": "string", "enum": ["assessment", "blind_solve", "verification", "repair"] },
+        "context_manifest_id": { "type": "string", "minLength": 1 },
+        "rubric_version": { "type": "string", "minLength": 1 },
+        "required_capabilities": { "type": "array", "items": { "type": "string", "enum": ["text", "structured_result", "direct_audio"] } },
+        "eligible_providers": { "type": "array", "items": { "$ref": "#/$defs/cli_provider" } },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts_total": { "type": "integer", "minimum": 1, "maximum": 3 },
+            "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 180 }
+          },
+          "required": ["max_attempts_total", "timeout_seconds"]
+        }
+      },
+      "required": ["schema_version", "job_id", "idempotency_key", "attempt_id", "snapshot_version", "attempt_generation", "billing_policy", "task_type", "phase",
+        "context_manifest_id", "rubric_version", "required_capabilities", "eligible_providers", "limits"],
+      "allOf": [
+        { "if": { "properties": { "task_type": { "const": "writing.assess" } } }, "then": { "properties": { "phase": { "const": "assessment" } } } },
+        { "if": { "properties": { "task_type": { "const": "reading.blind_solve" } } }, "then": { "properties": { "phase": { "const": "blind_solve" } } } },
+        { "if": { "properties": { "task_type": { "const": "reading.verify" } } }, "then": { "properties": { "phase": { "const": "verification" } } } },
+        { "if": { "properties": { "task_type": { "const": "repair.assess" } } }, "then": { "properties": { "phase": { "const": "repair" } } } }
+      ]
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "const": "2" },
+        "run_id": { "type": "string", "minLength": 1 },
+        "job_id": { "type": "string", "minLength": 1 },
+        "generation": { "type": "integer", "minimum": 1 },
+        "execution_index": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "lease_owner": { "type": "string", "minLength": 1 },
+        "lease_expires_at": { "type": "string", "format": "date-time", "pattern": "Z$" },
+        "state": { "type": "string", "enum": ["RUNNING", "VALIDATING", "COMPLETED", "FAILED", "CANCELLED", "STALE"] },
+        "provider": { "type": "string", "enum": ["fake", "codex", "claude-code", "agy"] },
+        "cli_version": { "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+        "model": { "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] }
+      },
+      "required": ["schema_version", "run_id", "job_id", "generation", "execution_index", "lease_owner", "lease_expires_at", "state", "provider", "cli_version", "model"]
+    }
+  }
+}

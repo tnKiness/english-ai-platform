@@ -4,9 +4,12 @@ import { isAbsolute, join } from 'node:path';
 export interface ProcessRequest {
   executable: string; args: string[]; cwd: string; input: string;
   env: NodeJS.ProcessEnv; timeoutMs: number; maxOutputBytes: number; signal?: AbortSignal;
+  /** Called with the root PID right after spawn (D-01 process-tree verification). */
+  onSpawn?: (pid: number) => void;
 }
 // Trusted executable/argv only. This supervisor is NOT a filesystem sandbox or billing guard.
-export function runBoundedProcess(request: ProcessRequest): Promise<{ stdout: string; code: number | null }> {
+// stderr shares the byte budget; callers that store it must redact it first.
+export function runBoundedProcess(request: ProcessRequest): Promise<{ stdout: string; stderr: string; code: number | null }> {
   if (!isAbsolute(request.executable) || /\.(cmd|bat|ps1)$/i.test(request.executable)) {
     return Promise.reject(new Error('EXECUTABLE_MUST_BE_ABSOLUTE_NATIVE_ENTRYPOINT'));
   }
@@ -14,7 +17,8 @@ export function runBoundedProcess(request: ProcessRequest): Promise<{ stdout: st
   return new Promise((resolve, reject) => {
     const child = spawn(request.executable, request.args, { cwd: request.cwd, env: request.env,
       shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-    let output = ''; let bytes = 0; let failure: string | undefined; let killing: Promise<void> | undefined;
+    if (child.pid) request.onSpawn?.(child.pid);
+    let output = ''; let errors = ''; let bytes = 0; let failure: string | undefined; let killing: Promise<void> | undefined;
     const stop = (reason: string) => {
       if (failure) return;
       failure = reason;
@@ -42,6 +46,7 @@ export function runBoundedProcess(request: ProcessRequest): Promise<{ stdout: st
     child.stderr.on('data', (data: Buffer) => {
       bytes += data.length;
       if (bytes > request.maxOutputBytes) stop('OUTPUT_LIMIT');
+      else errors += data.toString('utf8');
     });
     child.stdin.on('error', () => stop('STDIN_ERROR'));
     child.once('error', (error) => { cleanup(); reject(error); });
@@ -49,7 +54,7 @@ export function runBoundedProcess(request: ProcessRequest): Promise<{ stdout: st
       cleanup();
       void (killing ?? Promise.resolve()).then(() => {
         if (failure) reject(new Error(failure));
-        else resolve({ stdout: output, code });
+        else resolve({ stdout: output, stderr: errors, code });
       });
     });
     child.stdin.end(request.input);

@@ -29,6 +29,7 @@ Ngày lập: 19/10/2026. Đây là kế hoạch, không phải báo cáo đã tr
 
 ## P3 — Lát cắt học hoàn chỉnh
 **Phụ thuộc:** P2 và gói nội dung đúng quyền sử dụng.
+Speaking giai đoạn đầu theo E-11: hỗ trợ ý tưởng/dàn ý/từ vựng dạng văn bản như Writing, chỉ nhận định nội dung/ngôn ngữ viết; chưa chấm audio, phát âm hay Band Speaking. Ca audio mẫu bên dưới chỉ kiểm thử hợp đồng/lưu trữ cục bộ; không gửi `learner_audio` sang provider. D-06 vẫn mở. Lượt P2 tiếp chỉ cập nhật kế hoạch này, chưa code P3.
 1. Mục tiêu ban đầu, Học hôm nay, Workspace, Tiến độ, Cài đặt; ba chế độ làm bài và autosave có báo lỗi thật.
 2. Một vòng Writing: bài nộp gốc → chẩn đoán → tự sửa → bổ sung kiến thức → 7A mới → cập nhật có điều kiện; xếp 7B/9 và kiểm tra bằng đồng hồ giả, không giả đã tích lũy bằng chứng thật.
 3. Sinh sẵn gợi mở ở đánh giá chỉ lưu server; cấp từng nấc theo quyền. Bản sửa mới mới kích hoạt chấm sửa. Gói sinh sẵn không được vượt kiểm duyệt tiết lộ.
@@ -60,9 +61,11 @@ Các đường dẫn module dưới đây là đích dự kiến; bổ sung file
 | R-03 | 03 §1–3 | domain/learning; application/workflows | Phạm vi Writing, audio/ASR, NG, nấc hỗ trợ đúng giới hạn | P1 nền: `src/domain/learning/*`, `signal.ts`; luồng kỹ năng là P3 |
 | R-04 | 04 §2; 05 §6 | application/context | Blind context, payload UI, cache không lộ đáp án/mục tiêu ẩn | P0 `blind-context.ts`; P1 manifest assessor không chứa đáp án (p1-queue) |
 | R-05 | 04 §4–5; 06 §5 | infrastructure/sqlite; application/jobs | Idempotency, fencing, retry budgets, pinning và tái đánh giá | P1: `src/infrastructure/sqlite/job-queue.ts`, `src/worker/worker.ts`, `src/domain/jobs/budget.ts`; tests/integration/p1-queue |
-| R-06 | 05 §5,7–8; 06 §3–4 | application/qc; infrastructure/files | QC đúng hash, revocation, exposure dùng chung, dry-run riêng | P1: `src/infrastructure/files/*`, `knowledge-repository.ts`, revocation/novelty; p1-persistence. QC là P2 |
-| R-07 | 06A §3–8 | infrastructure/ai; worker | Subscription-only, isolation, timeout, 12 ca lỗi bắt buộc | P1: worker timeout/cancel/fencing với FakeAdapter (ca 2, 6, 7, 8 ở mức fake); adapter thật P2 |
+| R-06 | 05 §5,7–8; 06 §3–4 | application/qc; infrastructure/files | QC đúng hash, revocation, exposure dùng chung, dry-run riêng | P1 nền; P2: `src/application/qc/*`, `src/domain/knowledge/{release-gate,qc4,coverage,source-rights}.ts`, `builder-repository.ts`, `result-cache.ts`; tests/integration/p2-pipeline, p2-console, contract/knowledge-schemas (P2_ACCEPTANCE) |
+| R-07 | 06A §3–8 | infrastructure/ai; worker | Subscription-only, isolation, timeout, 12 ca lỗi bắt buộc | P1 fake (ca 2, 6, 7, 8); P2: `subscription-guard.ts`, `src/infrastructure/ai/gateway/*`, `src/worker/main.ts`; tests/integration/p2-gateway (ca 3, 4, 5, 6; ca 9 ở p2-pipeline). Chưa có adapter thật được xác minh (D-01) |
 | R-08 | 06 §2,5 | web; infrastructure/backup | Autosave/reload, backup DB+JSON+media và restore | P1: `src/infrastructure/backup/backup.ts`; tests/integration/p1-backup. Autosave UI là P3 |
 
 ## Quy tắc nhận việc
+R-07 / E-13: `verify-codex.ts` tách quan sát phản hồi khỏi bằng chứng ranh giới đọc; `subscription-guard.ts` từ chối evidence cũ/model_reply/thiếu tham chiếu thực thi. Hồi quy: `tests/integration/p2-e11.test.ts` (không dùng tool, tool bị policy chặn, rò rỉ, lỗi/empty) và `p2-gateway.test.ts` (legacy/method/reference). Chưa có collector kiểm chứng quyền đọc độc lập trên runner thật; P2 vẫn BLOCKED D-01.
+
 Mỗi lượt chọn một hạng mục đủ nhỏ để nghiệm thu, ghi mã P/R trong PROGRESS. Không coi làm xong giao diện là xong nghiệp vụ. Không bỏ cổng lỗi để chạy demo; không cần chờ toàn sản phẩm hoàn chỉnh mới kiểm thử lát cắt.

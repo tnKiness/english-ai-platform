@@ -207,7 +207,7 @@ Trước khi đưa vào vận hành, kiến trúc phải vượt qua 6 kịch b�
 ## 7. Lộ trình Phát triển 4 Giai đoạn & Đồng bộ với Phần 1–6 / 06A
 
 ### A. Lộ trình Triển khai Thực tế (Đã đồng bộ với Phần 6 & Phụ lục 06A)
-- **Giai đoạn 1 — Chốt nền tảng Dữ liệu, Hàng đợi & Hợp đồng Adapter:** Thiết lập SQLite schema, quản lý phiên bản JSON bất biến, phân quyền ngữ cảnh, khóa chống trùng, liên kết truy vết, cùng hợp đồng `providerAdapter` (gọi CLI thuê bao `codex`, `claude-code`, `gemini-cli`) và chốt chặn `subscriptionGuard`.
+- **Giai đoạn 1 — Chốt nền tảng Dữ liệu, Hàng đợi & Hợp đồng Adapter:** Thiết lập SQLite schema, quản lý phiên bản JSON bất biến, phân quyền ngữ cảnh, khóa chống trùng, liên kết truy vết, cùng hợp đồng `providerAdapter` (gọi CLI thuê bao `codex`, `claude-code`, `agy` (thay gemini-cli theo E-11)) và chốt chặn `subscriptionGuard`.
 - **Giai đoạn 2 — `Builder & QC Console` tối thiểu + Một vòng học hoàn chỉnh (End-to-End Slice):** Đưa `Builder & QC Console` tối thiểu lên sớm để chạy gói tri thức, xem QC, phát hành/ngừng sử dụng; triển khai trọn vẹn 1 vòng lặp Writing + 1 luồng Reading có *Giải mù* + các tình huống mẫu có *Audio*.
 - **Giai đoạn 3 — Kiểm chứng Đa nhà cung cấp & Khả năng mở rộng:** Bổ sung đầy đủ các Adapter CLI thuê bao, kiểm thử chuyển hãng khi hết hạn mức (`QUOTA_EXHAUSTED` khác với lỗi sư phạm, bảo toàn nguồn xử lý và không cộng trùng bằng chứng độc lập), thêm dạng nhiệm vụ mới và đo kiểm thử hồi quy.
 - **Giai đoạn 4 — Tối ưu Ngữ cảnh, Theo dõi Hằng ngày & Công cụ nâng cao:** Hoàn thiện tra cứu SQLite FTS/BM25, bộ nhớ đệm (`result_cache`), `Daily Tracker`, đề xuất điều chỉnh lịch có phiên bản và các công cụ quản trị nâng cao.

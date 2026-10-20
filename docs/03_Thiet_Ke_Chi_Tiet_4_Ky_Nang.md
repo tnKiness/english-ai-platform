@@ -58,6 +58,8 @@ Trên giao diện chế độ *Học có hướng dẫn*, hỗ trợ được ch
 
 ## 2. Phân hệ SPEAKING (Part 1, 2, 3)
 
+> **Phạm vi giai đoạn đầu theo E-11 (20/10/2026, người dùng chốt):** Speaking hỗ trợ ý tưởng, dàn ý và từ vựng dạng văn bản như Writing. Chỉ phản hồi nội dung/ngôn ngữ viết; không suy ra phản xạ nói, độ trôi chảy hay phát âm, không chấm audio hoặc báo Band Speaking từ văn bản/audio. Không gửi `learner_audio` cho provider. Các yêu cầu audio bên dưới giữ làm đặc tả giai đoạn sau, phụ thuộc xác minh D-06 và quyết định quyền dữ liệu mới. P2 chỉ đồng bộ ghi chú, chưa triển khai P3.
+
 ### A. Xử lý Dữ liệu Âm thanh (Audio), Bản chép lời (ASR Transcript) & Chất lượng Phép đo
 1. **Phân cấp nguồn dữ liệu đối chiếu:**
    - **Audio gốc là nguồn đối chiếu chuẩn**; bản chép lời (Transcript) chỉ là dữ liệu được suy ra.

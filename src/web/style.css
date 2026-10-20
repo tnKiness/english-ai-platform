@@ -1,6 +1,16 @@
 :root { font-family: system-ui, sans-serif; color: #183c38; background: #f4f6f1; line-height: 1.6; }
-body { margin: 0; } main { max-width: 760px; margin: 10vh auto; padding: 24px; }
+body { margin: 0; } main { max-width: 1100px; margin: 4vh auto; padding: 24px; }
 h1 { font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.15; letter-spacing: -.04em; }
 .eyebrow { letter-spacing: .16em; font-size: .75rem; font-weight: 700; }
-section { margin-top: 40px; padding: 24px; border: 1px solid #cad8cb; border-radius: 16px; background: #fff; }
-h2 { font-size: 1.15rem; } p { max-width: 64ch; }
+section { margin-top: 24px; padding: 24px; border: 1px solid #cad8cb; border-radius: 16px; background: #fff; }
+h2 { font-size: 1.15rem; } h3 { font-size: 1rem; margin: 0 0 8px; } p { max-width: 72ch; }
+.tabs { display: flex; gap: 8px; margin: 12px 0; } .tabs button.active { background: #183c38; color: #fff; }
+button { font: inherit; border: 1px solid #9fb8a6; background: #fff; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+button:disabled { opacity: .45; cursor: not-allowed; } input { font: inherit; padding: 4px 8px; border: 1px solid #9fb8a6; border-radius: 8px; }
+.card { margin: 12px 0; padding: 16px; border: 1px solid #cad8cb; border-radius: 12px; background: #fff; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; } .mono { font-family: ui-monospace, monospace; font-size: .8rem; }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; } th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #e3ebe4; vertical-align: top; }
+.PASS { color: #19703a; } .FAIL { color: #a12a1f; } .NOT_RUN { color: #8a6d0b; }
+.tag { font-size: .7rem; border: 1px solid #9fb8a6; border-radius: 6px; padding: 0 6px; margin-left: 6px; }
+.tag.active { background: #d9f0df; } .tag.suspended, .tag.retired { background: #f6dcd8; }
+.sev-high { border-color: #e2a59c; } .error { color: #a12a1f; } pre { white-space: pre-wrap; max-height: 50vh; overflow: auto; background: #f4f6f1; padding: 8px; }
