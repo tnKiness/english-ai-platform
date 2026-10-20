@@ -1,80 +1,104 @@
-# Study English — IELTS cá nhân
+# English AI Platform
 
-Ứng dụng web local theo kiến trúc modular monolith. Đã có khung P0 (trang trạng thái, health endpoint, schema, fake adapter, spike Windows/SQLite) và nền P1 dạng thư viện có test: migrations SQLite, kho JSON/media bất biến, Rule Engine thuần, queue lease/fencing/retry và backup/restore phối hợp ([nghiệm thu P1](docs/engineering/P1_ACCEPTANCE.md)). P2 (đang BLOCKED chờ xác minh provider, [nghiệm thu P2](docs/engineering/P2_ACCEPTANCE.md)): 6 đầu ra tri thức Phần 5, pipeline Builder/QC1–4, Console 3 tab có session/CSRF, gateway AI thuê bao chặn thực thi khi thiếu căn cứ, worker và CLI backup. P3 đang `IN_PROGRESS` ([nghiệm thu P3](docs/engineering/P3_ACCEPTANCE.md)): đã có khung học web (Mục tiêu ban đầu, Học hôm nay, Workspace 3 chế độ, Tiến độ 4 thành phần, Cài đặt), vòng học Writing khép kín với `FakeAdapter` (synthetic) và gợi mở theo nấc chỉ lưu server; còn phần Reading giải mù/audio mẫu ở lượt sau. **Chưa bật AI thật hay báo điểm Band (chờ D-01, D-02, D-05).**
+[![CI](https://github.com/tnKiness/english-ai-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/tnKiness/english-ai-platform/actions/workflows/ci.yml)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-22-339933?logo=node.js&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-217%20passing-brightgreen)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
-AI lập trình phải đọc [AGENTS.md](AGENTS.md), [PROGRESS.md](PROGRESS.md) và [kế hoạch](docs/engineering/IMPLEMENTATION_PLAN.md) trước khi sửa.
+A local-first **IELTS learning system** that uses AI to build study material and give feedback — designed so the AI can never see answer keys it shouldn't, never leak credentials, and never claim a band score it can't justify.
 
-## Môi trường và cài đặt
-- Đã kiểm chứng trên Windows, Node **22.18.0**, npm **10.9.3**; `.node-version` ghi bản baseline, engines giới hạn Node 22 từ 22.18.0.
-- Dependency khóa exact trong `package.json` và `package-lock.json`; cài lại bằng `npm ci` (PowerShell có thể dùng `npm.cmd ci`).
-- `better-sqlite3` có native binding; cần tải binary phù hợp khi cài. Không cần API key hoặc đăng nhập AI để chạy P0.
+It runs on the learner's own machine (Windows), stores everything in SQLite + immutable JSON, and talks to AI through the **CLI tools of existing subscriptions** (Codex, Claude Code, Antigravity) instead of paid API keys — behind a gateway that blocks every provider until its isolation has been proven.
 
-## Chạy khung ứng dụng
-Mở hai terminal tại root repository:
-```powershell
-npm.cmd run dev:server
+> **Status:** in active development. Foundation (P0–P1) done, AI content pipeline (P2) built and waiting on provider verification, learning UI (P3) in progress — a full Writing loop works end-to-end with a synthetic `FakeAdapter`. Real AI and band scores are intentionally **off** until their acceptance gates pass. Detailed Vietnamese docs: [docs/README.vi.md](docs/README.vi.md).
+
+---
+
+## Highlights
+
+- **Modular monolith with enforced layering** — `domain` (pure rules, no I/O) → `application` (use cases, ports) → `infrastructure` (SQLite, files, AI) → `server` / `worker` / `web` entrypoints.
+- **Durable job queue on SQLite** with leases, fencing tokens, retry budgets and crash recovery ([job-queue.ts](src/infrastructure/sqlite/job-queue.ts), [jobs/state.ts](src/domain/jobs/state.ts)).
+- **AI gateway with defense in depth** — env-var allowlist, sandboxed working directory, output redaction, per-provider read-boundary probes; a provider stays blocked until evidence proves it can't read outside its sandbox ([gateway/](src/infrastructure/ai/gateway)).
+- **Blind context** — the model only gets the data its task is allowed to see; hidden answer keys are kept out of prompts and out of the web DTOs ([blind-context.ts](src/application/context/blind-context.ts)).
+- **Content pipeline: Builder → QC1–QC4 → release gate**, with source-rights tracking, novelty/coverage checks and revocation ([domain/knowledge/](src/domain/knowledge)).
+- **Versioned contracts** — JSON Schema for every job, AI result and knowledge pack ([contracts/](contracts)), sequential SQL migrations ([migrations/](migrations)).
+- **Coordinated backup/restore** of DB + JSON + media using SQLite online backup ([backup.ts](src/infrastructure/backup/backup.ts)).
+- **Local-only HTTP security** — binds to `127.0.0.1`, session cookies, Origin check and CSRF tokens on every write ([session.ts](src/server/session.ts)).
+- **217 tests** (unit, integration, contract, Windows process-tree spikes) all running against synthetic data.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Entrypoints
+    WEB[web<br/>React + Vite] -->|JSON API| SRV[server<br/>Fastify]
+    WRK[worker<br/>queue loop]
+    CLI[cli<br/>ai · backup]
+  end
+  SRV --> APP
+  WRK --> APP
+  CLI --> APP
+  APP[application<br/>use cases · ports · QC pipeline] --> DOM[domain<br/>pure rules]
+  APP --> INF
+  subgraph INF[infrastructure]
+    DB[(SQLite<br/>state + queue)]
+    FS[(Immutable JSON<br/>+ media store)]
+    GW[AI gateway<br/>isolation · redaction]
+  end
+  GW -->|sandboxed process| AI[Codex / Claude Code / Antigravity CLI]
 ```
+
+| Layer | Responsibility |
+|---|---|
+| `src/domain` | Entities, invariants, state machines (attempts, jobs, knowledge release). No imports from other layers. |
+| `src/application` | Workflows (Writing loop, assessment submission, QC pipeline), context building, port interfaces. |
+| `src/infrastructure` | SQLite repositories and queue, JSON/media stores, AI adapters and gateway, backup. |
+| `src/server` · `src/worker` · `src/web` | Composition roots: HTTP API, background worker, React UI (talks to the API only). |
+
+Design decisions are recorded in [docs/engineering/DECISIONS.md](docs/engineering/DECISIONS.md); acceptance criteria per phase live next to it.
+
+## Tech stack
+
+TypeScript (strict) · Node.js 22 · Fastify 5 · React 19 · Vite · SQLite (better-sqlite3) · Ajv / JSON Schema · Vitest · ESLint · GitHub Actions
+
+## Getting started
+
+Requires **Windows** and **Node.js 22.18+** (see [.node-version](.node-version)). No API key or AI login is needed — everything runs on the synthetic `FakeAdapter` by default.
+
 ```powershell
-npm.cmd run dev
-```
-Mở [ứng dụng local](http://127.0.0.1:5173). Backend chỉ bind `127.0.0.1:4317`, mở store ở `var/` (chạy từ root). Không public server qua LAN/tunnel. UI có mục Builder & QC (Gói tri thức · Cần xử lý · Lần chạy); Học hôm nay/Tiến độ chưa mở. Mọi `/api` trừ health/session cần cookie phiên; thao tác ghi cần thêm Origin + header CSRF.
-
-Lệnh vận hành P2:
-```powershell
-npm.cmd run worker                 # thoát mã 3 nếu gateway chặn mọi provider
-npm.cmd run worker -- --fake       # chỉ job dry-run bằng FakeAdapter (synthetic)
-npm.cmd run ai -- status           # lý do từng provider bị chặn; không gọi model
-npm.cmd run backup -- create       # restore <backup> <thư mục mới> ; promote <thư mục> --confirm
+npm ci
+npm run dev:server   # API on http://127.0.0.1:4317
+npm run dev          # UI  on http://127.0.0.1:5173
 ```
 
-## Kiểm tra
-E-11 chọn Codex để xác minh D-01 đầu tiên. Hướng dẫn từng lệnh đăng nhập profile CODEX_HOME riêng, xác nhận extra usage (30 ngày), `npm.cmd run ai -- verify codex --profile <dir>`, duyệt evidence và cấp đúng 5 loại dữ liệu ở [P2_ACCEPTANCE](docs/engineering/P2_ACCEPTANCE.md). `verify` gọi prompt synthetic bằng quota thuê bao và chỉ dành cho người dùng tự chạy; test tự động dùng CLI giả. Ranh giới đọc file chứng minh bằng `npm.cmd run ai -- probe-boundary codex --profile <dir>` (chạy `codex sandbox`, không gọi model; hướng dẫn và kết quả ở [D01_CODEX_READ_BOUNDARY](docs/engineering/D01_CODEX_READ_BOUNDARY.md)). agy thay gemini-cli, vẫn NEEDS_VERIFICATION; learner_audio luôn bị chặn. P2 vẫn BLOCKED cho tới khi có bằng chứng thật và QC thật.
+Useful commands:
 
 ```powershell
-npm.cmd run check
-npm.cmd run spike
-npm.cmd run inventory
+npm run check              # lint → typecheck → tests → build (same as CI)
+npm run worker -- --fake   # process queued jobs with the synthetic adapter
+npm run ai -- status       # why each AI provider is currently blocked (no model call)
+npm run backup -- create   # coordinated DB + JSON + media backup
 ```
-- `check`: ESLint → TypeScript → Vitest → build backend và web.
-- `spike`: SQLite transaction/online backup/restore và stdin/EOF/timeout/output/cancel/cây tiến trình Windows, toàn bộ bằng dữ liệu synthetic tạm.
-- `inventory`: chỉ tra executable CLI trên PATH, không đọc auth hoặc gọi inference; không thấy trên PATH không chứng minh chưa cài.
-- Sau build: `npm.cmd start` chạy backend đã biên dịch; chưa có server phục vụ static bundle production. Dùng `dev` để xem UI P0.
 
-## Relay AI lập trình (chuyển nền tảng khi hết quota)
-Chạy một nhiệm vụ code qua Claude Code → Codex → Antigravity (Gemini); khi một nền tảng hết quota hoặc rate limit, relay ghi giờ mở lại và giao tiếp cho nền tảng kế tiếp kèm `git status`/`git diff --stat`. Các AI nối mạch qua working tree và PROGRESS.md. Đây là công cụ phát triển, không phải AI của ứng dụng học.
-```powershell
-npm.cmd run relay -- --preflight
-npm.cmd run relay -- "Mô tả nhiệm vụ"
-npm.cmd run relay -- --task-file task.md --wait
-npm.cmd run relay -- --continue
-npm.cmd run relay -- --status
+## Project layout
+
+```text
+src/            domain · application · infrastructure · server · worker · web · cli
+contracts/      JSON Schemas (core, provider, knowledge)
+migrations/     sequential SQLite migrations
+tests/          unit · integration · contract · spikes · fixtures (synthetic only)
+docs/           product design (00–06) and engineering docs (plan, decisions, acceptance)
+scripts/        tooling, incl. a relay that hands coding tasks between AI coding CLIs
 ```
-- `--preflight`: kiểm tra đăng nhập thuê bao, không gọi model. `--smoke`: mỗi CLI trả một dòng ở chế độ chỉ đọc (tốn rất ít quota) và ghi trạng thái quota.
-- `--order claude,codex,agy` đổi thứ tự; `--timeout-min` (mặc định 60) cho mỗi lượt; `--max-runs` (mặc định 6); `--wait` chờ tới giờ mở lại sớm nhất khi mọi nền tảng hết quota thay vì thoát; `--reset codex|all` xóa cooldown/NEEDS_LOGIN; `--quiet` không in output CLI.
-- Mã thoát: 0 xong, 2 AI cần người dùng quyết định, 75 hết nền tảng khả dụng, 1 lỗi khác (không tự chuyển tiếp để tránh đốt quota cả ba). Ctrl+C dừng cả cây tiến trình; chạy `--continue` để tiếp.
-- Đường dẫn CLI tự dò; ghi đè bằng `RELAY_CLAUDE_BIN`, `RELAY_CODEX_BIN`, `RELAY_AGY_BIN`; model mặc định Opus 5.5 Medium → GPT-6 Astra Medium → Gemini 4 Argon Medium; đổi bằng `RELAY_CLAUDE_MODEL`/`RELAY_CLAUDE_EFFORT`, `RELAY_CODEX_MODEL`/`RELAY_CODEX_EFFORT`, `RELAY_AGY_MODEL` (agy ghi mức effort trong tên model); thứ tự mặc định bằng `RELAY_ORDER`.
-- Trạng thái, khóa và log từng lượt nằm ở `var/relay/` (không commit). Relay không commit/push; xem diff trước khi commit.
-- Xem trực tiếp: relay in từng bước (đọc/sửa file, lệnh đang chạy, câu trả lời) với tiền tố nền tảng. Ở terminal khác: `Get-Content -Wait -Encoding UTF8 var\relay\live.log`. `--quiet` chỉ tắt in ra màn hình, live.log vẫn ghi.
-- Mở lại phiên: mỗi lượt là một phiên thật của CLI đó. `--status` liệt kê phiên gần đây kèm lệnh mở lại (`claude --resume <id>`, `codex resume <id>`, `agy --conversation <id>`), chạy tại thư mục dự án để chat tiếp với đúng ngữ cảnh.
-- Chuyển nền tảng khi: CLI báo lỗi hết quota/rate limit/mất đăng nhập, Claude gửi `rate_limit_event` bị từ chối, AI kết thúc bằng `RELAY_STATUS: QUOTA`, hoặc AI ghi BLOCKED vì hạn mức sau cảnh báo sắp hết hạn mức. Lượt sau nhận cả báo cáo cuối của lượt trước.
-- Giới hạn: relay chỉ điều khiển CLI headless chạy từ terminal, không làm phiên Claude/Codex desktop đang mở tự chuyển. Nhận diện quota dựa vào sự kiện và chữ CLI in ra; khi CLI đổi định dạng phải cập nhật `scripts/relay/core.ts`/`stream.ts`.
 
-## Relay Console (giao diện chat chung)
-```powershell
-npm.cmd run relay:console
-```
-Mở `http://127.0.0.1:4319/` (đổi cổng bằng `RELAY_CONSOLE_PORT`). Một trang để:
-- Chat với Claude Code, Codex hoặc Antigravity trong thư mục dự án; xem từng bước (đọc/sửa file, lệnh) ngay khi chạy. Tắt "Cho phép sửa file" để chỉ đọc.
-- Một **cuộc trò chuyện** gom phiên thật của nhiều nền tảng. Hết hạn mức thì tự chuyển sang nền tảng kế tiếp (có thể tắt). Khi quay lại nền tảng cũ, console tiếp đúng phiên cũ của nó và gửi kèm tóm tắt những lượt nó đã bỏ lỡ. Mỗi phiên vẫn mở được trong CLI gốc (`claude --resume`, `codex resume`, `agy --conversation`).
-- Mở phiên do relay/CLI tạo trước đó ("Phiên chưa gom") và chat tiếp; chạy relay nhiệm vụ dài và xem cột Trực tiếp (đọc `var/relay/live.log`, kể cả relay chạy ở terminal khác).
-- Chỉ một tiến trình sửa workspace tại một thời điểm (dùng chung khóa với relay). Server chỉ nghe 127.0.0.1, API cần token nhúng trong trang và kiểm Host/Origin. Lịch sử ở `var/relay/threads.json`, `var/relay/transcripts/`.
-- Giới hạn: lịch sử chat không chuyển giữa các hãng (chỉ có tóm tắt bàn giao); phiên tạo trước khi có console chưa có transcript trong console; app desktop của từng hãng có hiện các phiên này hay không chưa được kiểm chứng.
+## Roadmap
 
-## Hợp đồng và giới hạn
-- [Schema v1](contracts/core.v1.schema.json), [ERD/trạng thái/quyền/recovery](docs/engineering/P0_DATA_AND_STATE.md), [nghiệm thu P0](docs/engineering/P0_ACCEPTANCE.md).
-- JSON Schema không kiểm chứng nội dung IELTS hay quyền thuê bao. FakeAdapter chỉ trả dữ liệu synthetic, không ghi bằng chứng học thật.
-- Process supervisor chưa phải sandbox. Gateway (`src/infrastructure/ai/gateway`) chặn mọi CLI thật cho tới khi có bằng chứng D-01 — xem các bước trong P2_ACCEPTANCE. Không có adapter nào READY.
-- Backup phối hợp DB + JSON + media có CLI `npm run backup`; chưa có lịch tự động.
-- Dữ liệu chạy thật mặc định nằm dưới `var/` (`db/`, `knowledge/`, `media/`, `staging/`, `backups/`); test dùng thư mục tạm. `var/`, database, log, credential và media cá nhân không được commit. Migrations ở `migrations/`, áp dụng khi mở store từ root repository.
+- [x] **P0** – bootstrap, data contracts v1, Windows/SQLite spikes
+- [x] **P1** – migrations, immutable stores, rule engine, job queue, backup/restore
+- [ ] **P2** – AI Builder/QC pipeline & gateway *(built; blocked on real-provider verification)*
+- [ ] **P3** – learning UI: Writing loop ✅, Reading & audio next
+- [ ] Real AI feedback and band estimates (after pedagogy & scoring decisions are approved)
 
-Mã nguồn: [tnKiness/english-ai-platform](https://github.com/tnKiness/english-ai-platform), nhánh `main`. `.gitignore` loại trừ `node_modules`, `dist`, `var/`, database, log và `.env`.
+## Author
+
+Built by [@tnKiness](https://github.com/tnKiness). Licensed under the [MIT License](LICENSE).
