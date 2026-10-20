@@ -22,7 +22,8 @@
     "relay:console": "tsx scripts/relay/console/main.ts",
     "ai": "tsx src/cli/ai.ts",
     "worker": "tsx src/worker/main.ts",
-    "backup": "tsx src/cli/backup.ts"
+    "backup": "tsx src/cli/backup.ts",
+    "qc:real": "tsx scripts/qc-real-synthetic.ts"
   },
   "dependencies": {
     "ajv": "8.20.0",

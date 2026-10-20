@@ -1,4 +1,4 @@
-# Nghiệm thu P2 — 20/10/2026 (IN_PROGRESS, BLOCKED chờ D-01)
+# Nghiệm thu P2 — 20/10/2026 (DONE)
 
 ## Phạm vi và trạng thái
 P2 theo [IMPLEMENTATION_PLAN](IMPLEMENTATION_PLAN.md). Quyết định: E-08 (tri thức/QC), E-09 (gateway), E-10 (session/console/worker) trong [DECISIONS](DECISIONS.md). Windows 11, Node 22.18.0, npm 10.9.3; không thêm dependency. Chỉ nội dung synthetic tự viết; không gọi inference thật trong code hay test.
@@ -125,6 +125,12 @@ npm.cmd run ai -- status
 `evidence` kiểm lại hash/version/login, không gọi inference; còn thiếu căn cứ thì giữ NEEDS_VERIFICATION và exit 2. Consent gồm synthetic_fixture, knowledge_content, answer_key, learner_submission, learner_profile; `learner_audio` luôn bị chặn ngay cả với provider VERIFIED. Quyền không tự lan sang Claude/agy.
 
 6. Sau D-01 đạt, chạy QC4/QC2–3 thật trên gói synthetic theo pipeline P2 và ghi kết quả mới; chỉ lúc đó mới xét P2 DONE. Bộ test CLI giả trong repository không đóng D-01/D-04.
+
+## QC thật bằng Codex (20/10/2026) — điều kiện đạt P2
+- D-01 đóng cho Codex: probe ranh giới PASS (`var/ai/probe-boundary-codex-2026-10-20T09-20-11-520Z.json`), verify thật (`var/ai/evidence-2.json`, bản duyệt `evidence-3.json`), gói ChatGPT Plus + `gpt-6-astra` do người dùng xác nhận → gateway `codex: READY`, consent 5 loại dữ liệu E-11.
+- `npm.cmd run qc:real` (kho tạm, không đụng dữ liệu app): QC1–QC4 PASS trên đúng bundle hash; QC4 gồm giải mù (FALSE / NOT GIVEN, khớp đáp án), đối chiếu `consistent`, đánh giá `inconclusive` cho bài thiếu dữ liệu; mọi run ghi `provider = codex`. Release theo đúng hash, rồi revoke → `suspended`, không cấp phát.
+- Các điều kiện còn lại của P2 đã có test: sửa sau QC bị chặn publish; thiếu căn cứ billing/isolation thì gateway chặn thực thi.
+- Lớp chỉ dẫn tác vụ (`task-instructions.ts`) thêm trước lượt chạy thật: chỉ dẫn cố định + schema kết quả qua stdin, argv không đổi.
 
 ## Giới hạn
 - Đường thực thi gateway chỉ được chứng minh với CLI giả (node.exe + script fixture) và evidence synthetic; argv/envelope/cơ chế cô lập của CLI thật là ứng viên chưa xác minh.

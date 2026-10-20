@@ -19,7 +19,7 @@ Cập nhật: 20/10/2026 — Asia/Bangkok.
 | P0 | Chốt hợp đồng, bootstrap, thử tính khả thi | DONE | P0_ACCEPTANCE; `npm.cmd run check` 41/41 tests; D-01, D-02, D-04–D-07 vẫn mở, D-03 còn phần P1/P2 |
 | TOOL-01 | Relay AI lập trình chuyển nền tảng khi hết quota | DONE | scripts/relay, tests/unit/relay.test.ts; chuyển codex → agy thật đạt; Claude CLI cần đăng nhập lại |
 | P1 | Nền dữ liệu, Rule Engine, queue | DONE | P1_ACCEPTANCE; `npm.cmd run check` 107/107 tests, spike 6/6; giới hạn: chưa API ghi/worker entrypoint/hồ sơ năng lực (D-02) |
-| P2 | Builder/QC + một adapter thật đủ điều kiện | BLOCKED | P2-1…P2-4 và E-11 mục 1–7 có code/tài liệu + test (P2_ACCEPTANCE; 163/163); chưa có provider thật được xác minh (D-01) — Fake-only chưa hoàn tất P2. E-14: collector ranh giới đọc có code + test (201/201); E-15/E-16: tắt công cụ + kiểm cấu hình, guard 3 ca OS + 2 ca cấu hình (203/203); probe thật FAIL (chưa khóa ACL; `unified_exec` không tắt được), chờ người dùng |
+| P2 | Builder/QC + một adapter thật đủ điều kiện | DONE | P2_ACCEPTANCE (mục "QC thật bằng Codex"); D-01 đóng cho Codex (READY); QC1–QC4 thật trên gói synthetic → release → revoke có truy vết (`npm.cmd run qc:real`); check 217/217. Còn mở: D-01 cho claude-code/agy; QC2/QC3 ngữ nghĩa vẫn là xác nhận của người/AI lập trình trên nội dung synthetic |
 | P3 | Vòng Writing + Reading giải mù + audio mẫu | IN_PROGRESS | Đã xong P3-1…P3-3 với FakeAdapter + nội dung synthetic ([P3_ACCEPTANCE](docs/engineering/P3_ACCEPTANCE.md), `tests/integration/p3-learning.test.ts` 8/8 ca đạt; bộ test P0–P3 183/183 đạt); còn thiếu P3-4 (Reading giải mù + audio mẫu), đánh giá bằng adapter thật (D-01) và chính sách ngưỡng năng lực (D-02) |
 | P4 | Chịu lỗi, adapter bổ sung, đối chứng | TODO | Chưa triển khai |
 | P5 | Mở rộng, daily tracking, tối ưu | TODO | Chưa triển khai |
@@ -286,6 +286,13 @@ Người dùng đã đăng nhập Codex trong profile riêng, ghi xác nhận ex
 
 ### 20/10/2026 — P3-1…P3-3 (relay, Antigravity) — kiểm lại độc lập
 - agy làm xong P3-1 khung học, P3-2 vòng Writing với FakeAdapter, P3-3 gợi mở theo nấc (P3_ACCEPTANCE, E-18, migration 0004). Sandbox agy không chạy được test cần socket loopback/junction nên agy chỉ chạy 183 test; chạy lại đầy đủ ngoài sandbox: `npm.cmd run check` 217/217 đạt. 2 test P1 chỉ đổi số migration 3→4.
+
+### 20/10/2026 — P2 DONE: QC thật bằng Codex trên gói synthetic
+- Phát hiện trước khi chạy: adapter CLI chỉ gửi JSON dữ liệu, không có chỉ dẫn vai trò/định dạng kết quả — model thật sẽ không biết hợp đồng. Thêm `src/infrastructure/ai/task-instructions.ts`: chỉ dẫn cố định theo task_type + JSON Schema kết quả (cùng schema parser dùng) + khối DATA, gửi qua stdin; argv đã xác minh không đổi (không dùng `--output-schema` vì sẽ lệch bằng chứng D-01). `tests/fixtures/fake-cli.mjs` đọc dòng dữ liệu sau `DATA (`.
+- Script `scripts/qc-real-synthetic.ts` (`npm.cmd run qc:real`): kho tạm `var/qc-real/<thời điểm>`, đọc evidence/consent/extra usage từ kho app; stage → freeze → QC1–3 deterministic → attest QC2/QC3 (AI lập trình, nội dung synthetic tự viết) → QC4 thật qua gateway → release → revoke.
+- Kết quả thật (`var/qc-real/2026-10-20T15-48-56-154Z`): gateway codex READY; 3 job, mỗi job 1 lần chạy, `ai_runs.provider = codex`: giải mù q1 FALSE, q2 NOT GIVEN (khớp đáp án), đánh giá policy-1 `inconclusive` đúng kỳ vọng, đối chiếu `consistent`, không có đáp án cạnh tranh. QC1–QC4 PASS trên bundle `69b0b431…`; release cho phép (manifest ghi QC4 bằng AI); revoke → `suspended`, item không còn cấp phát (`REVOKED`).
+- Phát hiện của Codex khi đối chiếu: phần giải thích q1 trong fixture synthetic ghi "paragraph two" trong khi dẫn chứng nằm ở câu thứ hai — lỗi nhỏ của nội dung synthetic, chưa sửa.
+- `npm.cmd run check` 217/217.
 
 ### Mẫu cho lượt code tiếp theo
 - Ngày / mã công việc / trạng thái:

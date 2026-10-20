@@ -6,8 +6,8 @@ import type { CliProvider } from '../../../application/ai/subscription-guard.js'
 import { runBoundedProcess, type ProcessRequest } from '../bounded-process.js';
 import { buildChildEnv } from './env-allowlist.js';
 import { parseEnvelope, type EnvelopeSpec } from './envelope.js';
+import { buildTaskInput } from '../task-instructions.js';
 import { CODEX_SANDBOX_GROUP, createRunSandbox, grantSandboxGroupRead, type SandboxGrant } from './isolation.js';
-import { DATA_POLICY } from '../../../application/context/scoped-reader.js';
 
 export interface CliDescriptor {
   provider: CliProvider;
@@ -120,9 +120,9 @@ export class CliProviderAdapter implements ProviderAdapter {
     try {
       const child = buildChildEnv(process.env, sandbox, permit.profileEnv);
       if (child.leaked_billing_names.length > 0) return { error: 'BILLING_UNVERIFIED' };
-      // Everything goes through stdin as data; argv is the recorded, fixed list (06A §5.C.1).
-      const input = JSON.stringify({ data_policy: DATA_POLICY, job_id: job.job_id, context_manifest_id: context.manifest_id, task_type: job.task_type ?? 'writing.assess',
-        result_schema_version: '1', context: context.payload });
+      // Instructions + data go through stdin; argv is the recorded, fixed list (06A §5.C.1). Without the instruction
+      // block a real model got only raw JSON and no output contract (found before the first real QC4 run, 20/10/2026).
+      const input = buildTaskInput(job.task_type ?? 'writing.assess', job.job_id, context.manifest_id, context.payload);
       const out = await this.run({ executable: permit.entrypoint, args: permit.argv, cwd: sandbox.dir, input, env: child.env, timeoutMs: permit.timeoutMs,
         maxOutputBytes: permit.maxOutputBytes, signal: abort.signal });
       this.envelopes.set(runId, permit.envelope);
