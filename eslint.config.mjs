@@ -6,4 +6,7 @@ export default ts.config(
   // P1: allow `const { dropped, ...rest } = row` to strip storage-only columns from DTOs.
   { rules: { '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true }] } },
   { files: ['**/*.mjs'], languageOptions: { globals: { process: 'readonly', console: 'readonly', Buffer: 'readonly', setInterval: 'readonly' } } },
+  // Relay Console page script runs in the browser.
+  { files: ['scripts/relay/console/public/**/*.js'], languageOptions: { globals: Object.fromEntries(
+    ['document', 'fetch', 'EventSource', 'setTimeout', 'clearTimeout', 'alert', 'encodeURIComponent'].map((g) => [g, 'readonly'])) } },
 );

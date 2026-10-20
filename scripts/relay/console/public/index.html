@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="relay-token" content="__RELAY_TOKEN__">
+  <title>Relay Console</title>
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">Relay Console</div>
+      <section class="providers" id="providers" aria-label="Nền tảng"></section>
+      <button class="primary" id="new-thread" type="button">+ Cuộc trò chuyện mới</button>
+      <h2>Cuộc trò chuyện</h2>
+      <nav id="threads" class="list"></nav>
+      <h2>Phiên chưa gom <span class="hint">(từ relay/CLI)</span></h2>
+      <nav id="sessions" class="list"></nav>
+    </aside>
+
+    <main class="chat">
+      <header class="chat-head">
+        <div class="title" id="thread-title">Cuộc trò chuyện mới</div>
+        <div class="busy" id="busy" hidden></div>
+      </header>
+      <div class="messages" id="messages" aria-live="polite">
+        <div class="empty" id="empty">
+          <p>Chọn nền tảng bên dưới rồi gửi tin nhắn. Mỗi lượt chạy CLI thật của nền tảng đó trong thư mục dự án.</p>
+          <p>Hết hạn mức thì tự chuyển sang nền tảng kế tiếp trong cùng cuộc trò chuyện; khi quay lại, nền tảng cũ được tóm tắt phần đã bỏ lỡ.</p>
+        </div>
+      </div>
+      <form class="composer" id="composer">
+        <div class="controls">
+          <div class="seg" id="provider-pick" role="radiogroup" aria-label="Gửi tới"></div>
+          <label class="toggle"><input type="checkbox" id="mode-work" checked> Cho phép sửa file</label>
+          <label class="toggle"><input type="checkbox" id="auto-fallback" checked> Tự chuyển khi hết hạn mức</label>
+        </div>
+        <div class="input-row">
+          <textarea id="message" rows="3" placeholder="Nhắn cho AI… (Ctrl+Enter để gửi)"></textarea>
+          <div class="actions">
+            <button class="primary" id="send" type="submit">Gửi</button>
+            <button id="stop" type="button" hidden>Dừng</button>
+          </div>
+        </div>
+      </form>
+    </main>
+
+    <aside class="side">
+      <section class="panel">
+        <h2>Relay nhiệm vụ dài</h2>
+        <textarea id="relay-task" rows="4" placeholder="Mô tả nhiệm vụ để relay chạy qua Claude → Codex → Antigravity"></textarea>
+        <div class="row">
+          <button id="relay-start" type="button">Chạy relay</button>
+          <button id="relay-continue" type="button">Tiếp tục nhiệm vụ dở</button>
+        </div>
+        <p class="hint" id="task-status"></p>
+      </section>
+      <section class="panel grow">
+        <div class="row between"><h2>Trực tiếp</h2><button id="live-clear" type="button" class="ghost">Xóa màn hình</button></div>
+        <pre class="live" id="live"></pre>
+      </section>
+    </aside>
+  </div>
+</body>
+</html>

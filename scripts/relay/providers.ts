@@ -6,8 +6,11 @@ import type { ProviderId } from './core.js';
 export interface Invocation { args: string[]; stdin: string | null; lastMessageFile?: string }
 export interface ProviderSpec {
   id: ProviderId; label: string; bin: string | null;
-  /** mode 'work' may edit the workspace; 'smoke' is read-only. Never a sandbox/permission bypass flag. */
-  invocation(prompt: string, opts: { cwd: string; mode: 'work' | 'smoke'; lastMessageFile: string }): Invocation;
+  /**
+   * mode 'work' may edit the workspace; 'read' is read-only. Never a sandbox/permission bypass flag.
+   * `resume` continues that native session of the same CLI (verified 20/10/2026 for agy; claude/codex per --help).
+   */
+  invocation(prompt: string, opts: { cwd: string; mode: 'work' | 'read'; lastMessageFile: string; resume?: string | null }): Invocation;
   /** Proves the CLI is logged in through a subscription, not an API key. null = cannot be checked. */
   checkSubscription(env: NodeJS.ProcessEnv): { ok: boolean | null; detail: string };
 }
@@ -57,8 +60,8 @@ export function providerSpecs(): Record<ProviderId, ProviderSpec> {
   return {
     claude: {
       id: 'claude', label: 'Claude Code', bin: firstExisting(process.env.RELAY_CLAUDE_BIN, claudeExe()),
-      invocation: (prompt, { mode }) => ({
-        args: ['-p', '--output-format', 'stream-json', '--verbose',
+      invocation: (prompt, { mode, resume }) => ({
+        args: ['-p', '--output-format', 'stream-json', '--verbose', ...(resume ? ['--resume', resume] : []),
           '--permission-mode', mode === 'work' ? 'acceptEdits' : 'default',
           '--allowedTools', ...(mode === 'work' ? WORK_TOOLS : READ_TOOLS),
           '--disallowedTools', ...DENIED,
@@ -77,11 +80,16 @@ export function providerSpecs(): Record<ProviderId, ProviderSpec> {
     },
     codex: {
       id: 'codex', label: 'Codex (ChatGPT)', bin: firstExisting(process.env.RELAY_CODEX_BIN, newestCodex(), where('codex.exe')[0]),
-      invocation: (_prompt, { cwd, mode, lastMessageFile }) => ({
-        args: ['exec', '--json', '--sandbox', mode === 'work' ? 'workspace-write' : 'read-only', '-C', cwd, '--color', 'never',
-          '-o', lastMessageFile, '-m', DEFAULT_MODELS.codex.model, '-c', `model_reasoning_effort="${DEFAULT_MODELS.codex.effort}"`, '-'],
-        stdin: _prompt, lastMessageFile,
-      }),
+      invocation: (prompt, { cwd, mode, lastMessageFile, resume }) => {
+        const sandbox = mode === 'work' ? 'workspace-write' : 'read-only';
+        const common = ['--json', '-o', lastMessageFile, '-m', DEFAULT_MODELS.codex.model, '-c', `model_reasoning_effort="${DEFAULT_MODELS.codex.effort}"`];
+        // `exec resume` has no --sandbox/-C flags: set the sandbox through config and run from the repo cwd.
+        return {
+          args: resume ? ['exec', 'resume', ...common, '-c', `sandbox_mode="${sandbox}"`, resume, '-']
+            : ['exec', ...common, '--sandbox', sandbox, '-C', cwd, '--color', 'never', '-'],
+          stdin: prompt, lastMessageFile,
+        };
+      },
       checkSubscription(env) {
         if (!this.bin) return { ok: false, detail: 'không tìm thấy' };
         const r = run(this.bin, ['login', 'status'], env);
@@ -91,8 +99,8 @@ export function providerSpecs(): Record<ProviderId, ProviderSpec> {
     },
     agy: {
       id: 'agy', label: 'Antigravity (Gemini)', bin: firstExisting(process.env.RELAY_AGY_BIN, join(LOCAL, 'agy', 'bin', 'agy.exe'), where('agy.exe')[0]),
-      invocation: (prompt, { mode }) => ({
-        args: ['-p', prompt, '--output-format', 'stream-json', '--sandbox', '--mode', mode === 'work' ? 'accept-edits' : 'plan',
+      invocation: (prompt, { mode, resume }) => ({
+        args: ['-p', prompt, '--output-format', 'stream-json', ...(resume ? ['--conversation', resume] : []), '--sandbox', '--mode', mode === 'work' ? 'accept-edits' : 'plan',
           '--model', DEFAULT_MODELS.agy.model],
         stdin: null,
       }),

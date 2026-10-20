@@ -59,6 +59,17 @@ npm.cmd run relay -- --status
 - Chuyển nền tảng khi: CLI báo lỗi hết quota/rate limit/mất đăng nhập, Claude gửi `rate_limit_event` bị từ chối, AI kết thúc bằng `RELAY_STATUS: QUOTA`, hoặc AI ghi BLOCKED vì hạn mức sau cảnh báo sắp hết hạn mức. Lượt sau nhận cả báo cáo cuối của lượt trước.
 - Giới hạn: relay chỉ điều khiển CLI headless chạy từ terminal, không làm phiên Claude/Codex desktop đang mở tự chuyển. Nhận diện quota dựa vào sự kiện và chữ CLI in ra; khi CLI đổi định dạng phải cập nhật `scripts/relay/core.ts`/`stream.ts`.
 
+## Relay Console (giao diện chat chung)
+```powershell
+npm.cmd run relay:console
+```
+Mở `http://127.0.0.1:4319/` (đổi cổng bằng `RELAY_CONSOLE_PORT`). Một trang để:
+- Chat với Claude Code, Codex hoặc Antigravity trong thư mục dự án; xem từng bước (đọc/sửa file, lệnh) ngay khi chạy. Tắt "Cho phép sửa file" để chỉ đọc.
+- Một **cuộc trò chuyện** gom phiên thật của nhiều nền tảng. Hết hạn mức thì tự chuyển sang nền tảng kế tiếp (có thể tắt). Khi quay lại nền tảng cũ, console tiếp đúng phiên cũ của nó và gửi kèm tóm tắt những lượt nó đã bỏ lỡ. Mỗi phiên vẫn mở được trong CLI gốc (`claude --resume`, `codex resume`, `agy --conversation`).
+- Mở phiên do relay/CLI tạo trước đó ("Phiên chưa gom") và chat tiếp; chạy relay nhiệm vụ dài và xem cột Trực tiếp (đọc `var/relay/live.log`, kể cả relay chạy ở terminal khác).
+- Chỉ một tiến trình sửa workspace tại một thời điểm (dùng chung khóa với relay). Server chỉ nghe 127.0.0.1, API cần token nhúng trong trang và kiểm Host/Origin. Lịch sử ở `var/relay/threads.json`, `var/relay/transcripts/`.
+- Giới hạn: lịch sử chat không chuyển giữa các hãng (chỉ có tóm tắt bàn giao); phiên tạo trước khi có console chưa có transcript trong console; app desktop của từng hãng có hiện các phiên này hay không chưa được kiểm chứng.
+
 ## Hợp đồng và giới hạn
 - [Schema v1](contracts/core.v1.schema.json), [ERD/trạng thái/quyền/recovery](docs/engineering/P0_DATA_AND_STATE.md), [nghiệm thu P0](docs/engineering/P0_ACCEPTANCE.md).
 - JSON Schema không kiểm chứng nội dung IELTS hay quyền thuê bao. FakeAdapter chỉ trả dữ liệu synthetic, không ghi bằng chứng học thật.

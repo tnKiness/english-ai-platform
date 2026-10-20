@@ -19,6 +19,7 @@
     "spike": "vitest run tests/spikes",
     "inventory": "node scripts/cli-inventory.mjs",
     "relay": "tsx scripts/relay/main.ts",
+    "relay:console": "tsx scripts/relay/console/main.ts",
     "ai": "tsx src/cli/ai.ts",
     "worker": "tsx src/worker/main.ts",
     "backup": "tsx src/cli/backup.ts"

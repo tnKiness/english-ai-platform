@@ -181,6 +181,13 @@ Người dùng đã đăng nhập Codex trong profile riêng, ghi xác nhận ex
 - Kiểm tra: `npm.cmd run check` lint/typecheck/184 tests/build đạt; `relay --smoke` claude/codex/agy OK ở chế độ stream, cả 3 session id có trong kho phiên của CLI tương ứng (`~/.claude/projects`, `~/.codex/sessions`, `~/.gemini/antigravity-cli/conversations`).
 - Giới hạn: chưa quan sát thật `rate_limit_event` trạng thái `rejected`/`allowed_warning` (test dùng dữ liệu tổng hợp theo định dạng đã thấy); chưa chạy một nhiệm vụ sửa file đầy đủ qua relay mới; mở lại phiên agy chưa thử.
 
+### 20/10/2026 — TOOL-02 Relay Console / DONE
+- Nguồn: người dùng yêu cầu một giao diện chat chung quản lý Claude Code/Codex/Antigravity, xem được các bước chạy ngầm, tự chuyển khi hết hạn mức và tiếp tục được trên nền tảng cũ; thử thực tế bằng phiên agy.
+- File: `scripts/relay/engine.ts` (tách từ main: chạy CLI, live.log, sessions.json, transcript theo phiên, khóa dùng chung; `RELAY_STATE_DIR` cho test), `scripts/relay/console/{server,threads,main}.ts`, `scripts/relay/console/public/{index.html,app.js,app.css}`, `providers.ts` (tham số resume cho từng CLI, chế độ `read`), `main.ts` (dùng engine; tạo live.log ngay khi chạy), `package.json` (`relay:console`), `eslint.config.mjs` (biến trình duyệt cho app.js), `tests/integration/relay-console.test.ts`, `tests/fixtures/fake-relay-cli.mjs`.
+- Lỗi người dùng gặp: `live.log` không tồn tại vì chưa có lượt relay nào chạy sau khi thêm tính năng; nay relay/console tạo file ngay khi khởi động.
+- Kiểm tra: `npm.cmd run check` lint/typecheck/189 tests/build đạt (console: token/Host/Origin/415, chat agy + resume, fallback claude→codex khi quota rồi quay lại claude nhận phần bỏ lỡ, chặn người ghi thứ hai). Thử thật trên trình duyệt: mở phiên agy `17af1dac…` (tạo bởi relay --smoke) trong console, chế độ chỉ đọc, hỏi lại câu trả lời trước và số script npm → agy tiếp đúng phiên cũ, nhớ câu trả lời trước, đọc package.json, trả lời 15 script (đúng); tiến trình hiện ở khung chat và cột Trực tiếp.
+- Giới hạn: chưa thử chat thật với Claude/Codex qua console (chỉ CLI giả); `codex exec resume` dùng `-c sandbox_mode` thay `--sandbox` theo `--help`, chưa chạy thật; chưa thử fallback với quota thật; token đổi mỗi lần khởi động console nên phải tải lại trang sau khi khởi động lại.
+
 ### Mẫu cho lượt code tiếp theo
 - Ngày / mã công việc / trạng thái:
 - Nguồn yêu cầu và quyết định áp dụng:
