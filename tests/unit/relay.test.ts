@@ -83,6 +83,11 @@ describe('reset time parsing', () => {
     const later = parseResetTime('Your limit resets 11pm', local) as Date;
     expect([later.getDate(), later.getHours()]).toEqual([19, 23]);
   });
+  it('reads a dated reset time (Codex, a day ahead; seen 20/10/2026)', () => {
+    const msg = 'You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/settings/usage to purchase more credits or try again at Oct 21st, 2026 3:26 AM.';
+    expect(parseResetTime(msg, new Date(2026, 9, 20, 23, 14))).toEqual(new Date(2026, 9, 21, 3, 26));
+    expect(parseResetTime('try again at Nov 2nd, 2026 12:05 PM', new Date(2026, 9, 20))).toEqual(new Date(2026, 10, 2, 12, 5));
+  });
   it('returns null for ambiguous text', () => {
     expect(parseResetTime('limit reached at 3', now)).toBeNull();
     expect(parseResetTime('quota exceeded', now)).toBeNull();

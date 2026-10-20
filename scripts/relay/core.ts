@@ -108,6 +108,17 @@ export function parseResetTime(text: string, now: Date): Date | null {
     if (ms > 0) return new Date(now.getTime() + ms);
   }
 
+  // Codex, once the reset is a day away: "try again at Oct 21st, 2026 3:26 AM" (seen 20/10/2026). Local machine time.
+  const dated = text.match(/\b(?:at|after)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4}),?\s+(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+  if (dated) {
+    const month = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].indexOf((dated[1] ?? '').slice(0, 3).toLowerCase());
+    let hour = Number(dated[4]); const ampm = dated[6]?.toLowerCase();
+    if (ampm === 'pm' && hour < 12) hour += 12;
+    if (ampm === 'am' && hour === 12) hour = 0;
+    const at = new Date(Number(dated[3]), month, Number(dated[2]), hour, Number(dated[5]), 0, 0);
+    if (month >= 0 && hour <= 23 && !Number.isNaN(at.getTime())) return at;
+  }
+
   const clock = text.match(/\b(?:at|lúc|resets?(?: at)?)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
   if (clock?.[1]) {
     let hour = Number(clock[1]); const minute = Number(clock[2] ?? 0); const ampm = clock[3]?.toLowerCase();
