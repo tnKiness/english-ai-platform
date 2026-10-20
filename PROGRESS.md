@@ -15,7 +15,8 @@ Cập nhật: 19/10/2026 — Asia/Bangkok.
 |---|---|---|---|
 | DOC-01 | Rà soát và quy định cho AI | DONE | AGENTS.md và docs/engineering; kiểm tra tài liệu, không phải kiểm thử ứng dụng |
 | P0 | Chốt hợp đồng, bootstrap, thử tính khả thi | DONE | P0_ACCEPTANCE; `npm.cmd run check` 41/41 tests; D-01, D-02, D-04–D-07 vẫn mở, D-03 còn phần P1/P2 |
-| P1 | Nền dữ liệu, Rule Engine, queue | TODO | Chưa triển khai |
+| TOOL-01 | Relay AI lập trình chuyển nền tảng khi hết quota | DONE | scripts/relay, tests/unit/relay.test.ts; chuyển codex → agy thật đạt; Claude CLI cần đăng nhập lại |
+| P1 | Nền dữ liệu, Rule Engine, queue | TODO | Chưa triển khai; người dùng yêu cầu tạm dừng 19/10/2026 |
 | P2 | Builder/QC + một adapter thật đủ điều kiện | TODO | Chưa xác minh entitlement, billing, isolation |
 | P3 | Vòng Writing + Reading giải mù + audio mẫu | TODO | Chưa triển khai |
 | P4 | Chịu lỗi, adapter bổ sung, đối chứng | TODO | Chưa triển khai |
@@ -54,6 +55,19 @@ P1: migrations/ports/repositories từ ERD P0; kiểm transaction, idempotency, 
 - Giới hạn: fake adapter không chứng minh adapter thật; runner chưa phải sandbox; backup mới chứng minh SQLite riêng; state guard chưa nằm trong DB transaction; chưa có Playwright.
 - Còn mở: D-01 (entitlement/billing/isolation CLI), D-02 (ngưỡng sư phạm), D-03 phần migrations/6 đầu ra tri thức, D-04 phần entrypoint Claude/Gemini và backup phối hợp, D-05–D-07.
 - Bước tiếp theo: P1 như mục "Việc tiếp theo".
+
+### 19/10/2026 — TOOL-01 / DONE
+- Nguồn: người dùng yêu cầu dùng chung Claude, ChatGPT (Codex) và Gemini theo thuê bao, tự chuyển khi hết quota để công việc lập trình không bị ngắt; phạm vi xác nhận là công cụ lập trình, không phải gateway trong app. Quyết định E-06.
+- File: `scripts/relay/core.ts` (phân loại lỗi, parse giờ mở lại, chọn provider, gỡ env tính phí, prompt bàn giao), `providers.ts` (dò binary, argv không bypass, kiểm tra thuê bao), `run-process.ts` (stream log, timeout, taskkill /T), `main.ts` (CLI, lock, state `var/relay`); `package.json` thêm `relay`; `tsconfig.json` typecheck cả `scripts`; README mục Relay.
+- CLI quan sát được: Claude Code 2.1.288 (shim → `claude.exe`), Codex 0.163.0-alpha.10.2 (`%LOCALAPPDATA%\OpenAI\Codex\bin\<hash>\codex.exe`, không có trên PATH), Antigravity CLI `agy` 1.4.2 (`%LOCALAPPDATA%\agy\bin\agy.exe`). Không có `gemini` CLI; phía Google dùng agy.
+- Lệnh và kết quả:
+  - `npm.cmd run check`: lint, typecheck, 63 tests/7 file, build đạt. Lần đầu 1 test fail do `.trim()` làm mất cột đầu của `git status --short`; đã sửa thành `trimEnd()`.
+  - `relay --preflight`: claude `claude.ai (pro)`, codex `Logged in using ChatGPT`, agy đăng nhập Google (gói chưa xác minh). Env con bị gỡ `ANTHROPIC_BASE_URL`.
+  - `relay --smoke`: agy OK; codex hết quota thật (`You’ve hit your usage limit … try again at 8:01 PM`) → COOLDOWN tới 20:01; claude `Failed to authenticate: OAuth session expired`, sau đó `auth status` báo `authMethod=none` → preflight chặn. Đã thêm mẫu lỗi AUTH này và test bằng đúng chuỗi quan sát được.
+  - Đầu-cuối: `relay --order codex,agy` với nhiệm vụ chỉ đọc: codex QUOTA → ghi cooldown → chuyển agy → `RELAY_STATUS: DONE`, exit 0; `git status` không đổi.
+- Giới hạn: chưa quan sát thật thông báo hết quota của Claude và agy (dùng mẫu đã biết + test synthetic); chưa chạy relay với nhiệm vụ có sửa file; agy chưa xác minh loại gói; quyền Bash của Claude chỉ là allowlist của Claude Code, không phải sandbox hệ điều hành.
+- Việc người dùng cần làm: đăng nhập lại Claude CLI trong terminal riêng (`claude` → `/login`), rồi `npm.cmd run relay -- --reset claude` và `--preflight`.
+- Bước tiếp theo: P1 khi người dùng cho tiếp tục; có thể chạy qua relay.
 
 ### Mẫu cho lượt code tiếp theo
 - Ngày / mã công việc / trạng thái:

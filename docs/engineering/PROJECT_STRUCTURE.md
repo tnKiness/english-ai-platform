@@ -28,7 +28,7 @@ policies/                   # luật cấu hình có phiên bản và nguồn qu
 migrations/                 # migrations SQLite tuần tự, không sửa bản đã áp dụng
 tests/
   unit/ integration/ contract/ e2e/ fixtures/
-scripts/                    # kiểm tra, khởi động, backup/restore, tooling
+scripts/                    # kiểm tra, khởi động, backup/restore, tooling; relay/ = relay AI lập trình (E-06)
 var/                        # runtime riêng tư, phải gitignore khi bootstrap
   db/ knowledge/ media/ staging/ logs/ backups/
 ```
