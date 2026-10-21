@@ -40,7 +40,7 @@ export class SqliteJobQueue implements JobQueuePort {
   get(jobId: string) { const r = this.row(jobId); return r && toRecord(r); }
 
   /** Idempotent by idempotency_key: a double submit returns the first job, a different payload is a conflict. */
-  enqueue(job: NewJob, regenRound = 0): JobRecord {
+  enqueue(job: NewJob, regenRound = 0, options: { allowUpdatedRubric?: boolean } = {}): JobRecord {
     return this.db.transaction(() => {
       const prior = this.db.prepare('SELECT * FROM ai_jobs WHERE idempotency_key = ?').get(job.idempotency_key) as JobRow | undefined;
       if (prior) {
@@ -55,9 +55,16 @@ export class SqliteJobQueue implements JobQueuePort {
         rubric_version: job.rubric_version, required_capabilities: job.required_capabilities, eligible_providers: job.eligible_providers,
         limits: { max_attempts_total: job.limits.max_attempts_total, timeout_seconds: job.limits.timeout_seconds } };
       if (!validateContract('job', contract)) throw new Error('Job violates contract');
-      const attempt = this.db.prepare('SELECT scope, rubric_version FROM attempts WHERE attempt_id = ?').get(job.attempt_id) as { scope: 'learner' | 'dry_run'; rubric_version: string } | undefined;
+      const attempt = this.db.prepare('SELECT scope, rubric_id, rubric_version FROM attempts WHERE attempt_id = ?').get(job.attempt_id) as { scope: 'learner' | 'dry_run'; rubric_id: string; rubric_version: string } | undefined;
       if (!attempt) throw new Error('Unknown attempt');
-      if (attempt.rubric_version !== job.rubric_version) throw new Error('Job rubric_version differs from the version pinned on the attempt');
+      if (attempt.rubric_version !== job.rubric_version) {
+        if (!options.allowUpdatedRubric) throw new Error('Job rubric_version differs from the version pinned on the attempt');
+        const rubExists = this.db.prepare("SELECT 1 FROM json_objects WHERE kind = 'rubric' AND object_id = ? AND version = ?").get(attempt.rubric_id, job.rubric_version);
+        if (!rubExists) throw new Error('Unknown updated rubric version for re-evaluation');
+        const manifest = this.db.prepare('SELECT rubric_id, rubric_version, rubric_hash FROM context_manifests WHERE manifest_id = ?').get(job.context_manifest_id) as { rubric_id: string; rubric_version: string; rubric_hash: string } | undefined;
+        const ref = this.db.prepare("SELECT content_hash FROM json_objects WHERE kind = 'rubric' AND object_id = ? AND version = ?").get(attempt.rubric_id, job.rubric_version) as { content_hash: string };
+        if (!manifest || manifest.rubric_id !== attempt.rubric_id || manifest.rubric_version !== job.rubric_version || manifest.rubric_hash !== ref.content_hash) throw new Error('Re-evaluation context rubric mismatch');
+      }
       const snapshot = this.db.prepare('SELECT n.snapshot_version FROM submissions s JOIN snapshots n USING (snapshot_id) WHERE s.submission_id = ?').get(job.submission_id) as { snapshot_version: number } | undefined;
       if (!snapshot || snapshot.snapshot_version !== job.snapshot_version) throw new Error('Job snapshot_version does not match the submission snapshot');
       const at = this.iso();
@@ -111,7 +118,8 @@ export class SqliteJobQueue implements JobQueuePort {
       if (this.db.prepare("SELECT 1 FROM ai_jobs WHERE state IN ('RUNNING', 'VALIDATING') LIMIT 1").get()) return null;
       const scopes = options.scopes ?? ['learner', 'dry_run'];
       const job = this.db.prepare(`SELECT * FROM ai_jobs WHERE state = 'QUEUED' AND available_at <= ? AND scope IN (${scopes.map(() => '?').join(', ')})
-        AND (? IS NULL OR job_id = ?) ORDER BY available_at, created_at LIMIT 1`).get(now, ...scopes, options.jobId ?? null, options.jobId ?? null) as JobRow | undefined;
+        AND (? IS NULL OR job_id = ?) ${options.complaintsOnly ? "AND job_id IN (SELECT reeval_job_id FROM learner_complaints WHERE state = 'RE_EVALUATING')" : ''}
+        ORDER BY available_at, created_at LIMIT 1`).get(now, ...scopes, options.jobId ?? null, options.jobId ?? null) as JobRow | undefined;
       if (!job) return null;
       if (remainingExecutions(job) <= 0) { this.setState(job, 'FAILED', 'EXECUTION_BUDGET_EXHAUSTED'); return null; }
       const generation = job.generation + 1;
@@ -153,6 +161,17 @@ export class SqliteJobQueue implements JobQueuePort {
     }).immediate();
   }
 
+  /** P4: cập nhật provider, cli_version, model thực tế đã được Gateway chọn cho lượt chạy hiện hành. */
+  recordRunProvider(fence: RunFence, provider: RunProvider, cliVersion: string | null = null, model: string | null = null): boolean {
+    return this.db.transaction(() => {
+      const c = this.check(fence, ACTIVE);
+      if (!c.ok) return false;
+      this.db.prepare('UPDATE ai_runs SET provider = ?, cli_version = COALESCE(?, cli_version), model = COALESCE(?, model) WHERE run_id = ?')
+        .run(provider, cliVersion, model, fence.run_id);
+      return true;
+    }).immediate();
+  }
+
   /** RUNNING → VALIDATING with the raw output kept on the run for audit; stale or late output is not stored. */
   recordOutput(fence: RunFence, output: unknown) {
     return this.db.transaction(() => {
@@ -166,17 +185,17 @@ export class SqliteJobQueue implements JobQueuePort {
     }).immediate();
   }
 
-  fail(fence: RunFence, failure: JobFailure, detail?: string, retryAfterMs?: number) {
+  fail(fence: RunFence, failure: JobFailure, detail?: string, retryAfterMs?: number, options?: { failoverAvailable?: boolean }) {
     return this.db.transaction(() => {
       const c = this.check(fence, ACTIVE);
       if (!c.ok) return { accepted: false as const, reason: c.reason };
-      return { accepted: true as const, to: this.applyFailure(c.job, failure, detail, retryAfterMs, failure === 'CANCELLED' ? 'CANCELLED' : 'FAILED') };
+      return { accepted: true as const, to: this.applyFailure(c.job, failure, detail, retryAfterMs, failure === 'CANCELLED' ? 'CANCELLED' : 'FAILED', options) };
     }).immediate();
   }
 
   /** Applies the pure budget decision. Leaving RUNNING/VALIDATING always bumps the generation (fencing). */
-  private applyFailure(job: JobRow, failure: JobFailure, detail: string | undefined, retryAfterMs: number | undefined, runState: 'FAILED' | 'STALE' | 'CANCELLED'): JobState {
-    const decision = decideAfterFailure(failure, job, retryAfterMs);
+  private applyFailure(job: JobRow, failure: JobFailure, detail: string | undefined, retryAfterMs: number | undefined, runState: 'FAILED' | 'STALE' | 'CANCELLED', options?: { failoverAvailable?: boolean }): JobState {
+    const decision = decideAfterFailure(failure, job, retryAfterMs, options);
     let to: JobState = decision.next;
     // VALIDATING has no WAITING_QUOTA edge; such a failure cannot come from validation, so stop safely.
     if (job.state === 'VALIDATING' && to === 'WAITING_QUOTA') to = 'FAILED';
@@ -211,15 +230,34 @@ export class SqliteJobQueue implements JobQueuePort {
       if (!c.ok) return { status: 'REJECTED', reason: c.reason };
       const attempt = this.db.prepare('SELECT a.*, s.evidence_source_id, s.submission_id FROM attempts a JOIN submissions s ON s.attempt_id = a.attempt_id WHERE s.submission_id = ?')
         .get(c.job.submission_id) as { item_id: string; item_version: string; item_hash: string; rubric_id: string; rubric_version: string; rubric_hash: string; evidence_source_id: string; scope: 'learner' | 'dry_run' };
-      const pins = { item: { id: attempt.item_id, version: attempt.item_version, hash: attempt.item_hash }, rubric: { id: attempt.rubric_id, version: attempt.rubric_version, hash: attempt.rubric_hash } };
+      let rubricPin = { id: attempt.rubric_id, version: attempt.rubric_version, hash: attempt.rubric_hash };
+      if (c.job.rubric_version !== attempt.rubric_version && (drafts.length === 0 || drafts.some((d) => !d.supersedes_id))) return { status: 'REJECTED', reason: 'PIN_MISMATCH' };
+      if (c.job.rubric_version !== attempt.rubric_version && drafts.length > 0 && drafts.every((d) => Boolean(d.supersedes_id))) {
+        const rubRow = this.db.prepare("SELECT content_hash FROM json_objects WHERE kind = 'rubric' AND object_id = ? AND version = ?")
+          .get(attempt.rubric_id, c.job.rubric_version) as { content_hash: string } | undefined;
+        if (rubRow) rubricPin = { id: attempt.rubric_id, version: c.job.rubric_version, hash: rubRow.content_hash };
+      }
+      const pins = { item: { id: attempt.item_id, version: attempt.item_version, hash: attempt.item_hash }, rubric: rubricPin };
       const pinned = checkPinned(pins, pins, this.knowledge.revocations());
-      if (!pinned.ok) {
+      const servable = this.knowledge.servableItem(attempt.item_id, attempt.item_version, attempt.scope);
+      if (!pinned.ok || !servable.ok) {
         // Revoked between enqueue and commit: no recognition; the job goes to review, history stays intact.
-        this.applyFailure(c.job, 'DEPENDENCY_REVOKED', `dependency revoked: ${pinned.detail.join(',')}`, undefined, 'FAILED');
+        this.applyFailure(c.job, 'DEPENDENCY_REVOKED', `dependency revoked: ${!pinned.ok ? pinned.detail.join(',') : !servable.ok ? servable.reason : ''}`, undefined, 'FAILED');
         return { status: 'REJECTED', reason: 'DEPENDENCY_REVOKED' };
       }
       const at = this.iso();
       const keys = new Set<string>();
+      // Migration regression fixtures run the old schema before upgrading; no complaint exists there.
+      const hasComplaints = this.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'learner_complaints'").get();
+      const complaint = hasComplaints ? this.db.prepare("SELECT target_observation_id FROM learner_complaints WHERE reeval_job_id = ? AND state = 'RE_EVALUATING'").get(fence.job_id) as { target_observation_id: string } | undefined : undefined;
+      if (complaint && (drafts.length !== 1 || drafts[0]!.supersedes_id !== complaint.target_observation_id)) return { status: 'REJECTED', reason: 'INVALID_OBSERVATION' };
+      for (const d of drafts) {
+        if (!d.supersedes_id) continue;
+        const old = this.db.prepare('SELECT submission_id, evidence_source_id, competency_id FROM observations WHERE observation_id = ?').get(d.supersedes_id) as
+          { submission_id: string; evidence_source_id: string; competency_id: string } | undefined;
+        if (!old || old.submission_id !== c.job.submission_id || old.evidence_source_id !== attempt.evidence_source_id || old.competency_id !== d.competency_id ||
+          this.db.prepare('SELECT 1 FROM observations WHERE supersedes_id = ?').get(d.supersedes_id)) return { status: 'REJECTED', reason: 'INVALID_OBSERVATION' };
+      }
       const rows = drafts.map((d) => {
         if (keys.has(d.observation_key)) return null;
         keys.add(d.observation_key);
@@ -244,6 +282,10 @@ export class SqliteJobQueue implements JobQueuePort {
         insert.run(o.observation_id, r.key, o.submission_id, o.evidence_source_id, o.competency_id, o.item.id, o.item.version, o.item.hash, o.rubric.id, o.rubric.version, o.rubric.hash,
           o.ai_run_id, fence.job_id, o.supersedes_id, o.processing, o.outcome, o.measurement_quality, o.opportunity, o.support_impact, o.scope, at);
         ids.push(o.observation_id);
+      }
+      if (complaint) {
+        this.db.prepare("UPDATE learner_complaints SET state = 'RESOLVED', superseding_observation_id = ?, resolution_note = 'Reassessment committed; source retained', updated_at = ? WHERE reeval_job_id = ?")
+          .run(ids[0], at, fence.job_id);
       }
       this.db.prepare(`UPDATE ai_jobs SET state = 'COMPLETED', lease_owner = NULL, lease_expires_at = NULL, current_run_id = NULL, last_error = NULL, updated_at = ? WHERE job_id = ?`).run(at, fence.job_id);
       this.db.prepare("UPDATE ai_runs SET state = 'COMPLETED', finished_at = ? WHERE run_id = ?").run(at, fence.run_id);
@@ -277,8 +319,8 @@ export class SqliteJobQueue implements JobQueuePort {
   }
 
   runs(jobId: string) {
-    return this.db.prepare('SELECT run_id, generation, execution_index, purpose, state, error, provider FROM ai_runs WHERE job_id = ? ORDER BY execution_index').all(jobId) as
-      { run_id: string; generation: number; execution_index: number; purpose: string; state: string; error: string | null; provider: RunProvider }[];
+    return this.db.prepare('SELECT run_id, generation, execution_index, purpose, state, error, provider, cli_version, model FROM ai_runs WHERE job_id = ? ORDER BY execution_index').all(jobId) as
+      { run_id: string; generation: number; execution_index: number; purpose: string; state: string; error: string | null; provider: RunProvider; cli_version: string | null; model: string | null }[];
   }
 
   /** Committed business result of a job, or undefined if it never committed. */

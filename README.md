@@ -102,3 +102,9 @@ scripts/        tooling, incl. a relay that hands coding tasks between AI coding
 ## Author
 
 Built by [@tnKiness](https://github.com/tnKiness). Licensed under the [MIT License](LICENSE).
+
+### P4 complaint worker (independent implementation)
+
+`npm run worker -- --complaints --once` processes one queued learner complaint through a verified gateway provider. It selects only complaint jobs, retains the original submission/evidence source, and appends a superseding observation. Without a ready provider it stops; `--fake` remains dry-run only. The Progress screen can submit a complaint; pending or failed reassessments remain reviewable in Builder & QC.
+
+Backup providers remain gated by per-provider D-01 verification and a sourced D-05 benchmark report. Synthetic failover tests do not enable real providers or establish scoring quality. See [P4 acceptance](docs/engineering/P4_ACCEPTANCE.md).

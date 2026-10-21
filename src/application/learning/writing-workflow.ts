@@ -1120,7 +1120,12 @@ export class LearningWorkflowService {
 
   competencyDetail(competencyId: string, title = competencyId, skill = 'writing', description = '') {
     const rawObs = this.store.learning.observations(competencyId, 'learner');
-    const { effective, excluded } = effectiveObservations(rawObs, this.store.knowledge.revocations());
+    const revoked = this.store.knowledge.revocations();
+    // A key/knowledge withdrawal suspends its dependent package too. Do not keep recognising its cached profile evidence.
+    for (const o of rawObs) {
+      if (!this.store.knowledge.servableItem(o.item.id, o.item.version, 'learner').ok) revoked.push({ target_kind: 'item', target_id: o.item.id, target_version: o.item.version });
+    }
+    const { effective, excluded } = effectiveObservations(rawObs, revoked);
     const exposures = this.store.learning.exposures();
 
     const classified: ClassifiedObservation[] = effective.map((o) => {
@@ -1181,7 +1186,7 @@ export class LearningWorkflowService {
     const nowIso = this.store.now().toISOString();
     const awaitingOpp = scheduled.some((s) => s.state === 'AWAITING_OPPORTUNITY');
     const dueNow = scheduled.some((s) => s.state === 'PENDING' && s.due_at <= nowIso);
-    const verificationStatus = awaitingOpp ? 'awaiting_opportunity' : dueNow ? 'due' : 'not_due';
+    const verificationStatus = excluded.some((o) => o.reason === 'REVOKED_DEPENDENCY') ? 'needs_recheck' : awaitingOpp ? 'awaiting_opportunity' : dueNow ? 'due' : 'not_due';
 
     return {
       competency_id: competencyId,

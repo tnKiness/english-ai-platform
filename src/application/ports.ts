@@ -60,15 +60,16 @@ export type CommitOutcome =
 
 export type RunProvider = 'fake' | CliProvider;
 /** P2: a fake-only worker restricts itself to dry-run scope so synthetic output never reaches learner evidence. */
-export interface ClaimOptions { scopes?: Scope[]; cli_version?: string | null; model?: string | null; jobId?: string }
+export interface ClaimOptions { scopes?: Scope[]; cli_version?: string | null; model?: string | null; jobId?: string; complaintsOnly?: boolean }
 
 export interface JobQueuePort {
-  enqueue(job: NewJob): JobRecord;
+  enqueue(job: NewJob, regenRound?: number, options?: { allowUpdatedRubric?: boolean }): JobRecord;
   recoverExpired(): { job_id: string; to: JobState }[];
   claim(owner: string, leaseMs: number, provider: RunProvider, options?: ClaimOptions): ClaimedRun | null;
   heartbeat(fence: RunFence, leaseMs: number): boolean;
+  recordRunProvider?(fence: RunFence, provider: RunProvider, cliVersion?: string | null, model?: string | null): boolean;
   recordOutput(fence: RunFence, output: unknown): { accepted: true } | { accepted: false; reason: FenceRejection };
-  fail(fence: RunFence, failure: JobFailure, detail?: string, retryAfterMs?: number): { accepted: true; to: JobState } | { accepted: false; reason: FenceRejection };
+  fail(fence: RunFence, failure: JobFailure, detail?: string, retryAfterMs?: number, options?: { failoverAvailable?: boolean }): { accepted: true; to: JobState } | { accepted: false; reason: FenceRejection };
   complete(fence: RunFence, result: unknown, observations: ObservationDraft[]): CommitOutcome;
   cancel(jobId: string, reason: string): { cancelled: boolean; state: JobState };
   isCurrent(fence: RunFence): boolean;

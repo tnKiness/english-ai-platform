@@ -596,6 +596,14 @@ export function TodayScreen({ onOpenAttempt }: { onOpenAttempt: (attemptId: stri
 export function ProgressScreen() {
   const [data, setData] = useState<ProgressData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [complaintStatus, setComplaintStatus] = useState('');
+  const [reason, setReason] = useState('');
+  const requestReview = async (observationId: string) => {
+    try {
+      await post('/api/learning/complaints', { request_key: crypto.randomUUID(), observation_id: observationId, reason });
+      setComplaintStatus('Đã gửi yêu cầu xem xét lại. Nhận định chưa tự động thay đổi.');
+    } catch (e) { setComplaintStatus(e instanceof Error ? e.message : String(e)); }
+  };
 
   useEffect(() => {
     get<ProgressData>('/api/learning/progress').then(setData).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
@@ -611,9 +619,12 @@ export function ProgressScreen() {
       <p className="mono">Trạng thái chính sách: {data.policy_status} · Báo điểm Band: {data.band_reporting_enabled ? 'Bật' : 'Tắt (chưa có bộ đối chứng & chính sách được duyệt)'}</p>
     </article>
 
-    {data.competencies.map((c) => (
+      <label>Lý do yêu cầu xem xét lại <input value={reason} maxLength={2000} onChange={(e) => setReason(e.target.value)} /></label>
+      <p role="status">{complaintStatus}</p>
+      {data.competencies.map((c) => (
       <article key={c.competency_id} className="card">
-        <h3>{c.title} {c.all_synthetic && <span className="tag">synthetic</span>}</h3>
+          <h3>{c.title} {c.all_synthetic && <span className="tag">synthetic</span>}</h3>
+          <ul>{c.observations.map((o) => <li key={o.observation_id}>{o.outcome} <button disabled={!reason.trim()} onClick={() => void requestReview(o.observation_id)}>Yêu cầu xem xét lại</button></li>)}</ul>
         <p>{c.description}</p>
         <table>
           <tbody>

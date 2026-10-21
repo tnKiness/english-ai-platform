@@ -14,6 +14,8 @@ export interface GatewayJob { billing_policy: string; required_capabilities: Cap
 export type Observation = GuardInput['observed'];
 
 export interface GatewayDeps {
+  backupAllowed?(provider: CliProvider, permit: ExecutionPermit): { allowed: boolean; reasons: string[] };
+  runtimeFailure?(provider: CliProvider, error: 'QUOTA_EXHAUSTED' | 'RATE_LIMIT' | 'AUTH_EXPIRED'): void;
   /** Test seam for the Codex sandbox-group grant on per-run dirs (default: icacls, E-17). */
   sandboxGrant?: SandboxGrant;
   adapters?: Partial<Record<CliProvider, CliProviderAdapter>>;
@@ -33,6 +35,7 @@ export interface GatewayDeps {
 const NOTHING_OBSERVED: Observation = { cli_version: null, entrypoint_sha256: null, entrypoint_issues: [], auth_subscription: null, entitlement_verified: null, isolation_issues: [], enforcement_issues: null };
 
 export class AiExecutionGateway {
+  private unavailable = new Map<CliProvider, ProviderError>();
   readonly adapters: Record<CliProvider, CliProviderAdapter>;
   constructor(private d: GatewayDeps) {
     this.adapters = {
@@ -80,11 +83,26 @@ export class AiExecutionGateway {
   async select(eligible: CliProvider[], job: GatewayJob): Promise<{ provider: CliProvider; permit: ExecutionPermit } | { blocked: { provider: CliProvider; error: string; reasons: string[] }[] }> {
     const blocked: { provider: CliProvider; error: string; reasons: string[] }[] = [];
     for (const provider of eligible) {
+      const unavailable = this.unavailable.get(provider);
+      const state = this.d.account(provider)?.state;
+      const runtime = unavailable ?? (state === 'QUOTA_EXHAUSTED' || state === 'COOLDOWN' ? 'QUOTA_EXHAUSTED' : state === 'NEEDS_LOGIN' ? 'AUTH_EXPIRED' : undefined);
+      if (runtime) { blocked.push({ provider, error: runtime, reasons: ['RUNTIME_UNAVAILABLE'] }); continue; }
       const { decision, permit } = await this.decide(provider, job);
-      if (decision.allowed && permit) return { provider, permit };
+      if (decision.allowed && permit) {
+        if (provider !== eligible[0]) {
+          const benchmark = this.d.backupAllowed?.(provider, permit) ?? { allowed: false, reasons: ['D05_SOURCED_BENCHMARK_REQUIRED'] };
+          if (!benchmark.allowed) { blocked.push({ provider, error: 'BILLING_UNVERIFIED', reasons: benchmark.reasons }); continue; }
+        }
+        return { provider, permit };
+      }
       if (!decision.allowed) blocked.push({ provider, error: decision.error, reasons: decision.reasons });
     }
     return { blocked };
+  }
+
+  markFailure(provider: CliProvider, error: 'QUOTA_EXHAUSTED' | 'RATE_LIMIT' | 'AUTH_EXPIRED') {
+    if (!this.d.runtimeFailure) this.unavailable.set(provider, error);
+    this.d.runtimeFailure?.(provider, error);
   }
 
   /** Console/worker banner: why each provider is (not) usable for a minimal synthetic text job. */
@@ -139,20 +157,31 @@ function defaultObserve(d: GatewayDeps) {
  */
 export class GatewayAdapter implements ProviderAdapter {
   private chosen = new Map<string, CliProvider>();
+  private permits = new Map<string, ExecutionPermit>();
   constructor(private gateway: AiExecutionGateway, private facts: (job: Job) => { eligible: CliProvider[]; job: GatewayJob }) {}
   async inspectAuth() { return { authenticated: false, synthetic: false }; }
   async inspectEntitlement() { return { verified: false, billing: 'unverified' as const, synthetic: false }; }
   async readQuotaIfSupported() { return { remaining: null, observed_at: new Date().toISOString(), source: 'gateway:not-observed' }; }
+  chosenProvider(runId: string) {
+    const p = this.permits.get(runId);
+    return p && { provider: p.provider, cli_version: p.cli_version, model: p.model };
+  }
+  async canFailover(job: Job) {
+    const f = this.facts(job);
+    return !('blocked' in await this.gateway.select(f.eligible, f.job));
+  }
   async cancel(runId: string) { const p = this.chosen.get(runId); if (p) await this.gateway.adapters[p].cancel(runId); }
   async execute(runId: string, job: Job, context: Context): Promise<unknown> {
     const f = this.facts(job);
     const selected = await this.gateway.select(f.eligible, f.job);
     if ('blocked' in selected) {
       const first = selected.blocked[0];
-      const error: ProviderError = first?.error === 'AUTH_EXPIRED' || first?.error === 'CAPABILITY_MISSING' ? first.error : 'BILLING_UNVERIFIED';
+      const error: ProviderError = selected.blocked.some((b) => b.error === 'QUOTA_EXHAUSTED' || b.error === 'RATE_LIMIT') ? 'QUOTA_EXHAUSTED'
+        : first?.error === 'AUTH_EXPIRED' || first?.error === 'CAPABILITY_MISSING' ? first.error : 'BILLING_UNVERIFIED';
       return { error, blocked: selected.blocked.map((b) => `${b.provider}:${b.error}`) };
     }
     this.chosen.set(runId, selected.provider);
+    this.permits.set(runId, selected.permit);
     this.gateway.adapters[selected.provider].authorize(runId, selected.permit);
     return { provider: selected.provider, raw: await this.gateway.adapters[selected.provider].execute(runId, job, context) };
   }
@@ -160,6 +189,8 @@ export class GatewayAdapter implements ProviderAdapter {
     if (typeof raw === 'object' && raw !== null && 'error' in raw) return { ok: false, error: (raw as { error: ProviderError }).error };
     const r = raw as { provider?: CliProvider; raw?: unknown };
     if (!r?.provider) return { ok: false, error: 'BILLING_UNVERIFIED' };
-    return this.gateway.adapters[r.provider].normalizeResult(r.raw, taskType);
+    const result = this.gateway.adapters[r.provider].normalizeResult(r.raw, taskType);
+    if (!result.ok && (result.error === 'QUOTA_EXHAUSTED' || result.error === 'RATE_LIMIT' || result.error === 'AUTH_EXPIRED')) this.gateway.markFailure(r.provider, result.error);
+    return result;
   }
 }

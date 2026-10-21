@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { ComplaintService } from '../application/learning/complaints.js';
 import { ReadingWorkflow } from '../application/learning/reading-workflow.js';
 import type { ReadingAnswer } from '../domain/learning/reading.js';
 import { AudioWorkflow, AUDIO_MAX_BYTES } from '../application/learning/audio-workflow.js';
@@ -62,6 +63,10 @@ export function createApp(deps: AppDeps = {}) {
   const store = deps.store;
   if (!store) return app;
   const pipeline = deps.pipeline ?? builderPipeline(store);
+  const complaints = new ComplaintService(store);
+  app.post<{ Body: { request_key: string; observation_id: string; reason: string } }>('/api/learning/complaints', {
+    schema: body({ request_key: str, observation_id: str, reason: { type: 'string', minLength: 1, maxLength: 2000 } }),
+  }, async (r) => complaints.request(r.body));
   const queries = new ConsoleQueries(store.db);
   const consoleService = new ConsoleService({ units: store.builder, json: store.json, items: queries, learning: store.learning, queue: store.queue,
     transaction: (fn) => store.builder.transaction(fn), contextPolicyVersion: 'context-policy-1' });

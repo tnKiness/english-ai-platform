@@ -78,3 +78,9 @@ Mở `http://127.0.0.1:4319/` (đổi cổng bằng `RELAY_CONSOLE_PORT`). Một
 - Dữ liệu chạy thật mặc định nằm dưới `var/` (`db/`, `knowledge/`, `media/`, `staging/`, `backups/`); test dùng thư mục tạm. `var/`, database, log, credential và media cá nhân không được commit. Migrations ở `migrations/`, áp dụng khi mở store từ root repository.
 
 Mã nguồn: [tnKiness/english-ai-platform](https://github.com/tnKiness/english-ai-platform), nhánh `main`. `.gitignore` loại trừ `node_modules`, `dist`, `var/`, database, log và `.env`.
+
+### Worker khiếu nại P4 (phần độc lập)
+
+`npm run worker -- --complaints --once` xử lý một job khiếu nại learner qua gateway đã xác minh. Chỉ claim job khiếu nại; giữ bài nộp/nguồn bằng chứng gốc và thêm nhận định supersedes. Thiếu provider READY thì dừng; `--fake` vẫn chỉ chạy dry-run. Nút yêu cầu xem xét lại nằm ở Tiến độ; review giữ trong Builder & QC để phân loại sự cố.
+
+Provider dự phòng vẫn chờ D-01 riêng và đối chứng có nguồn/quyền D-05. Fixture synthetic không bật hãng thật hay chứng minh chất lượng chấm. Chi tiết [P4_ACCEPTANCE](engineering/P4_ACCEPTANCE.md).

@@ -16,6 +16,7 @@ import { openStore } from '../infrastructure/sqlite/store.js';
 
 const USAGE = `Usage: npm run ai -- <command>
   status                                            why each provider is (not) usable
+  recover <provider>                                after signing in again: NEEDS_VERIFICATION, then re-record evidence
   account <profile_id> <provider> <label> <runner_dir>  register a profile (state NEEDS_VERIFICATION)
   evidence <file.json> [--boundary <probe.json>]    record {"evidence":…,"envelope":…} (no secrets), then re-check;
                                                     --boundary takes file_scope_test from a PASS probe-boundary report
@@ -92,6 +93,15 @@ async function main(args: string[]): Promise<number> {
       if (!isProvider(provider) || !DATA_CLASSES.includes(dataClass) || !['grant', 'revoke'].includes(action)) throw new Error(USAGE);
       store.aiAccounts.setConsent(provider, dataClass, action === 'grant');
       console.log(`${provider} ${action === 'grant' ? 'may now receive' : 'may no longer receive'} ${dataClass}.`);
+      return 0;
+    }
+    if (command === 'recover' && rest.length === 1) {
+      // Manual recovery (e.g. after signing in again). Quota/rate-limit pauses end on their own; this one requires
+      // re-recording D-01 evidence (`ai -- evidence …`) before the profile is READY again.
+      const provider = rest[0];
+      if (!isProvider(provider)) throw new Error(USAGE);
+      store.aiAccounts.recoverAccount(provider, 'user ran npm run ai -- recover');
+      console.log(`${provider}: NEEDS_VERIFICATION. Nạp lại bằng chứng D-01 (npm run ai -- evidence … --boundary …) để về READY.`);
       return 0;
     }
     if (command === 'confirm-extra-usage' && rest.length === 2 && rest[1] === 'off') {

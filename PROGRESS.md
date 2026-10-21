@@ -1,15 +1,16 @@
 # Tiến độ và trạng thái code
 
-Cập nhật: 20/10/2026 — Asia/Bangkok.
+Cập nhật: 21/10/2026 — Asia/Bangkok.
 
 ## Trạng thái thực tế
 - Hoàn tất lượt rà soát 8 tài liệu 00–06A và tạo bộ hướng dẫn triển khai.
 - P0 hoàn tất: skeleton Node/TypeScript/React/Vite/Fastify, schema v1 (15 definition), state guard, fake adapter, spike Windows runner và SQLite backup. Chi tiết: [P0_ACCEPTANCE](docs/engineering/P0_ACCEPTANCE.md), [P0_DATA_AND_STATE](docs/engineering/P0_DATA_AND_STATE.md), [README](docs/README.vi.md).
 - P1 hoàn tất ở mức thư viện có integration test SQLite thật: migrations, JSON/media bất biến, repositories, Rule Engine thuần, queue lease/fencing/retry/cancel, backup/restore phối hợp. Chi tiết: [P1_ACCEPTANCE](docs/engineering/P1_ACCEPTANCE.md), quyết định E-07.
-- P2 BLOCKED chờ D-01: đã có 6 đầu ra Phần 5, pipeline staging + QC1–4, phát hành đúng hash, thu hồi lan truyền + cache, gateway chặn thực thi khi thiếu căn cứ, session/CSRF, Console 3 tab, worker/backup CLI. Chi tiết: [P2_ACCEPTANCE](docs/engineering/P2_ACCEPTANCE.md).
+- P2 DONE: đã có 6 đầu ra Phần 5, pipeline staging + QC1–4, phát hành đúng hash, thu hồi lan truyền + cache, gateway chặn thực thi khi thiếu căn cứ, session/CSRF, Console 3 tab, worker/backup CLI; D-01 đã đóng cho Codex (READY) và chạy `npm.cmd run qc:real`. Chi tiết: [P2_ACCEPTANCE](docs/engineering/P2_ACCEPTANCE.md).
 - P3 hoàn tất phần lát cắt học trên gói synthetic: P3-1 (khung học 5 màn, 3 chế độ guided/self_practice/exam, autosave server qua session/CSRF), P3-2 (vòng Writing khép kín với FakeAdapter + nội dung synthetic, xếp lịch 7B/Bước 9 và Opportunity-to-Use, giữ giới hạn D-02), P3-3 (gợi mở theo nấc chỉ lưu server, cắt quyền trước truy xuất, assistance_events idempotent, chỉ bản sửa mới mới kích hoạt chấm lại), P3-4 (Reading trong luồng học: chỉ cấp item đã qua QC4 + phát hành, đáp án cạnh tranh hợp lệ, Not Given đúng nghĩa, cắt quyền HTTP payload trước Nấc 3, thu hồi ngừng cấp phát ngay; Audio mẫu cục bộ theo D-06/E-11: thu/phát vào kho media có SHA-256, ASR unavailable, transcript người học tách biệt với audio gốc, không bao giờ gửi `learner_audio` vào job AI). Chi tiết: [P3_ACCEPTANCE](docs/engineering/P3_ACCEPTANCE.md), quyết định E-18, E-19. Chưa bật báo điểm Band hay hồ sơ năng lực chính thức (chờ D-02, D-05) và chưa chọn ASR/chấm phát âm (chờ D-06).
+- P4 hoàn tất phần độc lập (mục 1–4): ma trận ca chịu lỗi bắt buộc 04 §6.C / 06 §6.A.4 / 06A §10.B, failover đa nhà cung cấp bằng fixture (không đốt quota thật, giữ nguyên nguồn bằng chứng và trần 3 lần thực thi, chặn kết quả muộn), khiếu nại/tái đánh giá có truy vết `supersedes` và thu hồi hai chiều tới cả nhận định đạt/chưa đạt và hồ sơ, khung cấu trúc đối chứng D-05 (schema/manifest tách dev/holdout + cổng chặn bật provider dự phòng khi thiếu báo cáo đối chứng có nguồn/quyền). P4 toàn phần giữ `IN_PROGRESS` vì còn chờ D-01 cho `claude-code`/`agy` và bộ đối chứng thật D-05. Chi tiết: [P4_ACCEPTANCE](docs/engineering/P4_ACCEPTANCE.md), quyết định E-20.
 - Git: nhánh `main` theo dõi [tnKiness/english-ai-platform](https://github.com/tnKiness/english-ai-platform); commit đầu `68a8557` (P0) đã push. `.gitattributes` chuẩn hóa LF.
-- Chưa đủ điều kiện bật adapter thật (D-01/D-04) hay công bố sẵn sàng sử dụng.
+- Chưa đủ điều kiện bật adapter dự phòng thật (`claude-code`, `agy` chờ D-01/D-05) hay công bố sẵn sàng sử dụng.
 - Phương án triển khai và ranh giới module: [PROJECT_STRUCTURE](docs/engineering/PROJECT_STRUCTURE.md). Kế hoạch chi tiết: [IMPLEMENTATION_PLAN](docs/engineering/IMPLEMENTATION_PLAN.md).
 
 ## Bảng công việc
@@ -21,7 +22,7 @@ Cập nhật: 20/10/2026 — Asia/Bangkok.
 | P1 | Nền dữ liệu, Rule Engine, queue | DONE | P1_ACCEPTANCE; `npm.cmd run check` 107/107 tests, spike 6/6; giới hạn: chưa API ghi/worker entrypoint/hồ sơ năng lực (D-02) |
 | P2 | Builder/QC + một adapter thật đủ điều kiện | DONE | P2_ACCEPTANCE (mục "QC thật bằng Codex"); D-01 đóng cho Codex (READY); QC1–QC4 thật trên gói synthetic → release → revoke có truy vết (`npm.cmd run qc:real`); check 217/217. Còn mở: D-01 cho claude-code/agy; QC2/QC3 ngữ nghĩa vẫn là xác nhận của người/AI lập trình trên nội dung synthetic |
 | P3 | Vòng Writing + Reading giải mù + audio mẫu | DONE | [P3_ACCEPTANCE](docs/engineering/P3_ACCEPTANCE.md) (E-18, E-19); P3-1…P3-4 đầy đủ trên gói synthetic (`tests/integration/p3-learning.test.ts` 5/5, `tests/integration/p3-reading.test.ts` 4/4; bộ test P0–P3 187/187 trong sandbox agy; lint/typecheck/build đạt). Phụ thuộc người dùng vẫn mở đúng quy định: D-02 (chính sách ngưỡng năng lực/Band), D-05 (gói nội dung thật & bộ đối chứng), D-06 (công cụ ASR/chấm phát âm) |
-| P4 | Chịu lỗi, adapter bổ sung, đối chứng | TODO | Chưa triển khai |
+| P4 | Chịu lỗi, adapter bổ sung, đối chứng | IN_PROGRESS | [P4_ACCEPTANCE](docs/engineering/P4_ACCEPTANCE.md) (E-20): phần độc lập 1–4 DONE (`p4-resilience`, `p4-failover`, `p4-complaints`, `p4-benchmark` 19/19 đạt; bộ P0–P4 207/207 trong sandbox agy; lint/typecheck/build đạt). Còn mở: D-01 cho `claude-code`/`agy` và bộ đối chứng có nguồn/quyền D-05 |
 | P5 | Mở rộng, daily tracking, tối ưu | TODO | Chưa triển khai |
 
 Trạng thái hợp lệ: TODO / IN_PROGRESS / BLOCKED / DONE. DONE cần đường dẫn code/tài liệu và bằng chứng nghiệm thu; không dùng phần trăm ước đoán để thay thế.
@@ -330,6 +331,12 @@ P0–P3 đã hoàn tất phần code và nghiệm thu trên gói synthetic (D-01
 - Sửa relay: `parseResetTime` đọc dạng ngày "at Oct 21st, 2026 3:26 AM" (trước đó rơi về cooldown mặc định 1 giờ → 00:14). Đã chỉnh `var/relay/state.json` của codex về 03:26 21/10/2026.
 - Giới hạn: "E2E" của P3 là test HTTP tích hợp; chưa kiểm giao diện thật trên trình duyệt. P3 DONE trên nội dung synthetic; vận hành thật chờ D-02/D-05/D-06.
 
+### 21/10/2026 — P4 phần độc lập qua relay (agy → Codex → agy) — kiểm lại độc lập
+- Lượt agy đầu tiên bị ngắt lúc 00:11 21/10 khi phiên điều phối kết thúc; đã ghi một handoff thủ công (git status/diff) rồi `relay --continue --order codex,agy`. Codex làm từ 09:18, hết hạn mức 09:38 (mở lại 14:19); agy hoàn tất và báo DONE (ma trận 24 ca, failover bằng fixture, khiếu nại/tái đánh giá, cấu trúc bộ đối chứng D-05; migration 0007, E-20). P4 giữ IN_PROGRESS: D-01 claude-code/agy và D-05 còn mở.
+- Rà gateway: provider dự phòng vẫn phải qua đủ guard D-01 và thêm cổng đối chứng D-05; REFUSAL không chuyển hãng.
+- Sửa thêm (Claude): `recordRuntimeFailure` đặt tài khoản QUOTA_EXHAUSTED/COOLDOWN nhưng không có đường tự trở lại, và `recoverAccount` (đưa về NEEDS_VERIFICATION) không được nối vào đâu → sau một lần hết quota trong app, Codex bị chặn vĩnh viễn. Nay `account()` tự trở về READY khi qua `reset_at` (hoặc mặc định 60 phút quota / 5 phút rate limit), ghi sự kiện `RECOVERED` "auto: …"; NEEDS_LOGIN không tự mở. Thêm `npm run ai -- recover <provider>` cho trường hợp đăng nhập lại (về NEEDS_VERIFICATION, nạp lại evidence). Test mới trong `tests/integration/p4-failover.test.ts`.
+- Kiểm tra: `npm.cmd run check` 242/242; `npm.cmd run ai -- status` trên kho thật (đã áp migration 0007): codex READY, claude-code/agy BLOCKED.
+
 ### Mẫu cho lượt code tiếp theo
 - 20/10/2026 — P3-4 mục 1 Reading: triển khai xong; kiểm tra toàn bộ PARTIAL do môi trường sandbox.
 - Nguồn: 03 §3–4, 04 §2, 05 §5–7, IMPLEMENTATION_PLAN P3-4; D-02/D-05 vẫn mở.
@@ -342,3 +349,51 @@ P0–P3 đã hoàn tất phần code và nghiệm thu trên gói synthetic (D-01
 - File đã sửa và hành vi đã có thật:
 - Lệnh kiểm tra / kết quả / môi trường / giới hạn:
 - Điểm còn thiếu, quyết định mới, bước tiếp theo:
+
+### 21/10/2026 — P4-1 ma trận ca bắt buộc / PARTIAL kiểm thử môi trường
+- Nguồn: 04 §6.C, 06 §6.A.4, 06A §10.B; đọc thay đổi dở từ lượt agy, giữ nguyên phần nền.
+- Thêm P4_ACCEPTANCE (24 dòng mapping), selectFallback kiểm 5 điều kiện, ReplanRepository kiểm CAS proposal, p4-resilience.test.ts (signal riêng từng đoạn, fallback, stale/expired/idempotent proposal). Planner đầy đủ vẫn thuộc P5; không đặt policy D-02.
+- `npm.cmd run check`: lint/typecheck đạt; 184/225 tests đạt, 41 lỗi (EPERM lstat AppData và probe fixture bị sandbox chặn); build chưa chạy vì test dừng chuỗi. Không đổi quyền hay cờ sandbox.
+- `npx.cmd vitest run tests/integration/p4-resilience.test.ts` với TEMP/TMP trỏ `.tmp-p3` trong workspace: 3/3 đạt. Full check lần 2 với TEMP này ghi `.tmp-p3/p4-step1-check.log`; guard chặn fixture profile nằm trong repo đúng thiết kế, chưa thể ghi full PASS.
+- Tiếp tục phần độc lập mục 2; các ô chưa có failover test được ghi rõ, chưa nghiệm thu P4 toàn phần.
+
+### 21/10/2026 — P4-2 failover fixture / triển khai, kiểm thử toàn bộ PARTIAL
+- GatewayAdapter ghi provider/CLI/model thực tế, theo dõi quota/rate/auth, router chỉ chọn dự phòng khi qua D-01 và cổng benchmark mặc định đóng. Compose ghi quota_events bền vững; worker/queue giữ chung budget 3 và fencing.
+- `npm.cmd run check` với TEMP/TMP `.tmp-p3`: lint/typecheck đạt; 209/231 tests đạt. 6/6 ca p4-failover đạt (CLI Node giả, seam evidence D-01 synthetic, không xác minh agy thật). 21 lỗi profile-in-repo của bộ P2 như mục 1; thêm 1 lỗi backup đang kiểm lại. Log `.tmp-p3/p4-step2-check.log`; chưa full PASS.
+- Không gọi provider thật, không đổi quyền nhận dữ liệu, không sửa relay/console. D-01/D-05 vẫn chặn provider dự phòng thật. Tiếp theo: khiếu nại/tái đánh giá và truy vết hồ sơ.
+
+### 21/10/2026 — P4-3 khiếu nại/tái đánh giá/thu hồi hai chiều
+- Thêm ComplaintService, POST /api/learning/complaints (session/CSRF), nút yêu cầu xem xét lại ở Tiến độ; worker --complaints chỉ claim job khiếu nại learner. Reason giữ riêng, context tái đánh giá nhắm competency gốc, không đưa outcome cũ vào model.
+- Queue kiểm supersedes cùng submission/source/competency, cấm thay thế lại bản đã superseded; commit mới giữ bản cũ, cập nhật complaint trong cùng transaction. Review để mở cho phân loại sự cố, không giả xác nhận thủ công.
+- Hồ sơ P3 loại nhận định từ item/package không còn cấp phát, cả đạt/chưa đạt; hiển thị needs_recheck. Nền revoke/cache/impactOf P2 dùng lại.
+- `npx.cmd vitest run tests/integration/p4-complaints.test.ts` TEMP workspace: 3/3 đạt. Kiểm lại `p4-failover.test.ts p1-backup.test.ts`: 12/12 đạt; lỗi rename backup trong full check mục 2 không tái hiện.
+- `npm.cmd run check` mục 3 đang ghi `.tmp-p3/p4-step3-check.log`; kết quả tổng hợp bổ sung cuối lượt, không ghi PASS trước khi xong. Chưa kiểm UI bằng browser.
+
+### 21/10/2026 — P4 phần độc lập (mục 1–4) hoàn tất nghiệm thu (tiếp nối Codex → Antigravity)
+- Ngày / mã công việc / trạng thái: 21/10/2026 — P4 phần độc lập (mục 1–4) — `DONE` phần độc lập; P4 toàn phần giữ `IN_PROGRESS` (còn chờ D-01 cho `claude-code`/`agy` và bộ đối chứng có nguồn/quyền D-05).
+- Nguồn yêu cầu và quyết định áp dụng: IMPLEMENTATION_PLAN P4; đặc tả 04 (§6.B–C), 05 (§7.A, §8.D), 06 (§5.B.5, §6.A.4), 06A (§3.B.7, §6.B, §9.B.3, §10.B — 12 ca); DECISIONS E-07…E-20, D-01 (Codex READY; claude-code/agy mở), D-02, D-05, D-06.
+- File đã sửa và hành vi đã có thật (kiểm chứng và hoàn tất bàn giao cho cả 4 mục):
+  1. **Mục 1 — Ma trận ca bắt buộc (`docs/engineering/P4_ACCEPTANCE.md`):**
+     - Lập bảng 24 dòng ánh xạ toàn bộ 6 ca 04 §6.C, 6 tình huống 06 §6.A.4 và 12 ca 06A §10.B sang đường dẫn test thực tế và ghi rõ các giới hạn chờ D-01 / D-02 / D-05 / D-06.
+     - Thêm `src/domain/scheduling/fallback.ts` (`selectFallback` kiểm đủ 5 điều kiện tương thích khi QC lỗi/timeout), `src/infrastructure/sqlite/replan-repository.ts` (cổng compare-and-set cho proposal lịch), và `tests/integration/p4-resilience.test.ts` (4 ca: 06A-10 stale/expired/idempotent proposal, 04-C5 fallback 5 điều kiện, 04-C1 giới hạn riêng đoạn nhiễu, 04-C2 mất snapshot trước hỗ trợ).
+  2. **Mục 2 — Failover đa nhà cung cấp bằng fixture (`tests/integration/p4-failover.test.ts`):**
+     - `src/infrastructure/ai/gateway/gateway.ts`, `compose.ts`, `src/infrastructure/sqlite/ai-accounts-repository.ts`, `src/domain/jobs/budget.ts`, `src/worker/worker.ts`, `tests/fixtures/p4-cli.mjs`.
+     - Chọn provider dự phòng khi provider chính trả `QUOTA_EXHAUSTED` / `RATE_LIMIT` / `AUTH_EXPIRED` (bằng CLI giả Node, không đốt hạn mức thật); chặn tuyệt đối provider chưa đủ D-01 hoặc thiếu báo cáo đối chứng D-05; không chuyển hãng khi `REFUSAL` (`NEEDS_REVIEW`); giữ nguyên 1 `evidence_source`, không vượt ngân sách 3 lần thực thi (`WAITING_QUOTA`), chặn kết quả muộn của lượt cũ bằng fencing token; giữ nguyên lịch sử gợi mở đã hiển thị và không gửi gợi ý tương lai.
+  3. **Mục 3 — Khiếu nại, tái đánh giá, thu hồi hai chiều (`tests/integration/p4-complaints.test.ts`):**
+     - `src/application/learning/complaints.ts`, `src/infrastructure/sqlite/job-queue.ts`, `src/application/learning/writing-workflow.ts`, `src/server/app.ts` (`POST /api/learning/complaints`), `src/web/learning.tsx`, `src/worker/main.ts` (`--complaints`).
+     - Khiếu nại tạo job tái đánh giá mới gắn cùng `submission_id` và `evidence_source_id` (không tạo nguồn độc lập mới, không đưa outcome cũ hay lời khiếu nại vào context model); kết quả mới ghi `supersedes_id` thay thế có truy vết và giữ nguyên bản cũ; hỗ trợ tái đánh giá khi sửa rubric (`04-C4`) với pin mới mà không sửa attempt gốc. Thu hồi nội dung (`revoke`) lan truyền hai chiều tới cả nhận định `met` và `not_met` trên hồ sơ năng lực (`needs_recheck`), giữ nguyên lịch sử và mở `review_items`, ngừng cấp phát qua cache.
+  4. **Mục 4 — Bộ đối chứng D-05 (`tests/integration/p4-benchmark.test.ts`):**
+     - `contracts/benchmark.v1.schema.json`, `src/domain/knowledge/benchmark-suite.ts`, `src/infrastructure/contracts/validate.ts`, `src/infrastructure/sqlite/ai-accounts-repository.ts`, `migrations/0007_p4_resilience.sql`.
+     - Kiểm tra schema và bất biến của `benchmark_suites` / `benchmark_run_reports`: bắt buộc `usage_rights: 'verified'`, tách `dev` và `holdout` (chặn rò rỉ item holdout sang dev), đủ 3 nhóm holdout bắt buộc; cổng `canEnableBackupProvider` chặn mặc định khi thiếu đối chứng `sourced` khớp `(provider, cli_version, model, suite_hash)` và luôn đặt `scoring_quality_claimed: false` trên dữ liệu synthetic.
+  5. **Đồng bộ tài liệu & kiểm thử hồi quy:** cập nhật `tests/integration/p1-persistence.test.ts`, `p1-backup.test.ts` (7 migrations), `README.md`, `docs/README.vi.md`, `docs/engineering/{P4_ACCEPTANCE,DECISIONS,IMPLEMENTATION_PLAN,PROJECT_STRUCTURE}.md`.
+- Lệnh kiểm tra / kết quả / môi trường / giới hạn (Windows 11, Node 22.18.0, npm 10.9.3, chạy trong sandbox headless của Antigravity):
+  - `npm.cmd run lint`: exit 0 (0 lỗi).
+  - `npm.cmd run typecheck`: exit 0 (0 lỗi).
+  - `npx.cmd vitest run tests/integration/p4-resilience.test.ts tests/integration/p4-failover.test.ts tests/integration/p4-complaints.test.ts tests/integration/p4-benchmark.test.ts`: **19/19 tests đạt** (4 file P4: resilience 4, failover 9, complaints 4, benchmark 2).
+  - `npx.cmd vitest run tests/contract tests/unit tests/spikes tests/integration/server.test.ts tests/integration/p1-persistence.test.ts tests/integration/p1-queue.test.ts tests/integration/p1-backup.test.ts tests/integration/p2-pipeline.test.ts tests/integration/p2-gateway.test.ts tests/integration/p2-console.test.ts tests/integration/p3-learning.test.ts tests/integration/p3-reading.test.ts tests/integration/p4-resilience.test.ts tests/integration/p4-failover.test.ts tests/integration/p4-complaints.test.ts tests/integration/p4-benchmark.test.ts`: **207/207 tests đạt** (25 file).
+  - `npm.cmd run build`: exit 0 (`tsc -p tsconfig.build.json && vite build` đạt).
+  - Giới hạn môi trường sandbox: như các lượt trước, 3 file test công cụ P2/TOOL-02 (`relay-console.test.ts`, `probe-boundary.test.ts`, và 1 ca junction trong `p2-e11.test.ts`) cần socket TCP loopback hoặc `mklink /J` / `powershell` ngoài repo bị sandbox Windows của CLI chặn; không có bất kỳ file nào thuộc `scripts/relay/` hay test relay/console bị sửa. Không gọi AI thật, không đọc credential.
+- Điểm còn thiếu, quyết định mới, bước tiếp theo:
+  - Quyết định mới: **E-20** trong `docs/engineering/DECISIONS.md`.
+  - Phần phụ thuộc người dùng / vận hành thật vẫn mở đúng quy định: **D-01** cho `claude-code` và `agy` (vẫn tắt và được báo trong `P4_ACCEPTANCE.md`), **D-05** (bộ đối chứng có nguồn/quyền thật trước khi bật provider dự phòng thật và báo điểm Band), **D-02** (bảng policy ngưỡng năng lực/Band), **D-06** (công cụ ASR/TTS local).
+  - Bước tiếp theo: P5 (Mở rộng kỹ năng/dạng bài, FTS/BM25 theo quyền, daily tracking/replan đầy đủ, retention/export) hoặc đóng D-01/D-05 khi người dùng cung cấp bằng chứng và gói nội dung thật.

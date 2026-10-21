@@ -13,6 +13,9 @@ const VERSIONED = new Set(['profile', 'job', 'run']);
 // P2: Phần 5 six outputs (Source Registry, Knowledge Schemas, Playbook, QC Spec, Coverage, Release Manifest).
 const knowledgeSchema = JSON.parse(readFileSync(resolve('contracts/knowledge.v1.schema.json'), 'utf8'));
 ajv.addSchema(knowledgeSchema);
+const benchmarkSchema = JSON.parse(readFileSync(resolve('contracts/benchmark.v1.schema.json'), 'utf8'));
+const benchmarkValidator = ajv.compile(benchmarkSchema);
+export function validateBenchmarkManifest(value: unknown): boolean { return benchmarkValidator(value) === true; }
 export function validateContract(name: string, value: unknown): boolean {
   const v2 = VERSIONED.has(name) && typeof value === 'object' && value !== null && (value as { schema_version?: unknown }).schema_version === '2';
   const validate = ajv.getSchema(`${v2 ? providerSchema.$id : schema.$id}#/$defs/${name}`);

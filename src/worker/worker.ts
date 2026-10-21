@@ -51,8 +51,20 @@ export async function processNextJob(deps: WorkerDeps): Promise<ProcessOutcome> 
   }
   if (lost || !deps.queue.isCurrent(fence)) return { status: 'ABANDONED', ...ids, detail: 'fence lost before result' };
 
-  const stop = (failure: Parameters<JobQueuePort['fail']>[1], detail: string): ProcessOutcome => {
-    const r = deps.queue.fail(fence, failure, detail);
+  const chosen = deps.adapter.chosenProvider?.(claim.run_id);
+  if (chosen) {
+    deps.queue.recordRunProvider?.(fence, chosen.provider, chosen.cli_version, chosen.model);
+  }
+
+  const jobForAdapter = { job_id: claim.job_id, context_manifest_id: claim.job.context_manifest_id, billing_policy: 'subscription_only' as const,
+    required_capabilities: claim.job.required_capabilities, task_type: claim.job.task_type };
+
+  const stop = async (failure: Parameters<JobQueuePort['fail']>[1], detail: string): Promise<ProcessOutcome> => {
+    let failoverAvailable = false;
+    if ((failure === 'QUOTA_EXHAUSTED' || failure === 'RATE_LIMIT' || failure === 'AUTH_EXPIRED') && deps.adapter.canFailover) {
+      failoverAvailable = await deps.adapter.canFailover(jobForAdapter);
+    }
+    const r = deps.queue.fail(fence, failure, detail, failoverAvailable ? 0 : undefined, { failoverAvailable });
     if (!r.accepted) return { status: 'ABANDONED', ...ids, detail: r.reason };
     return { status: r.to === 'QUEUED' ? 'RETRY_SCHEDULED' : 'STOPPED', ...ids, detail: `${failure} -> ${r.to}` };
   };

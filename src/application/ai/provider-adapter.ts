@@ -31,4 +31,8 @@ export interface ProviderAdapter {
   execute(runId: string, job: Job, context: Context): Promise<unknown>;
   cancel(runId: string): Promise<void>;
   normalizeResult(raw: unknown, taskType?: TaskType): AdapterResult;
+  /** P4: trả về provider/version/model thực tế mà Gateway đã cấp phép cho runId. */
+  chosenProvider?(runId: string): { provider: 'codex' | 'claude-code' | 'agy'; cli_version: string; model: string } | undefined;
+  /** P4: kiểm tra xem còn provider dự phòng nào đủ điều kiện (D-01 + READY + D-05 benchmark) để failover hay không. */
+  canFailover?(job: Job): Promise<boolean>;
 }
