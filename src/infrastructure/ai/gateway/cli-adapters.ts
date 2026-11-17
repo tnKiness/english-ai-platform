@@ -348,7 +348,7 @@ export class CliProviderAdapter implements ProviderAdapter {
   private permits = new Map<string, ExecutionPermit>();
   private envelopes = new Map<string, EnvelopeSpec>();
   private aborts = new Map<string, AbortController>();
-  constructor(readonly descriptor: CliDescriptor, private run: (r: ProcessRequest) => Promise<{ stdout: string; code: number | null }> = runBoundedProcess,
+  constructor(readonly descriptor: CliDescriptor, private run: (r: ProcessRequest) => Promise<{ stdout: string; stderr?: string; code: number | null }> = runBoundedProcess,
     /** Test seam for the Codex sandbox-group grant on per-run dirs (default: icacls, E-17). */
     private sandboxGrant?: SandboxGrant) {}
 
@@ -408,7 +408,7 @@ export class CliProviderAdapter implements ProviderAdapter {
         }
       }
       this.envelopes.set(runId, permit.envelope);
-      return { transport: 'cli', run_id: runId, stdout: out.stdout, code: out.code };
+      return { transport: 'cli', run_id: runId, stdout: out.stdout, stderr: out.stderr ?? '', code: out.code };
     } catch (error) {
       const m = error instanceof Error ? error.message : '';
       return { error: m === 'TIMEOUT' ? 'TIMEOUT' : m === 'CANCELLED' ? 'CANCELLED' : m === 'OUTPUT_LIMIT' ? 'INVALID_SCHEMA' : 'NETWORK' };
@@ -421,11 +421,11 @@ export class CliProviderAdapter implements ProviderAdapter {
   normalizeResult(raw: unknown, taskType: TaskType = 'writing.assess'): AdapterResult {
     if (typeof raw !== 'object' || raw === null) return { ok: false, error: 'INVALID_SCHEMA' };
     if ('error' in raw) return { ok: false, error: raw.error as ProviderError };
-    const r = raw as { run_id?: string; stdout?: unknown; code?: number | null };
+    const r = raw as { run_id?: string; stdout?: unknown; stderr?: unknown; code?: number | null };
     const envelope = r.run_id ? this.envelopes.get(r.run_id) : undefined;
     if (r.run_id) this.envelopes.delete(r.run_id);
     if (!envelope || typeof r.stdout !== 'string') return { ok: false, error: 'BILLING_UNVERIFIED' };
-    const parsed = parseEnvelope(r.stdout, r.code ?? null, envelope, taskType);
-    return parsed.ok ? { ok: true, result: parsed.result } : { ok: false, error: parsed.error };
+    const parsed = parseEnvelope(r.stdout, r.code ?? null, envelope, taskType, { stderr: typeof r.stderr === 'string' ? r.stderr : '' });
+    return parsed.ok ? { ok: true, result: parsed.result } : { ok: false, error: parsed.error, reset_at: parsed.reset_at ?? null };
   }
 }

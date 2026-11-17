@@ -57,7 +57,7 @@ try {
     const { processNextJob } = await import('./worker.js');
     console.log(JSON.stringify(await processNextJob(deps)));
   } else {
-    await runWorkerLoop({ ...deps, pollMs: Number(option('--poll-ms') ?? 2000), signal: controller.signal });
+    await runWorkerLoop({ ...deps, pollMs: Number(option('--poll-ms') ?? 2000), quotaRecheckMs: option('--quota-recheck-ms') ? Number(option('--quota-recheck-ms')) : undefined, signal: controller.signal });
   }
 } catch (error) {
   if (!(error instanceof Error && error.message === 'GATEWAY_BLOCKED')) { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; }

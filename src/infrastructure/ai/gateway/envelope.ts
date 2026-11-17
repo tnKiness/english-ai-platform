@@ -3,6 +3,7 @@
 // recorded from an observed run (D-01 output contract) before it is used; unverified layouts refuse to parse.
 import type { AdapterResult, ProviderError, TaskType } from '../../../application/ai/provider-adapter.js';
 import { validateAiResult } from '../result-contracts.js';
+import { classifyRunFailure, resetTimeIn } from './failover.js';
 import { redact } from './redaction.js';
 
 export interface EnvelopeSpec {
@@ -32,17 +33,28 @@ function outer(stdout: string, spec: EnvelopeSpec): unknown {
   return chosen[chosen.length - 1];
 }
 
-function classify(text: string, spec: EnvelopeSpec): ProviderError {
-  for (const p of spec.error_patterns) if (new RegExp(p.pattern, 'i').test(text)) return p.error;
-  return 'BILLING_UNVERIFIED';
+interface RunOutput { stdout: string; stderr?: string; exitCode: number | null; now: Date }
+
+/**
+ * Mẫu lỗi đã ghi trong bằng chứng D-01 được xét trước. Không khớp thì hỏi lõi định tuyến của ai-router (E-24): hạn mức,
+ * giới hạn tốc độ, mất đăng nhập, phía hãng lỗi. Vẫn không nhận ra thì dừng như BILLING_UNVERIFIED (06A §8 chốt 6).
+ */
+function classify(text: string, spec: EnvelopeSpec, run: RunOutput): { error: ProviderError; reset_at?: string | null } {
+  const routed = classifyRunFailure(run, run.now);
+  const recorded = spec.error_patterns.find((p) => new RegExp(p.pattern, 'i').test(text))?.error;
+  if (!recorded) return routed ?? { error: 'BILLING_UNVERIFIED' };
+  return recorded === 'QUOTA_EXHAUSTED' || recorded === 'RATE_LIMIT' ? { error: recorded, reset_at: routed?.reset_at ?? resetTimeIn(text, run.now) } : { error: recorded };
 }
 
-export function parseEnvelope(stdout: string, exitCode: number | null, spec: EnvelopeSpec, taskType: TaskType): AdapterResult & { detail?: string } {
+export function parseEnvelope(stdout: string, exitCode: number | null, spec: EnvelopeSpec, taskType: TaskType, extra: { stderr?: string; now?: Date } = {}): AdapterResult & { detail?: string } {
+  const run: RunOutput = { stdout, stderr: extra.stderr, exitCode, now: extra.now ?? new Date() };
   if (spec.status !== 'VERIFIED') return { ok: false, error: 'BILLING_UNVERIFIED', detail: 'envelope layout not verified' };
   let envelope: unknown;
   try { envelope = outer(stdout, spec); } catch {
     // Not an envelope at all: an error banner or interactive prompt. Classify only by recorded patterns.
-    return { ok: false, error: exitCode === 0 ? 'INVALID_SCHEMA' : classify(stdout, spec), detail: redact(stdout, 300) };
+    // Thoát mã 0 mà không có envelope: chỉ lỗi do chính CLI báo trong luồng sự kiện mới đổi được kết luận INVALID_SCHEMA.
+    const failure = exitCode === 0 ? (classifyRunFailure(run, run.now) ?? { error: 'INVALID_SCHEMA' as const }) : classify(stdout, spec, run);
+    return { ok: false, ...failure, detail: redact(stdout, 300) };
   }
   if (spec.error_flag_path) {
     const flagVal = at(envelope, spec.error_flag_path);
@@ -51,7 +63,7 @@ export function parseEnvelope(stdout: string, exitCode: number | null, spec: Env
       : flagVal === true;
     if (isErr) {
       const text = JSON.stringify(envelope);
-      return { ok: false, error: classify(text, spec), detail: redact(text, 300) };
+      return { ok: false, ...classify(text, spec, run), detail: redact(text, 300) };
     }
   }
   const inner = at(envelope, spec.result_path);

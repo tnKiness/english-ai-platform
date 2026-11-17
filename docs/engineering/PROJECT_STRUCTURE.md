@@ -22,6 +22,7 @@ src/
     workflows/ context/ qc/ jobs/
   infrastructure/           # triển khai ports
     sqlite/ files/ ai/ audio/ backup/
+    # ai/router-core/ = bản đồng bộ lõi định tuyến ai-router (E-24, không sửa tay; npm run router:sync)
   server/                   # HTTP, session local, input validation, composition
   worker/                   # queue loop, lease, retry, process supervision
   web/                      # UI; chỉ gọi API, không đọc DB/files trực tiếp

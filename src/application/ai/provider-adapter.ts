@@ -23,7 +23,8 @@ export interface VerificationResult {
   competing_answers: { question_id: string; answer: string; rationale: string }[]; findings: string[]; synthetic: boolean;
 }
 export type AiResult = Assessment | BlindSolveResult | VerificationResult;
-export type AdapterResult = { ok: true; result: AiResult } | { ok: false; error: ProviderError };
+/** reset_at (E-24): thời điểm hãng báo mở lại hạn mức/giới hạn tốc độ, nếu đọc được từ lỗi của CLI. */
+export type AdapterResult = { ok: true; result: AiResult } | { ok: false; error: ProviderError; reset_at?: string | null };
 export interface ProviderAdapter {
   inspectAuth(): Promise<{ authenticated: boolean; synthetic: boolean }>;
   inspectEntitlement(): Promise<{ verified: boolean; billing: 'subscription_only' | 'unverified'; synthetic: boolean }>;

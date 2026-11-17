@@ -1,6 +1,6 @@
 # Tiến độ và trạng thái code
 
-Cập nhật: 21/10/2026 — Asia/Bangkok.
+Cập nhật: 17/11/2026 — Asia/Bangkok.
 
 ## Trạng thái thực tế
 - Hoàn tất lượt rà soát 8 tài liệu 00–06A và tạo bộ hướng dẫn triển khai.
@@ -23,6 +23,7 @@ Cập nhật: 21/10/2026 — Asia/Bangkok.
 | P2 | Builder/QC + một adapter thật đủ điều kiện | DONE | P2_ACCEPTANCE (mục "QC thật bằng Codex"); D-01 đóng cho Codex (READY); QC1–QC4 thật trên gói synthetic → release → revoke có truy vết (`npm.cmd run qc:real`); check 217/217. Còn mở: D-01 cho claude-code/agy; QC2/QC3 ngữ nghĩa vẫn là xác nhận của người/AI lập trình trên nội dung synthetic |
 | P3 | Vòng Writing + Reading giải mù + audio mẫu | DONE | [P3_ACCEPTANCE](docs/engineering/P3_ACCEPTANCE.md) (E-18, E-19); P3-1…P3-4 đầy đủ trên gói synthetic (`tests/integration/p3-learning.test.ts` 5/5, `tests/integration/p3-reading.test.ts` 4/4; bộ test P0–P3 187/187 trong sandbox agy; lint/typecheck/build đạt). Phụ thuộc người dùng vẫn mở đúng quy định: D-02 (chính sách ngưỡng năng lực/Band), D-05 (gói nội dung thật & bộ đối chứng), D-06 (công cụ ASR/chấm phát âm) |
 | P4 | Chịu lỗi, adapter bổ sung, đối chứng | IN_PROGRESS | [P4_ACCEPTANCE](docs/engineering/P4_ACCEPTANCE.md) (E-20, E-21) và [D01_CLAUDE_AGY](docs/engineering/D01_CLAUDE_AGY.md): phần độc lập 1–4 + code/công cụ D-01 cho `claude-code` (`cli_tools_disabled`) và `agy` (`cli_permission_deny`) DONE (`p4-*` 19/19, `e21-claude-agy` 6/6 đạt; bộ P0–P4 214/214 trong sandbox agy; lint/typecheck/build đạt). Còn mở: người dùng đăng nhập và chạy `probe-boundary`/`verify` thật cho `claude-code`/`agy` (D-01) và bộ đối chứng có nguồn/quyền D-05 |
+| AI-01 | Lõi định tuyến ai-router làm nền gateway AI (E-24) | DONE | `src/infrastructure/ai/router-core/` (đồng bộ `npm run router:sync`), `gateway/failover.ts`, worker tự mở lại WAITING_QUOTA; `npm.cmd run check` 247/247. Chưa chạy với CLI thật |
 | P5 | Mở rộng, daily tracking, tối ưu | TODO | Chưa triển khai |
 
 Trạng thái hợp lệ: TODO / IN_PROGRESS / BLOCKED / DONE. DONE cần đường dẫn code/tài liệu và bằng chứng nghiệm thu; không dùng phần trăm ước đoán để thay thế.
@@ -502,3 +503,16 @@ P0–P3 đã hoàn tất phần code và nghiệm thu trên gói synthetic (D-01
 - Đã làm: đọc `scripts/relay/core.ts` (phần thuần của relay: dựng prompt nhiệm vụ/`--continue` kèm quy tắc dự án và ánh xạ kết quả ai-router + dòng `RELAY_STATUS` sang trạng thái/exit code); chỉ thêm mục này vào PROGRESS.md.
 - Đã chạy: `git status --short | wc -l` → 49 dòng (trước khi sửa PROGRESS.md, vốn đã ở trạng thái M). Không chạy test, không sửa mã.
 - Tiếp theo: không có việc phát sinh từ lần chạy thử; tiếp tục mục "Còn thiếu / tiếp theo" của E-23.
+
+### 17/11/2026 — AI-01 / E-24: dùng lõi định tuyến của ai-router làm nền xử lý AI / DONE (code + test, chưa chạy CLI thật)
+- Nguồn: người dùng yêu cầu nghiên cứu ai-router (`..\ai-router`, commit `f0f4c55`) và đồng bộ làm nền xử lý AI của dự án; 06A §1.5–1.6, §6.B, §8; E-09, E-20, E-23; quyết định mới E-24.
+- Nghiên cứu: ai-router gồm lõi thuần (`src/core`: phân loại QUOTA/RATE_LIMIT/AUTH/UNAVAILABLE/TIMEOUT, đọc giờ mở lại, cooldown, thứ tự failover), adapter CLI/API, router hội thoại, hàng đợi job, HTTP/MCP/Admin. Chỉ lõi thuần được đưa vào app; provider API trả phí, xoay tài khoản cùng hãng, workspace `full`, chat/handoff không phù hợp đặc tả gateway nên không dùng. Relay (`scripts/relay`) đã gọi ai-router từ trước, không đổi.
+- File: `scripts/sync-ai-router.mjs` + script `router:sync` (package.json); `src/infrastructure/ai/router-core/{types,outcome,routing}.ts` + `SOURCE.json` (bản chép nguyên văn); `src/infrastructure/ai/gateway/failover.ts` (mới); sửa `envelope.ts` (mẫu D-01 trước, lõi sau, vẫn đóng khi không nhận ra), `cli-adapters.ts` (giữ stderr, trả `reset_at`), `gateway.ts` + `compose.ts` (`reset_at` → `quota_events`), `ai-accounts-repository.ts` (cooldown theo lõi, bỏ giờ mở lại đã qua), `application/ai/provider-adapter.ts` (`reset_at`), `application/ports.ts` + `sqlite/job-queue.ts` (`waitingQuota`), `worker/worker.ts` (`resumeWaitingJobs`, kiểm mỗi 5 phút) + `worker/main.ts` (`--quota-recheck-ms`). Không thêm migration, không thêm dependency, không sửa ai-router.
+- Test mới: `tests/unit/router-core-failover.test.ts` (12 ca: sự kiện Claude/Codex/agy, không đọc câu trả lời model, stderr của lượt thành công bị bỏ qua, giờ mở lại vô lý bị bỏ, mẫu D-01 thắng, lỗi lạ vẫn BILLING_UNVERIFIED, bản sao router-core khớp SHA-256), `tests/integration/e24-router-core.test.ts` (3 ca: job WAITING_QUOTA chỉ mở lại sau cooldown 60 phút, giữ ngân sách, một evidence source; provider dự phòng có D-05 được dùng ngay; chỉ xét scope worker sở hữu).
+- Lệnh / kết quả (Windows 11, Node 22.18.0, ngoài sandbox CLI):
+  - Trước khi sửa `npx.cmd vitest run`: 232/232 (30 file).
+  - `npm.cmd run router:sync`: chép 3 file từ `f0f4c55`; `npm.cmd run router:sync -- --check`: khớp.
+  - Typecheck lần đầu lỗi TS2339 (thu hẹp kiểu `quota` trong vòng lặp) → sửa. `npx.cmd vitest run` 2 file mới: 15/15.
+  - `npm.cmd run check`: lint, typecheck, **247/247 (32 file)**, build đạt.
+- Giới hạn: chưa chạy CLI thật (không tốn hạn mức); giờ mở lại của Codex dạng "at 6:49 PM" theo giờ máy; `CliProviderAdapter` dùng giờ thật khi đọc giờ mở lại (không theo đồng hồ giả của test). Worker vẫn từ chối khởi động khi không provider nào READY lúc khởi động (hành vi P2 cũ). Khi CLI đổi định dạng lỗi: sửa ở ai-router, `router:sync`, `check`.
+- Tiếp theo: khi một provider thật chạm hạn mức trong app, đối chiếu `quota_events.reset_at` với thông báo thật; cân nhắc cho worker chờ (thay vì thoát) khi mọi provider đang cooldown — cần người dùng đồng ý vì đổi hành vi khởi động P2.

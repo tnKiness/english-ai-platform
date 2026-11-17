@@ -82,10 +82,37 @@ export async function processNextJob(deps: WorkerDeps): Promise<ProcessOutcome> 
   return { status: outcome.reason === 'DEPENDENCY_REVOKED' ? 'STOPPED' : 'ABANDONED', ...ids, detail: outcome.reason };
 }
 
+/** Default spacing of WAITING_QUOTA rechecks (06A §6.B: no continuous polling). */
+export const DEFAULT_QUOTA_RECHECK_MS = 5 * 60_000;
+
+/**
+ * E-24 (ai-router's "wait for the earliest reset, then continue"): a job parked in WAITING_QUOTA goes back to QUEUED
+ * once the gateway confirms that one of its eligible providers can run now (D-01 guard + READY account + D-05 gate for
+ * a backup). The check spawns no model call: an account still in its cooldown is refused before any probe, and the
+ * cooldown itself ends at the provider-stated reset time or the routing core's default. The execution budget is kept.
+ */
+export async function resumeWaitingJobs(deps: Pick<WorkerDeps, 'queue' | 'adapter' | 'claimOptions'>): Promise<string[]> {
+  if (!deps.queue.waitingQuota || !deps.queue.resumeWaiting || !deps.adapter.canFailover) return [];
+  const resumed: string[] = [];
+  for (const job of deps.queue.waitingQuota(deps.claimOptions?.scopes)) {
+    const available = await deps.adapter.canFailover({ job_id: job.job_id, context_manifest_id: job.context_manifest_id, billing_policy: 'subscription_only',
+      required_capabilities: job.required_capabilities, task_type: job.task_type });
+    if (!available) continue;
+    if (deps.queue.resumeWaiting(job.job_id) === 'QUEUED') resumed.push(job.job_id);
+  }
+  return resumed;
+}
+
 /** Single sequential worker loop. Restart-safe: expired leases are recovered on every claim. */
-export async function runWorkerLoop(deps: WorkerDeps & { pollMs: number; signal: AbortSignal }): Promise<void> {
+export async function runWorkerLoop(deps: WorkerDeps & { pollMs: number; signal: AbortSignal; quotaRecheckMs?: number }): Promise<void> {
   deps.queue.recoverExpired();
+  const recheckMs = deps.quotaRecheckMs ?? DEFAULT_QUOTA_RECHECK_MS;
+  let nextRecheck = 0;
   while (!deps.signal.aborted) {
+    if (Date.now() >= nextRecheck) {
+      nextRecheck = Date.now() + recheckMs;
+      try { await resumeWaitingJobs(deps); } catch { /* a failed recheck leaves jobs waiting; retried next interval */ }
+    }
     const outcome = await processNextJob(deps);
     if (outcome.status === 'IDLE') await new Promise((resolve) => setTimeout(resolve, deps.pollMs));
   }

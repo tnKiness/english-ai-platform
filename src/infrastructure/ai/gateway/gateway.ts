@@ -17,7 +17,8 @@ export type Observation = GuardInput['observed'];
 
 export interface GatewayDeps {
   backupAllowed?(provider: CliProvider, permit: ExecutionPermit): { allowed: boolean; reasons: string[] };
-  runtimeFailure?(provider: CliProvider, error: 'QUOTA_EXHAUSTED' | 'RATE_LIMIT' | 'AUTH_EXPIRED'): void;
+  /** resetAt (E-24): giờ mở lại hãng báo, nếu đọc được; null thì nơi lưu dùng khoảng chờ mặc định. */
+  runtimeFailure?(provider: CliProvider, error: 'QUOTA_EXHAUSTED' | 'RATE_LIMIT' | 'AUTH_EXPIRED', resetAt: string | null): void;
   /** E-22: user-selected default model (and effort where supported) for a provider. */
   modelPreference?(provider: CliProvider): { model: string; effort: string | null } | undefined;
   /** E-23 (3)/(4): danh sách model người dùng cho phép (giữ qua các phiên bản CLI, không cần verify lại từng model). */
@@ -204,7 +205,7 @@ export class AiExecutionGateway {
       return { ok: true };
     }
     if (normalized.error === 'QUOTA_EXHAUSTED' || normalized.error === 'RATE_LIMIT' || normalized.error === 'AUTH_EXPIRED') {
-      this.markFailure(permit.provider, normalized.error);
+      this.markFailure(permit.provider, normalized.error, normalized.reset_at ?? null);
       return { ok: false, error: normalized.error, reason: normalized.error };
     }
     this.setCanary({ provider: permit.provider, cli_version: permit.cli_version, model: permit.model, effort: permit.effort ?? null, passed: false, reason: normalized.error });
@@ -232,9 +233,9 @@ export class AiExecutionGateway {
     return { blocked };
   }
 
-  markFailure(provider: CliProvider, error: 'QUOTA_EXHAUSTED' | 'RATE_LIMIT' | 'AUTH_EXPIRED') {
+  markFailure(provider: CliProvider, error: 'QUOTA_EXHAUSTED' | 'RATE_LIMIT' | 'AUTH_EXPIRED', resetAt: string | null = null) {
     if (!this.d.runtimeFailure) this.unavailable.set(provider, error);
-    this.d.runtimeFailure?.(provider, error);
+    this.d.runtimeFailure?.(provider, error, resetAt);
   }
 
   /** Console/worker banner: why each provider is (not) usable for a minimal synthetic text job. */
@@ -381,7 +382,7 @@ export class GatewayAdapter implements ProviderAdapter {
     const r = raw as { provider?: CliProvider; raw?: unknown };
     if (!r?.provider) return { ok: false, error: 'BILLING_UNVERIFIED' };
     const result = this.gateway.adapters[r.provider].normalizeResult(r.raw, taskType);
-    if (!result.ok && (result.error === 'QUOTA_EXHAUSTED' || result.error === 'RATE_LIMIT' || result.error === 'AUTH_EXPIRED')) this.gateway.markFailure(r.provider, result.error);
+    if (!result.ok && (result.error === 'QUOTA_EXHAUSTED' || result.error === 'RATE_LIMIT' || result.error === 'AUTH_EXPIRED')) this.gateway.markFailure(r.provider, result.error, result.reset_at ?? null);
     return result;
   }
 }

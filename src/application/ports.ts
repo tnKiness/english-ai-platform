@@ -74,4 +74,7 @@ export interface JobQueuePort {
   cancel(jobId: string, reason: string): { cancelled: boolean; state: JobState };
   isCurrent(fence: RunFence): boolean;
   get(jobId: string): JobRecord | undefined;
+  /** E-24: jobs in WAITING_QUOTA within these scopes, and the explicit WAITING_QUOTA → QUEUED transition (budget unchanged). */
+  waitingQuota?(scopes?: Scope[]): JobRecord[];
+  resumeWaiting?(jobId: string): JobState;
 }

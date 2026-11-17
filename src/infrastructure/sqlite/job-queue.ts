@@ -4,6 +4,7 @@ import { decideAfterFailure, MAX_WORKFLOW_REGEN_ROUNDS, remainingExecutions, typ
 import { transitionJob, type JobState } from '../../domain/jobs/state.js';
 import { checkPinned } from '../../domain/learning/pinning.js';
 import { limitBySignal } from '../../domain/evidence/signal.js';
+import type { Scope } from '../../domain/evidence/types.js';
 import { validateContract } from '../contracts/validate.js';
 import { canonicalJson, sha256 } from '../files/paths.js';
 import type { Db } from './database.js';
@@ -316,6 +317,14 @@ export class SqliteJobQueue implements JobQueuePort {
       this.db.prepare("UPDATE ai_jobs SET state = 'QUEUED', available_at = ?, updated_at = ? WHERE job_id = ?").run(this.iso(), this.iso(), jobId);
       return 'QUEUED' as JobState;
     }).immediate();
+  }
+
+  /** E-24: jobs parked in WAITING_QUOTA (oldest first), for the worker's periodic availability recheck. */
+  waitingQuota(scopes: Scope[] = ['learner', 'dry_run']): JobRecord[] {
+    if (scopes.length === 0) return [];
+    const rows = this.db.prepare(`SELECT * FROM ai_jobs WHERE state = 'WAITING_QUOTA' AND scope IN (${scopes.map(() => '?').join(', ')}) ORDER BY updated_at, created_at LIMIT 50`)
+      .all(...scopes) as JobRow[];
+    return rows.map(toRecord);
   }
 
   runs(jobId: string) {

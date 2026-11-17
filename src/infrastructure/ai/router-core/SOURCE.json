@@ -1,0 +1,10 @@
+{
+  "source": "ai-router/src/core",
+  "commit": "f0f4c5505ed3fe805914dd578e67252ab6e4c066",
+  "uncommitted_changes": false,
+  "files": {
+    "types.ts": "4ca50fa7e16ebba02b0a90d5ab0d1d4d1396e2f42272c352fbaebb3a6a6053d7",
+    "outcome.ts": "ddc2accdc4ee42b4abb2a671b157f9986d549de1b1807a3f69275695fb0c4295",
+    "routing.ts": "3a2aa24ea9621cee65c1b0d08c42ab5dbc9b55f76492042d902325ef473b7f63"
+  }
+}

@@ -59,6 +59,19 @@ npm.cmd run relay -- --continue
 - Trạng thái nhiệm vụ gần nhất ở `var/relay/router-task.json` (không commit); log thô từng lượt ở `var/runs/` của ai-router.
 - Giới hạn: relay chỉ điều khiển CLI headless, không làm phiên Claude/Codex desktop đang mở tự chuyển. Nhận diện quota dựa vào sự kiện và chữ CLI in ra; khi CLI đổi định dạng thì cập nhật ở ai-router.
 
+## Lõi định tuyến AI dùng chung với ai-router (E-24)
+Gateway AI của ứng dụng dùng chung lõi nhận diện lỗi và cooldown với ai-router: bản sao các file thuần `ai-router/src/core/{types,outcome,routing}.ts` nằm ở `src/infrastructure/ai/router-core/` (không sửa tay; `SOURCE.json` ghi commit và SHA-256, có test kiểm).
+
+```powershell
+npm.cmd run router:sync -- --check   # so với ..\ai-router (hoặc AI_ROUTER_DIR); thoát 1 nếu lệch
+npm.cmd run router:sync              # chép lại, rồi npm.cmd run check
+```
+
+- Lõi phân loại lỗi do CLI tự báo (hạn mức, giới hạn tốc độ, mất đăng nhập, phía hãng lỗi) và đọc giờ mở lại; không bao giờ đọc câu trả lời của model hay bài làm. Mẫu lỗi đã ghi trong bằng chứng D-01 vẫn được xét trước; lỗi không nhận ra vẫn dừng như `BILLING_UNVERIFIED`.
+- Profile hết hạn mức bị khóa tới giờ hãng báo (nếu hợp lý), nếu không thì 60 phút (giới hạn tốc độ: 5 phút) — mặc định của lõi.
+- Worker kiểm lại job `WAITING_QUOTA` mỗi 5 phút (`--quota-recheck-ms` để đổi); khi một provider trong `eligible_providers` dùng được thì job quay lại hàng đợi, giữ nguyên ngân sách 3 lần chạy. Lần kiểm không gọi model.
+- Không đưa vào ứng dụng: provider API trả phí, xoay tài khoản cùng hãng, chat/handoff, MCP và Admin của ai-router (06A §1.5–1.6). Chọn hãng vẫn do `subscriptionGuard` + cổng D-05 quyết định.
+
 ## Hợp đồng và giới hạn
 - [Schema v1](../contracts/core.v1.schema.json), [ERD/trạng thái/quyền/recovery](engineering/P0_DATA_AND_STATE.md), [nghiệm thu P0](engineering/P0_ACCEPTANCE.md).
 - JSON Schema không kiểm chứng nội dung IELTS hay quyền thuê bao. FakeAdapter chỉ trả dữ liệu synthetic, không ghi bằng chứng học thật.

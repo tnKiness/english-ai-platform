@@ -2,14 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { NEVER_SENT_DATA_CLASSES, USER_APPROVED_DATA_CLASSES, type AccountState, type CliProvider, type DataClass, type ProviderEvidence } from '../../application/ai/subscription-guard.js';
 import { evaluateBackupProviderBenchmarkGate, validateBenchmarkSuite, type BackupBenchmarkGateDecision, type BenchmarkRunReport, type BenchmarkSuiteManifest } from '../../domain/knowledge/benchmark-suite.js';
 import type { EnvelopeSpec } from '../ai/gateway/envelope.js';
+import { cooldownUntil } from '../ai/gateway/failover.js';
 import { containsSecretLike } from '../ai/gateway/redaction.js';
+import { DEFAULT_COOLDOWN_MS } from '../ai/router-core/routing.js';
 import { canonicalJson, sha256 } from '../files/paths.js';
 import type { Db } from './database.js';
 import { validateBenchmarkManifest } from '../contracts/validate.js';
 
-/** Pause without a provider-stated reset time (same defaults as the dev relay). */
-export const DEFAULT_QUOTA_COOLDOWN_MS = 60 * 60_000;
-export const DEFAULT_RATE_LIMIT_MS = 5 * 60_000;
+/** Pause without a provider-stated reset time: the defaults of ai-router's routing core (E-24). */
+export const DEFAULT_QUOTA_COOLDOWN_MS = DEFAULT_COOLDOWN_MS.QUOTA;
+export const DEFAULT_RATE_LIMIT_MS = DEFAULT_COOLDOWN_MS.RATE_LIMIT;
 
 const REQUIRED: (keyof ProviderEvidence)[] = ['provider', 'profile_id', 'cli_version', 'entrypoint', 'argv', 'auth', 'entitlement', 'extra_usage', 'models_allowed', 'isolation', 'process_control', 'output_contract', 'capabilities'];
 
@@ -41,9 +43,11 @@ export class AiAccountsRepository {
     const ev = this.db.prepare("SELECT event_kind, reset_at, recorded_at FROM quota_events WHERE profile_id = ? AND event_kind IN ('QUOTA_EXHAUSTED', 'RATE_LIMIT') ORDER BY recorded_at DESC, rowid DESC LIMIT 1")
       .get(acc.profile_id) as { event_kind: string; reset_at: string | null; recorded_at: string } | undefined;
     if (!ev) return;
-    const until = ev.reset_at ? Date.parse(ev.reset_at) : Date.parse(ev.recorded_at) + (ev.event_kind === 'RATE_LIMIT' ? DEFAULT_RATE_LIMIT_MS : DEFAULT_QUOTA_COOLDOWN_MS);
+    const recordedAt = new Date(ev.recorded_at);
+    if (Number.isNaN(recordedAt.getTime())) return;
+    const until = cooldownUntil(ev.event_kind === 'RATE_LIMIT' ? 'RATE_LIMIT' : 'QUOTA_EXHAUSTED', ev.reset_at, recordedAt).getTime();
     const now = this.now();
-    if (Number.isNaN(until) || now.getTime() < until) return;
+    if (now.getTime() < until) return;
     const at = now.toISOString();
     this.db.transaction(() => {
       this.db.prepare("UPDATE ai_accounts SET state = 'READY', updated_at = ? WHERE profile_id = ? AND state = ?").run(at, acc.profile_id, acc.state);

@@ -8,7 +8,7 @@ import { runnerWorkspace } from './isolation.js';
 export function gatewayFor(store: Store, override: { account?: (p: CliProvider) => { profile_id: string; runner_ref: string; state: AccountState } | undefined } = {}) {
   return new AiExecutionGateway({
     backupAllowed: (p, permit) => store.aiAccounts.canEnableBackupProvider(p, { cli_version: permit.cli_version, model: permit.model }),
-    runtimeFailure: (p, error) => store.aiAccounts.recordRuntimeFailure(p, error, 'provider runtime failure'),
+    runtimeFailure: (p, error, resetAt) => store.aiAccounts.recordRuntimeFailure(p, error, 'provider runtime failure', resetAt),
     modelPreference: (p) => store.aiAccounts.modelPreference(p),
     allowedModels: (p) => store.aiAccounts.allowedModels(p),
     modelCanary: (p, v, m, e) => store.aiAccounts.modelCanary(p, v, m, e),
