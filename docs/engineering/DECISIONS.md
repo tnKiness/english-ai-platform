@@ -142,3 +142,9 @@ ID / ngày / trạng thái (đề xuất, áp dụng kỹ thuật, người dùn
   - Giới hạn kỹ thuật: heartbeat đồng bộ muộn tối đa 14 ngày, lệch đồng hồ 5 phút; khai báo trong 14 ngày trước tới 30 ngày sau (học ngoài ứng dụng chỉ tới hôm nay).
 - Chưa làm (P5 tiếp): tạo đề xuất lịch bù (`replan_proposals`) — phần xếp hạng phụ thuộc D-02; kênh Telegram/email.
 - Kiểm chứng: `tests/unit/study-day.test.ts`, `tests/integration/p5-tracking.test.ts`; hồi quy `npm.cmd run check`.
+
+## E-26 — Hướng dẫn sử dụng tự cập nhật (17/11/2026)
+- Trạng thái: áp dụng kỹ thuật theo yêu cầu người dùng ("file hướng dẫn kĩ trong docs, tự động cập nhật khi có thay đổi"); đảo ngược được.
+- Lựa chọn: `docs/HUONG_DAN_SU_DUNG.md` gồm phần viết tay (mục 1–13: tổng quan, cài, chạy, học, Builder & QC, AI thật, worker, sao lưu, relay, kiểm tra, sự cố, giới hạn) và các khối `AUTO` (mục 14) do `scripts/user-guide.mjs` sinh từ `package.json`, USAGE của `src/cli/{ai,backup}.ts`, cờ `src/worker/main.ts`, route `src/server/app.ts`, `migrations/`, DECISIONS và bảng PROGRESS.
+- Cưỡng chế: `npm run check` chạy `docs:guide -- --check` sau lint; thất bại khi khối AUTO cũ, khi có lệnh npm/route/cờ worker mới chưa có mô tả, hoặc còn mô tả cho thứ đã xóa. AGENTS.md mục 5a bắt AI lập trình sửa phần viết tay trong cùng lượt. Git hook tùy chọn `.githooks/pre-commit` (bật bằng `npm run hooks:install` = `git config core.hooksPath .githooks`) tự sinh lại khối AUTO trước commit.
+- Giới hạn: phần viết tay không kiểm được bằng máy; độ đúng của nó dựa vào quy định AGENTS.md và người duyệt. Phần mô tả lệnh `ai`/`backup` lấy nguyên văn USAGE tiếng Anh trong mã.

@@ -2,6 +2,8 @@
 
 Ứng dụng web local theo kiến trúc modular monolith. Đã có khung P0 (trang trạng thái, health endpoint, schema, fake adapter, spike Windows/SQLite), nền P1 ([nghiệm thu P1](engineering/P1_ACCEPTANCE.md): migrations SQLite, kho JSON/media bất biến, Rule Engine thuần, queue lease/fencing/retry, backup/restore phối hợp), P2 DONE ([nghiệm thu P2](engineering/P2_ACCEPTANCE.md): 6 đầu ra tri thức Phần 5, pipeline Builder/QC1–4, Console 3 tab có session/CSRF, gateway AI thuê bao với Codex READY và `npm run qc:real`, worker, CLI backup), và P3 DONE phần lát cắt học ([nghiệm thu P3](engineering/P3_ACCEPTANCE.md): khung học web 5 màn, vòng học Writing khép kín với `FakeAdapter`, gợi mở theo nấc chỉ lưu server, Reading giải mù/đáp án cạnh tranh/Not Given và audio mẫu cục bộ). **Chưa bật báo điểm Band hay ASR/chấm phát âm (chờ D-02, D-05, D-06).**
 
+**Hướng dẫn sử dụng đầy đủ (cài, chạy, học, AI thật, sao lưu, sự cố): [HUONG_DAN_SU_DUNG.md](HUONG_DAN_SU_DUNG.md).**
+
 AI lập trình phải đọc [AGENTS.md](../AGENTS.md), [PROGRESS.md](../PROGRESS.md) và [kế hoạch](engineering/IMPLEMENTATION_PLAN.md) trước khi sửa.
 
 ## Môi trường và cài đặt

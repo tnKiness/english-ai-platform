@@ -1,0 +1,5 @@
+#!/bin/sh
+# Tự sinh lại phần tự động của docs/HUONG_DAN_SU_DUNG.md trước mỗi commit (E-26). Bật bằng: npm run hooks:install
+# Thiếu mô tả cho lệnh/route/cờ mới thì dừng commit và in việc cần làm.
+node scripts/user-guide.mjs || exit 1
+git add docs/HUONG_DAN_SU_DUNG.md

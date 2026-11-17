@@ -91,6 +91,10 @@ docs/           product design (00–06) and engineering docs (plan, decisions, 
 scripts/        tooling, incl. a relay that hands coding tasks between AI coding CLIs
 ```
 
+A detailed user guide in Vietnamese (setup, daily use, real-AI setup, backup, troubleshooting) is in
+[docs/HUONG_DAN_SU_DUNG.md](docs/HUONG_DAN_SU_DUNG.md); its reference sections are generated from the code
+(`npm run docs:guide`) and `npm run check` fails when they drift.
+
 The app's AI gateway shares its failure classification, reset-time parsing and cooldown defaults with the sibling
 [ai-router](../ai-router) project: `src/infrastructure/ai/router-core/` is a verbatim copy of `ai-router/src/core`
 (`npm run router:sync -- --check` compares, `npm run router:sync` re-copies). Paid API providers and same-provider
