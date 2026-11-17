@@ -12,12 +12,21 @@ const within = (root: string, p: string) => { const r = relative(resolve(root), 
  * Candidate config-dir mechanisms per provider. A candidate is only a place to point the CLI; it becomes usable
  * when recorded evidence names the same mechanism and passed the file-scope test. null: none recorded → blocked.
  */
-export const ISOLATION_MECHANISMS: Record<CliProvider, { env: string; source: string } | null> = {
+export const ISOLATION_MECHANISMS: Record<CliProvider, { env: string; extraEnvs?: string[]; source: string } | null> = {
   'claude-code': { env: 'CLAUDE_CONFIG_DIR', source: '06A §3.B [S3] — documented, not yet verified on this machine' },
   // E-11 (1): a dedicated CODEX_HOME outside the repo and var/ holds this profile's login and config.
   codex: { env: 'CODEX_HOME', source: 'E-11 (1) user decision — candidate, not yet verified on this machine' },
-  agy: null,
+  // E-21: USERPROFILE and HOME point to the dedicated profile directory (<profile>\.gemini\antigravity-cli\settings.json).
+  agy: { env: 'USERPROFILE', extraEnvs: ['HOME'], source: 'E-21 user decision — USERPROFILE+HOME point to dedicated profile dir' },
 };
+
+export function profileEnvFor(provider: CliProvider, runnerDir: string): Record<string, string> {
+  const m = ISOLATION_MECHANISMS[provider];
+  if (!m) return {};
+  const out: Record<string, string> = { [m.env]: runnerDir };
+  for (const k of m.extraEnvs ?? []) out[k] = runnerDir;
+  return out;
+}
 
 /**
  * The runner (credential) directory must sit outside the repository, the learning data (incl. backups and logs)

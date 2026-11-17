@@ -3,7 +3,7 @@
 // any path named in the prompt plus ../AGENTS.md, "apikey" reports an API-key login. `sandbox` and `features list`
 // modes: see below.
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { setTimeout } from 'node:timers';
 
@@ -13,13 +13,17 @@ const mode = existsSync(join(home, 'fake-mode.txt')) ? readFileSync(join(home, '
 
 if (args.at(-2) === 'features' && args.at(-1) === 'list') {
   // `codex [--disable <f>]... features list`: each named feature is reported disabled, except in "*-pinned" modes
-  // where unified_exec stays on (as observed on codex-cli 0.163.0-alpha.10.2). Malformed names exit 1 like the CLI.
+  // where unified_exec stays on (as observed on codex-cli 0.163.0-alpha.10.2) or "feature-reenabled" where shell_tool stays on.
   const names = args.slice(0, -2).filter((_, i) => i % 2 === 1);
   if (names.some((n) => !/^[a-z0-9_.]+$/.test(n))) { process.stderr.write('Error: Unknown feature flag\n'); process.exitCode = 1; }
   else process.stdout.write([...names, 'shell_tool'].filter((n, i, a) => a.indexOf(n) === i)
-    .map((n) => `${n.padEnd(40)} stable             ${names.includes(n) && !(n === 'unified_exec' && mode.endsWith('-pinned')) ? 'false' : 'true'}`).join('\n') + '\n');
+    .map((n) => {
+      const stayedOn = (n === 'unified_exec' && mode.endsWith('-pinned')) || (n === 'shell_tool' && mode === 'feature-reenabled');
+      return `${n.padEnd(40)} stable             ${names.includes(n) && !stayedOn ? 'false' : 'true'}`;
+    }).join('\n') + '\n');
 } else if (args[0] === '--version') {
-  process.stdout.write('codex-cli 0.0.0-synthetic\n');
+  const customVer = existsSync(join(home, 'fake-version.txt')) ? readFileSync(join(home, 'fake-version.txt'), 'utf8').trim() : '';
+  process.stdout.write(`${customVer || 'codex-cli 0.0.0-synthetic'}\n`);
 } else if (args[0] === 'login' && args[1] === 'status') {
   // Real CLIs may print status on stderr; the verifier must read both streams.
   process.stderr.write(mode === 'apikey' ? 'Logged in using an API key - synthetic\n' : 'Logged in using ChatGPT\n');
@@ -28,6 +32,14 @@ if (args.at(-2) === 'features' && args.at(-1) === 'list') {
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (c) => { prompt += c; });
   process.stdin.on('end', () => {
+    const selectedModel = args[(args.includes('--model') ? args.indexOf('--model') : args.indexOf('-m')) + 1];
+    appendFileSync(join(home, 'calls.jsonl'), JSON.stringify({ model: selectedModel, long: prompt.includes('Synthetic long-task test') }) + '\n');
+    if (selectedModel === 'quota-model') {
+      process.stdout.write(JSON.stringify({ type: 'error', message: 'quota exhausted' }) + '\n');
+      process.exitCode = 1;
+      return;
+    }
+    if (selectedModel === 'invalid-model') { process.stdout.write('{}\n'); return; }
     if (prompt.includes('Synthetic long-task test')) {
       // A grandchild process that must die with the tree.
       const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)'], { stdio: 'ignore', windowsHide: true });
@@ -40,7 +52,13 @@ if (args.at(-2) === 'features' && args.at(-1) === 'list') {
     if (mode === 'failed') { process.exitCode = 2; return; }
     const json = prompt.split(/\r?\n/).find((l) => l.startsWith('{"schema_version"'));
     if (json) reply = json;
-    else if (mode === 'leaky') {
+    else if (prompt.includes('DATA (')) {
+      const req = JSON.parse(prompt.trimEnd().split('\n').at(-1));
+      reply = JSON.stringify({
+        schema_version: '1', job_id: req.job_id, context_manifest_id: req.context_manifest_id,
+        processing: 'processed', outcome: 'inconclusive', evidence_refs: [], limitations: ['codex-stream-ok'], synthetic: true,
+      });
+    } else if (mode === 'leaky') {
       const paths = [...prompt.matchAll(/((?:[A-Za-z]:\\|\.\.\/|linked\/)[^\s]+\.txt)/g)].map((m) => m[1]);
       const parts = paths.filter((p) => existsSync(resolve(p))).map((p) => readFileSync(resolve(p), 'utf8').trim());
       if (existsSync(resolve('..', 'AGENTS.md'))) parts.push(readFileSync(resolve('..', 'AGENTS.md'), 'utf8').trim());

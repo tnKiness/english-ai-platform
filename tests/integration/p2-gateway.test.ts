@@ -29,13 +29,14 @@ const VERIFIED_ENVELOPE: EnvelopeSpec = { status: 'VERIFIED', source: 'synthetic
 function evidence(over: Partial<ProviderEvidence> = {}): ProviderEvidence {
   return {
     provider: 'claude-code', profile_id: 'syn-profile', cli_version: 'synthetic-1.0',
-    entrypoint: { path: process.execPath, sha256: nodeSha, kind: 'native_executable' }, argv: [resolve('tests/fixtures/fake-cli.mjs')],
+    entrypoint: { path: process.execPath, sha256: nodeSha, kind: 'native_executable' },
+    argv: [resolve('tests/fixtures/fake-cli.mjs'), '-p', '--output-format', 'stream-json', '--verbose', '--restricted', '--tools', '', '--strict-mcp-config', '--no-session-persistence'],
     auth: { mode: 'subscription_login', observed: 'synthetic: subscription login', checked_at: NOW.toISOString(), probe_argv: ['--version'], expect_pattern: 'v' },
     entitlement: { plan: 'synthetic', applies_to_cli: true, source: 'synthetic', checked_at: NOW.toISOString(), expect_pattern: 'v' },
     extra_usage: { disabled_confirmed: true, confirmed_at: NOW.toISOString(), next_confirmation_due: '2026-11-20T00:00:00.000Z' },
     models_allowed: ['synthetic-model'],
     isolation: { mechanism: 'CLAUDE_CONFIG_DIR', file_scope_test: { passed: true, cases: ['absolute_path', 'dotdot', 'symlink_junction'], run_at: NOW.toISOString(),
-      method: 'enforced_boundary', enforcement_evidence_ref: 'synthetic fixture only: not real CLI evidence',
+      method: 'cli_tools_disabled', enforcement_evidence_ref: 'synthetic fixture only: not real CLI evidence',
       config_cases: ['inherited_config', 'plugins_hooks'], config_method: 'config_inspection' }, plugins_disabled: true },
     process_control: { timeout_cancel_test_passed: true, run_at: NOW.toISOString() },
     output_contract: { envelope_verified: true, test_passed: true, run_at: NOW.toISOString() },
@@ -50,8 +51,9 @@ const guardInput = (over: Partial<GuardInput> = {}): GuardInput => ({
 });
 
 describe('subscriptionGuard (06A §8, D-01)', () => {
-  it('passes only with complete evidence, live observations, consent and capability', () => {
+  it('passes only with complete evidence, live observations, consent and capability (including across CLI version/hash updates, E-23)', () => {
     expect(subscriptionGuard(guardInput())).toEqual({ allowed: true });
+    expect(subscriptionGuard(guardInput({ observed: { ...okObserved, cli_version: 'synthetic-2.0', entrypoint_sha256: 'b'.repeat(64) } }))).toEqual({ allowed: true });
   });
 
   it.each(['legacy', 'model_reply', 'missing_reference', 'blank_reference'] as const)(
@@ -83,8 +85,8 @@ describe('subscriptionGuard (06A §8, D-01)', () => {
       ['FILE_SCOPE_TEST_INCOMPLETE:inherited_config,plugins_hooks', { evidence: evidence({ isolation: { ...evidence().isolation, file_scope_test: { ...evidence().isolation.file_scope_test,
         cases: ['absolute_path', 'dotdot', 'symlink_junction', 'inherited_config', 'plugins_hooks'], config_cases: undefined } } }) }],
       ['FILE_SCOPE_TEST_INCOMPLETE:inherited_config,plugins_hooks', { evidence: evidence({ isolation: { ...evidence().isolation, file_scope_test: { ...evidence().isolation.file_scope_test, config_method: undefined } } }) }],
-      ['CLI_VERSION_CHANGED_SINCE_VERIFICATION', { observed: { ...okObserved, cli_version: 'synthetic-2.0' } }],
-      ['ENTRYPOINT_CHANGED_SINCE_VERIFICATION', { observed: { ...okObserved, entrypoint_sha256: 'b'.repeat(64) } }],
+      ['ENTRYPOINT_PROVIDER_MISMATCH', { observed: { ...okObserved, entrypoint_issues: ['PROVIDER_MISMATCH'] } }],
+      ['RUNTIME_TOOLS_PRESENT', { observed: { ...okObserved, isolation_issues: ['RUNTIME_TOOLS_PRESENT'] } }],
       ['ENTRYPOINT_SHIM_OR_SCRIPT', { observed: { ...okObserved, entrypoint_issues: ['SHIM_OR_SCRIPT'] } }],
       ['ARGV_HAS_BYPASS_FLAG', { evidence: evidence({ argv: ['-p', '--dangerously-skip-permissions'] }) }],
       ['ARGV_HAS_BYPASS_FLAG', { evidence: evidence({ argv: ['-p', '--bare'] }) }],
@@ -187,10 +189,11 @@ describe('aiExecutionGateway with the real (unverified) adapters', () => {
     expect(status.map((s) => [s.provider, s.adapter, s.ready, s.error])).toEqual([
       ['codex', 'NEEDS_VERIFICATION', false, 'BILLING_UNVERIFIED'], ['claude-code', 'NEEDS_VERIFICATION', false, 'BILLING_UNVERIFIED'], ['agy', 'NEEDS_VERIFICATION', false, 'BILLING_UNVERIFIED']]);
     expect(status[1]!.reasons).toEqual(expect.arrayContaining(['ADAPTER_NEEDS_VERIFICATION', 'NO_D01_EVIDENCE', 'NO_ACCOUNT_PROFILE', 'NO_CONSENT_synthetic_fixture']));
-    // E-11: codex has a candidate mechanism (CODEX_HOME), so missing evidence — not the mechanism — blocks it; agy has none.
+    // E-11 / E-21: each provider has a candidate mechanism (CODEX_HOME, CLAUDE_CONFIG_DIR, USERPROFILE+HOME), so missing evidence — not the mechanism — blocks it.
     expect(status[0]!.reasons).not.toContain('ISOLATION_NO_RECORDED_MECHANISM');
     expect(status[0]!.reasons).toEqual(expect.arrayContaining(['NO_D01_EVIDENCE', 'ADAPTER_NEEDS_VERIFICATION']));
-    expect(status[2]!.reasons).toContain('ISOLATION_NO_RECORDED_MECHANISM');
+    expect(status[2]!.reasons).not.toContain('ISOLATION_NO_RECORDED_MECHANISM');
+    expect(status[2]!.reasons).toEqual(expect.arrayContaining(['NO_D01_EVIDENCE', 'ADAPTER_NEEDS_VERIFICATION']));
     expect(observe).not.toHaveBeenCalled();
     for (const c of Object.values(CLI_DESCRIPTORS)) expect(c.candidate_envelope.status).toBe('NEEDS_VERIFICATION');
   });

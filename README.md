@@ -107,4 +107,15 @@ Built by [@tnKiness](https://github.com/tnKiness). Licensed under the [MIT Licen
 
 `npm run worker -- --complaints --once` processes one queued learner complaint through a verified gateway provider. It selects only complaint jobs, retains the original submission/evidence source, and appends a superseding observation. Without a ready provider it stops; `--fake` remains dry-run only. The Progress screen can submit a complaint; pending or failed reassessments remain reviewable in Builder & QC.
 
-Backup providers remain gated by per-provider D-01 verification and a sourced D-05 benchmark report. Synthetic failover tests do not enable real providers or establish scoring quality. See [P4 acceptance](docs/engineering/P4_ACCEPTANCE.md).
+Backup providers remain gated by per-provider D-01 verification (`npm run ai -- probe-boundary claude|agy` and `npm run ai -- verify claude|agy`; see [D01_CLAUDE_AGY.md](docs/engineering/D01_CLAUDE_AGY.md)) and a sourced D-05 benchmark report. Synthetic failover tests do not enable real providers or establish scoring quality. See [P4 acceptance](docs/engineering/P4_ACCEPTANCE.md).
+
+
+Model selection for all three providers (E-22, admin CLI; the app gateway uses these defaults):
+
+```powershell
+npm.cmd run ai -- models <provider>
+npm.cmd run ai -- verify <provider> --profile <profile-dir> --models <model-a>,<model-b> --effort <effort> --out <new-report.json>
+npm.cmd run ai -- model <provider> <verified-model> [verified-effort]
+```
+
+Use `codex`, `claude-code` (`claude` alias), or `agy`. Under **E-23**, declare allowed models without re-running `verify` via `npm.cmd run ai -- allow-models <provider> <model-a>,<model-b>` (or `npm.cmd run ai -- models <provider> --allow <model-a>,<model-b>`), and select defaults with `npm.cmd run ai -- model <provider> <model> [effort]`. On first use of a `(provider, model[, effort])` in a CLI version without a passing canary, the gateway runs 1 short synthetic canary prompt to validate the envelope and output contract (`MODEL_CANARY_FAILED` on failure). CLI version/hash updates are recorded informationally in `npm.cmd run ai -- status` without blocking; boundary rules (`RUNTIME_TOOLS_PRESENT`, `RUNTIME_DENY_RULES_CHANGED`, `RUNTIME_TOOL_EXECUTED`, `RUNTIME_CODEX_FEATURES_CHANGED`) and billing guards are enforced on every run. See [E-22/E-23](docs/engineering/DECISIONS.md) and the D-01 guides.

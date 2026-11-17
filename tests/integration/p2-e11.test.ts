@@ -123,12 +123,13 @@ describe('E-11 (4) agy replaces gemini-cli with old data kept', () => {
     expect(validateContract('profile', { ...profile, token: 'synthetic' })).toBe(false);
   });
 
-  it('agy is registered but blocked: no evidence and no recorded isolation mechanism', async () => {
+  it('agy is registered but blocked: no evidence', async () => {
     f = await fixture();
     f.store.aiAccounts.upsertAccount({ profile_id: 'agy-main', provider: 'agy', label: 'Antigravity', runner_ref: join(f.root, '..', 'runner-agy'), state: 'NEEDS_VERIFICATION' });
     const agy = (await new AiExecutionGateway(deps(f)).status()).find((s) => s.provider === 'agy')!;
     expect(agy).toMatchObject({ adapter: 'NEEDS_VERIFICATION', ready: false, error: 'BILLING_UNVERIFIED' });
-    expect(agy.reasons).toEqual(expect.arrayContaining(['NO_D01_EVIDENCE', 'ISOLATION_NO_RECORDED_MECHANISM', 'PROFILE_NEEDS_VERIFICATION']));
+    expect(agy.reasons).toEqual(expect.arrayContaining(['NO_D01_EVIDENCE', 'PROFILE_NEEDS_VERIFICATION']));
+    expect(agy.reasons).not.toContain('ISOLATION_NO_RECORDED_MECHANISM');
     const legacyProviders = JSON.parse('["gemini-cli"]') as ['codex'];
     expect(await new AiExecutionGateway(deps(f)).select(legacyProviders, { billing_policy: 'subscription_only', required_capabilities: ['text'], data_classes: [] }))
       .toMatchObject({ blocked: [{ provider: 'gemini-cli', reasons: ['PROVIDER_NOT_ENABLED'] }] });

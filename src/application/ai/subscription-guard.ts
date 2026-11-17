@@ -14,6 +14,15 @@ export const NEVER_SENT_DATA_CLASSES: readonly DataClass[] = ['learner_audio'];
 export const EXTRA_USAGE_RECONFIRM_MS = 30 * 24 * 60 * 60 * 1000;
 export type AccountState = 'NEEDS_LOGIN' | 'NEEDS_VERIFICATION' | 'READY' | 'BUSY' | 'COOLDOWN' | 'QUOTA_EXHAUSTED' | 'DISABLED';
 
+export type ReadBoundaryMethod = 'model_reply' | 'enforced_boundary' | 'cli_tools_disabled' | 'cli_permission_deny';
+
+/** E-21: each provider has its own accepted D-01 read-boundary method. Codex requires OS enforced_boundary. */
+export const PROVIDER_BOUNDARY_METHODS: Record<CliProvider, Exclude<ReadBoundaryMethod, 'model_reply'>> = {
+  codex: 'enforced_boundary',
+  'claude-code': 'cli_tools_disabled',
+  agy: 'cli_permission_deny',
+};
+
 /** Evidence the user collects to close D-01 for one provider/profile/CLI build (P2_ACCEPTANCE). No secrets. */
 export interface ProviderEvidence {
   provider: CliProvider;
@@ -27,12 +36,14 @@ export interface ProviderEvidence {
   /** next_confirmation_due is informational; the guard enforces EXTRA_USAGE_RECONFIRM_MS from the latest confirmation. */
   extra_usage: { disabled_confirmed: boolean; confirmed_at: string; next_confirmation_due: string };
   models_allowed: string[];
+  /** E-22: exact model/effort pairs observed in successful synthetic runs. */
+  model_configurations?: { model: string; effort: string | null }[];
   isolation: {
     mechanism: string;
     file_scope_test: {
       passed: boolean; cases: string[]; run_at: string;
       /** Missing in legacy reports. Model replies cannot establish an enforced read boundary. */
-      method?: 'model_reply' | 'enforced_boundary';
+      method?: ReadBoundaryMethod;
       /** Reference to independently reviewed enforcement evidence, not model output. */
       enforcement_evidence_ref?: string;
       /** E-15 (3): inherited_config/plugins_hooks rest on config inspection + disabled tools, never on an OS boundary. */
@@ -63,7 +74,7 @@ export interface GuardInput {
   now: Date;
 }
 
-export type GuardError = 'BILLING_UNVERIFIED' | 'AUTH_EXPIRED' | 'CAPABILITY_MISSING' | 'DATA_RECIPIENT_NOT_ALLOWED';
+export type GuardError = 'BILLING_UNVERIFIED' | 'AUTH_EXPIRED' | 'CAPABILITY_MISSING' | 'DATA_RECIPIENT_NOT_ALLOWED' | 'MODEL_NOT_VERIFIED';
 export type GuardDecision = { allowed: true } | { allowed: false; error: GuardError; reasons: string[] };
 
 /** Files a run may not be denied for: case names the file-scope test must cover (QUALITY_AND_DATA case 3, 06A ca 11). */
@@ -90,16 +101,18 @@ export function subscriptionGuard(g: GuardInput): GuardDecision {
     if (e.provider !== g.provider) billing.push('EVIDENCE_FOR_OTHER_PROVIDER');
     if (e.entrypoint.kind !== 'native_executable') billing.push('ENTRYPOINT_NOT_NATIVE');
     if (g.observed.entrypoint_issues.length > 0) billing.push(...g.observed.entrypoint_issues.map((i) => `ENTRYPOINT_${i}`));
-    if (g.observed.entrypoint_sha256 !== e.entrypoint.sha256) billing.push('ENTRYPOINT_CHANGED_SINCE_VERIFICATION');
-    if (g.observed.cli_version === null || g.observed.cli_version !== e.cli_version) billing.push('CLI_VERSION_CHANGED_SINCE_VERIFICATION');
+    // E-23 (1): CLI version and entrypoint SHA-256 changes no longer block; they are recorded for traceability,
+    // while native executable resolution, provider match and per-run boundary checks remain enforced.
     if (e.argv.some((a) => BYPASS.test(a))) billing.push('ARGV_HAS_BYPASS_FLAG');
     // Chốt 2: live auth/entitlement inspection, not only env stripping.
     if (e.auth.mode !== 'subscription_login') billing.push('AUTH_MODE_NOT_SUBSCRIPTION');
     if (g.observed.auth_subscription === false) auth.push('AUTH_NOT_SUBSCRIPTION_NOW');
     if (g.observed.auth_subscription === null) billing.push('AUTH_NOT_OBSERVED');
     if (!e.entitlement.applies_to_cli || g.observed.entitlement_verified !== true) billing.push('ENTITLEMENT_UNVERIFIED');
-    // Chốt 3: only models inside the verified entitlement.
-    if (g.job.model === null || !e.models_allowed.includes(g.job.model)) billing.push('MODEL_NOT_IN_VERIFIED_ENTITLEMENT');
+    // Chốt 3: only models inside the verified entitlement (E-22: MODEL_NOT_VERIFIED).
+    if (g.job.model === null || !e.models_allowed.includes(g.job.model)) {
+      billing.push('MODEL_NOT_VERIFIED', 'MODEL_NOT_IN_VERIFIED_ENTITLEMENT');
+    }
     // Chốt 4: extra usage / auto-recharge confirmed off, and the latest confirmation is at most 30 days old (E-11).
     const latest = latestExtraUsageConfirmation(e, g.extra_usage_confirmed_at ?? null, g.now);
     if (latest === null) billing.push('EXTRA_USAGE_NOT_CONFIRMED_OFF');
@@ -111,9 +124,16 @@ export function subscriptionGuard(g: GuardInput): GuardDecision {
     const configCases = scope.config_method === 'config_inspection' ? scope.config_cases ?? [] : [];
     const missingCases = [...OS_BOUNDARY_CASES.filter((c) => !scope.cases.includes(c)), ...CONFIG_INSPECTION_CASES.filter((c) => !configCases.includes(c))];
     if (!e.isolation.file_scope_test.passed || missingCases.length > 0) billing.push(`FILE_SCOPE_TEST_INCOMPLETE${missingCases.length ? `:${missingCases.join(',')}` : ''}`);
-    if (e.isolation.file_scope_test.method !== 'enforced_boundary' ||
-      typeof e.isolation.file_scope_test.enforcement_evidence_ref !== 'string' ||
-      !e.isolation.file_scope_test.enforcement_evidence_ref.trim()) billing.push('READ_BOUNDARY_UNVERIFIED');
+    const expectedMethod = PROVIDER_BOUNDARY_METHODS[g.provider];
+    const hasInvalidMethod = e.isolation.file_scope_test.method !== expectedMethod;
+    const hasBlankRef = typeof e.isolation.file_scope_test.enforcement_evidence_ref !== 'string' ||
+      !e.isolation.file_scope_test.enforcement_evidence_ref.trim();
+    if (hasInvalidMethod || hasBlankRef) {
+      billing.push('READ_BOUNDARY_UNVERIFIED');
+      if (hasInvalidMethod && e.isolation.file_scope_test.method && e.isolation.file_scope_test.method !== 'model_reply') {
+        billing.push(`BOUNDARY_METHOD_NOT_ALLOWED_FOR_${g.provider}:${e.isolation.file_scope_test.method}`);
+      }
+    }
     // A reference alone is not evidence: the report must exist and match this binary, profile, workspace and sandbox config.
     else if (g.observed.enforcement_issues === null || g.observed.enforcement_issues.length > 0) {
       billing.push('READ_BOUNDARY_UNVERIFIED', ...(g.observed.enforcement_issues ?? ['NOT_CHECKED']).map((i) => `BOUNDARY_${i}`));
@@ -122,8 +142,12 @@ export function subscriptionGuard(g: GuardInput): GuardDecision {
     if (!e.output_contract.envelope_verified || !e.output_contract.test_passed) billing.push('OUTPUT_CONTRACT_UNVERIFIED');
     for (const c of g.job.required_capabilities) if (!e.capabilities.includes(c)) capability.push(`CAPABILITY_${c}`);
   }
-  // Layout/mechanism problems are reported even before evidence exists, so the user sees every missing basis.
-  if (g.observed.isolation_issues.length > 0) billing.push(...g.observed.isolation_issues.map((i) => `ISOLATION_${i}`));
+  // Layout/mechanism and runtime self-check problems are reported even before evidence exists.
+  if (g.observed.isolation_issues.length > 0) {
+    for (const i of g.observed.isolation_issues) {
+      billing.push(i.startsWith('RUNTIME_') ? i : `ISOLATION_${i}`);
+    }
+  }
   if (!g.account) billing.push('NO_ACCOUNT_PROFILE');
   else if (g.account.state === 'NEEDS_LOGIN') auth.push('PROFILE_NEEDS_LOGIN');
   else if (g.account.state !== 'READY') billing.push(`PROFILE_${g.account.state}`);

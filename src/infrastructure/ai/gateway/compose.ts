@@ -9,6 +9,12 @@ export function gatewayFor(store: Store, override: { account?: (p: CliProvider) 
   return new AiExecutionGateway({
     backupAllowed: (p, permit) => store.aiAccounts.canEnableBackupProvider(p, { cli_version: permit.cli_version, model: permit.model }),
     runtimeFailure: (p, error) => store.aiAccounts.recordRuntimeFailure(p, error, 'provider runtime failure'),
+    modelPreference: (p) => store.aiAccounts.modelPreference(p),
+    allowedModels: (p) => store.aiAccounts.allowedModels(p),
+    modelCanary: (p, v, m, e) => store.aiAccounts.modelCanary(p, v, m, e),
+    recordModelCanary: (input) => { store.aiAccounts.recordModelCanary(input); },
+    runtimeBlock: (p) => store.aiAccounts.activeRuntimeBlock(p),
+    recordRuntimeBlock: (p, reason, detail) => store.aiAccounts.recordRuntimeBoundaryBlock(p, reason, detail),
     evidence: (p) => store.aiAccounts.latestEvidence(p), account: override.account ?? ((p) => store.aiAccounts.account(p)), consents: (p) => store.aiAccounts.consents(p),
     extraUsageConfirmedAt: (p) => store.aiAccounts.latestExtraUsageConfirmation(p), parentEnv: process.env, roots: { repo: resolve('.'), data: store.paths.root, sandboxRoot: runnerWorkspace() }, now: store.now,
   });

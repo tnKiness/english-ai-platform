@@ -157,3 +157,25 @@ Sau khi probe PASS: chạy lại `verify` (argv đã đổi ở E-14/E-16), rồ
 - Probe `probe-boundary-codex-2026-10-20T09-17-27-398Z.json`: **PASS** — đối chứng đọc được; USERPROFILE, `%LOCALAPPDATA%`, CODEX_HOME, `var/`, junction, `..` bị chặn; repo đọc được (INFO, E-15.1).
 - Quy tắc E-17 trong code (`toolsAcceptable`): ca cấu hình được tính khi chỉ `unified_exec` còn bật, argv sạch và chính lượt probe thấy `%LOCALAPPDATA%` bị chặn. Probe `…09-20-11-520Z.json`: PASS, đủ 5 ca (3 enforced_boundary + 2 config_inspection).
 - Còn lại cho người dùng: bước 6–9 (verify, nạp evidence với báo cáo `…09-20-11-520Z.json`, consent, status), rồi QC thật (P2_ACCEPTANCE bước 6).
+
+
+## Thêm/đổi model theo E-22 (21/10/2026)
+1. Xem ứng viên và nguồn: `npm.cmd run ai -- models <provider>` (codex, claude-code hoặc agy; claude là bí danh). Danh mục không gọi inference, không chứng minh quyền thuê bao.
+2. Khi xác nhận extra usage OFF còn hạn: `npm.cmd run ai -- verify <provider> --profile <dir> --models <model-a>,<model-b> [--effort <e>] --out <file-moi.json>`. Dùng ID từ danh mục; bỏ effort cho agy. Một synthetic/model + hai lượt timeout/cancel chung; --models không chạy các behavioral probe Codex cũ.
+3. Kiểm tra observations.models/models_verified/models_unverified. Chỉ thành công mới vào models_allowed; model_configurations ghim cặp model/effort. Quota dừng sớm, model chưa chạy ghi not_run. Báo cáo abort không được nạp làm READY; tiếp tục khi có quota, không bật trả phí.
+4. Duyệt bản mới theo D-01, không thêm model/effort chưa thử bằng tay. Nạp `npm.cmd run ai -- evidence <file-moi-da-duyet.json> --boundary <probe-PASS.json>`. Không sửa đè báo cáo cũ. Probe dùng lại khi chỉ khác model/effort; binary/profile/workspace/cờ an toàn phải giữ nguyên, cấu hình sống vẫn được kiểm tra. Lập luận và ngoại lệ cần probe lại tại E-22.
+5. `npm.cmd run ai -- model <provider> <model> [effort]` lưu mặc định cho app; gateway kiểm lại mỗi lượt, sai trả MODEL_NOT_VERIFIED. Evidence cũ chỉ cho effort đã ghi, effort mới cần verify riêng. D-05 failover vẫn phải khớp model.
+
+Phần này cập nhật yêu cầu khớp toàn bộ argv trong hướng dẫn cũ: nay so khớp mẫu chính xác ngoài model/effort. Quyền dữ liệu, ACL và deny giữ nguyên. Lượt E-22 chỉ chạy fixture, chưa verify thêm model thật.
+
+## Vận hành khi CLI tự cập nhật và canary model theo E-23 (21/10/2026)
+1. **Không chặn khi CLI đổi phiên bản hoặc SHA-256 entrypoint:** Khi `codex`, `claude-code` hoặc `agy` tự cập nhật, `subscriptionGuard`, `AiExecutionGateway` và `boundaryReportIssues` không còn chặn chỉ vì `cli_version` hoặc `entrypoint.sha256` khác bản đã verify. Phiên bản và SHA-256 quan sát trực tiếp vẫn được ghi lại để truy vết và hiển thị dạng thông tin (`INFO:`) trong `npm.cmd run ai -- status`. Entrypoint vẫn bắt buộc là file thực thi native đã phân giải (từ chối shim `.cmd`/`.ps1` và sai binary hãng).
+2. **Kiểm ranh giới trong mỗi lượt chạy (runtime self-check):**
+   - `codex`: trước lượt chạy, gateway chạy `codex [--disable …] features list` (không gọi model, cache 5 phút theo phiên bản/hash/profile) để xác nhận toàn bộ cờ `--disable` vẫn có tác dụng theo E-15/E-17 (`unified_exec` được bù bởi ACL Deny trên `%LOCALAPPDATA%` đã chứng minh trong báo cáo probe); nếu feature bị bật lại hoặc cờ mất tác dụng → chặn ngay với `RUNTIME_CODEX_FEATURES_CHANGED`.
+   - `claude-code` và `agy`: kiểm tra trực tiếp luồng `stream-json` và `settings.json` trong mỗi lượt chạy (xem chi tiết tại [D01_CLAUDE_AGY](D01_CLAUDE_AGY.md)).
+   - Chốt thanh toán giữ nguyên: env allowlist, kiểm phương thức đăng nhập thuê bao, xác nhận extra usage 30 ngày.
+3. **Khai báo `models_allowed` và canary theo phiên bản thay cho verify lại từng model:**
+   - Khai báo danh sách model được phép mà không cần chạy lại `verify`: `npm.cmd run ai -- allow-models <provider> <model-a>,<model-b>` (hoặc `npm.cmd run ai -- models <provider> --allow <model-a>,<model-b>`).
+   - Chọn model/effort mặc định: `npm.cmd run ai -- model <provider> <model> [effort]`.
+   - Lần đầu sử dụng một tổ hợp `(provider, cli_version, model[, effort])` chưa có canary đạt trong phiên bản CLI hiện hành, gateway tự chạy 1 prompt synthetic ngắn qua đúng đường adapter để kiểm tra envelope + hợp đồng đầu ra: nếu đạt thì ghi DB (`provider_model_canaries`) và chạy job thật; nếu không đạt thì ghi lỗi và chặn riêng tổ hợp model đó với `MODEL_CANARY_FAILED`.
+   - Xác nhận của người dùng (gói thuê bao, `models_allowed`, `confirm-extra-usage`, `consent`) giữ nguyên qua các lần CLI cập nhật phiên bản.

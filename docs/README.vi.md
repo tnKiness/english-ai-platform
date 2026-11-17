@@ -28,7 +28,7 @@ npm.cmd run backup -- create       # restore <backup> <thư mục mới> ; promo
 ```
 
 ## Kiểm tra
-E-11 chọn Codex để xác minh D-01 đầu tiên. Hướng dẫn từng lệnh đăng nhập profile CODEX_HOME riêng, xác nhận extra usage (30 ngày), `npm.cmd run ai -- verify codex --profile <dir>`, duyệt evidence và cấp đúng 5 loại dữ liệu ở [P2_ACCEPTANCE](engineering/P2_ACCEPTANCE.md). `verify` gọi prompt synthetic bằng quota thuê bao và chỉ dành cho người dùng tự chạy; test tự động dùng CLI giả. Ranh giới đọc file chứng minh bằng `npm.cmd run ai -- probe-boundary codex --profile <dir>` (chạy `codex sandbox`, không gọi model; hướng dẫn và kết quả ở [D01_CODEX_READ_BOUNDARY](engineering/D01_CODEX_READ_BOUNDARY.md)). agy thay gemini-cli, vẫn NEEDS_VERIFICATION; learner_audio luôn bị chặn. P2 vẫn BLOCKED cho tới khi có bằng chứng thật và QC thật.
+E-11 chọn Codex để xác minh D-01 đầu tiên. Hướng dẫn từng lệnh đăng nhập profile CODEX_HOME riêng, xác nhận extra usage (30 ngày), `npm.cmd run ai -- verify codex --profile <dir>`, duyệt evidence và cấp đúng 5 loại dữ liệu ở [P2_ACCEPTANCE](engineering/P2_ACCEPTANCE.md). `verify` gọi prompt synthetic bằng quota thuê bao và chỉ dành cho người dùng tự chạy; test tự động dùng CLI giả. Ranh giới đọc file của Codex chứng minh bằng `npm.cmd run ai -- probe-boundary codex --profile <dir>` (chạy `codex sandbox`, không gọi model; hướng dẫn và kết quả ở [D01_CODEX_READ_BOUNDARY](engineering/D01_CODEX_READ_BOUNDARY.md)). Theo E-21, công cụ thu bằng chứng D-01 cho `claude-code` (`cli_tools_disabled`) và `agy` (`cli_permission_deny`) đã có qua `npm.cmd run ai -- probe-boundary claude|agy --profile <dir>` và `npm.cmd run ai -- verify claude|agy --profile <dir>` (hướng dẫn từng bước tại [D01_CLAUDE_AGY](engineering/D01_CLAUDE_AGY.md)); cả hai vẫn NEEDS_VERIFICATION cho tới khi người dùng chạy thật và duyệt evidence; `learner_audio` luôn bị chặn.
 
 ```powershell
 npm.cmd run check
@@ -41,34 +41,23 @@ npm.cmd run inventory
 - Sau build: `npm.cmd start` chạy backend đã biên dịch; chưa có server phục vụ static bundle production. Dùng `dev` để xem UI P0.
 
 ## Relay AI lập trình (chuyển nền tảng khi hết quota)
-Chạy một nhiệm vụ code qua Claude Code → Codex → Antigravity (Gemini); khi một nền tảng hết quota hoặc rate limit, relay ghi giờ mở lại và giao tiếp cho nền tảng kế tiếp kèm `git status`/`git diff --stat`. Các AI nối mạch qua working tree và PROGRESS.md. Đây là công cụ phát triển, không phải AI của ứng dụng học.
+Chạy một nhiệm vụ code qua Claude Code → Codex → Antigravity (Gemini); khi một nền tảng hết quota, bị rate limit hoặc mất đăng nhập, lượt được giao tiếp cho nền tảng kế tiếp kèm `git status`, danh sách file đã sửa và báo cáo cuối của lượt trước. Các AI nối mạch qua working tree và PROGRESS.md. Đây là công cụ phát triển, không phải AI của ứng dụng học.
+
+Phần máy (chạy CLI, nhận diện quota, cooldown, chuyển nền tảng, nhật ký) nằm ở dự án `ai-router` đặt cạnh thư mục này (`..\ai-router`; đổi bằng `AI_ROUTER_BIN` trỏ tới `bin\ai-router.mjs`). `scripts/relay` chỉ thêm quy tắc của dự án vào nhiệm vụ (đọc AGENTS.md/PROGRESS.md, không commit/push, dòng kết `RELAY_STATUS`) và nhớ cuộc trò chuyện cho `--continue`.
 ```powershell
-npm.cmd run relay -- --preflight
+npm.cmd run relay -- --status
 npm.cmd run relay -- "Mô tả nhiệm vụ"
 npm.cmd run relay -- --task-file task.md --wait
 npm.cmd run relay -- --continue
-npm.cmd run relay -- --status
 ```
-- `--preflight`: kiểm tra đăng nhập thuê bao, không gọi model. `--smoke`: mỗi CLI trả một dòng ở chế độ chỉ đọc (tốn rất ít quota) và ghi trạng thái quota.
-- `--order claude,codex,agy` đổi thứ tự; `--timeout-min` (mặc định 60) cho mỗi lượt; `--max-runs` (mặc định 6); `--wait` chờ tới giờ mở lại sớm nhất khi mọi nền tảng hết quota thay vì thoát; `--reset codex|all` xóa cooldown/NEEDS_LOGIN; `--quiet` không in output CLI.
-- Mã thoát: 0 xong, 2 AI cần người dùng quyết định, 75 hết nền tảng khả dụng, 1 lỗi khác (không tự chuyển tiếp để tránh đốt quota cả ba). Ctrl+C dừng cả cây tiến trình; chạy `--continue` để tiếp.
-- Đường dẫn CLI tự dò; ghi đè bằng `RELAY_CLAUDE_BIN`, `RELAY_CODEX_BIN`, `RELAY_AGY_BIN`; model mặc định Opus 5.5 Medium → GPT-6 Astra Medium → Gemini 4 Argon Medium; đổi bằng `RELAY_CLAUDE_MODEL`/`RELAY_CLAUDE_EFFORT`, `RELAY_CODEX_MODEL`/`RELAY_CODEX_EFFORT`, `RELAY_AGY_MODEL` (agy ghi mức effort trong tên model); thứ tự mặc định bằng `RELAY_ORDER`.
-- Trạng thái, khóa và log từng lượt nằm ở `var/relay/` (không commit). Relay không commit/push; xem diff trước khi commit.
-- Xem trực tiếp: relay in từng bước (đọc/sửa file, lệnh đang chạy, câu trả lời) với tiền tố nền tảng. Ở terminal khác: `Get-Content -Wait -Encoding UTF8 var\relay\live.log`. `--quiet` chỉ tắt in ra màn hình, live.log vẫn ghi.
-- Mở lại phiên: mỗi lượt là một phiên thật của CLI đó. `--status` liệt kê phiên gần đây kèm lệnh mở lại (`claude --resume <id>`, `codex resume <id>`, `agy --conversation <id>`), chạy tại thư mục dự án để chat tiếp với đúng ngữ cảnh.
-- Chuyển nền tảng khi: CLI báo lỗi hết quota/rate limit/mất đăng nhập, Claude gửi `rate_limit_event` bị từ chối, AI kết thúc bằng `RELAY_STATUS: QUOTA`, hoặc AI ghi BLOCKED vì hạn mức sau cảnh báo sắp hết hạn mức. Lượt sau nhận cả báo cáo cuối của lượt trước.
-- Giới hạn: relay chỉ điều khiển CLI headless chạy từ terminal, không làm phiên Claude/Codex desktop đang mở tự chuyển. Nhận diện quota dựa vào sự kiện và chữ CLI in ra; khi CLI đổi định dạng phải cập nhật `scripts/relay/core.ts`/`stream.ts`.
-
-## Relay Console (giao diện chat chung)
-```powershell
-npm.cmd run relay:console
-```
-Mở `http://127.0.0.1:4319/` (đổi cổng bằng `RELAY_CONSOLE_PORT`). Một trang để:
-- Chat với Claude Code, Codex hoặc Antigravity trong thư mục dự án; xem từng bước (đọc/sửa file, lệnh) ngay khi chạy. Tắt "Cho phép sửa file" để chỉ đọc.
-- Một **cuộc trò chuyện** gom phiên thật của nhiều nền tảng. Hết hạn mức thì tự chuyển sang nền tảng kế tiếp (có thể tắt). Khi quay lại nền tảng cũ, console tiếp đúng phiên cũ của nó và gửi kèm tóm tắt những lượt nó đã bỏ lỡ. Mỗi phiên vẫn mở được trong CLI gốc (`claude --resume`, `codex resume`, `agy --conversation`).
-- Mở phiên do relay/CLI tạo trước đó ("Phiên chưa gom") và chat tiếp; chạy relay nhiệm vụ dài và xem cột Trực tiếp (đọc `var/relay/live.log`, kể cả relay chạy ở terminal khác).
-- Chỉ một tiến trình sửa workspace tại một thời điểm (dùng chung khóa với relay). Server chỉ nghe 127.0.0.1, API cần token nhúng trong trang và kiểm Host/Origin. Lịch sử ở `var/relay/threads.json`, `var/relay/transcripts/`.
-- Giới hạn: lịch sử chat không chuyển giữa các hãng (chỉ có tóm tắt bàn giao); phiên tạo trước khi có console chưa có transcript trong console; app desktop của từng hãng có hiện các phiên này hay không chưa được kiểm chứng.
+- Chuẩn bị một lần: trong ai-router, tin cậy thư mục này ở mức `edit` kèm danh sách lệnh được phép (`node bin\ai-router.mjs workspace add C:\Code\study-english --trust edit --cmd "npm.cmd run" ...`). Thư mục chưa tin cậy bị từ chối.
+- `--status`: trạng thái từng nền tảng trong ai-router và nhiệm vụ gần nhất. `--wait`: khi mọi nền tảng hết quota thì chờ tới giờ mở lại sớm nhất rồi chạy tiếp thay vì thoát. `--provider <id>`: ưu tiên một nền tảng. `--continue`: tiếp nhiệm vụ dở trong cùng cuộc trò chuyện.
+- Mã thoát: 0 xong, 2 AI cần người dùng quyết định, 75 hết nền tảng khả dụng, 130 bị dừng, 1 lỗi khác (lỗi lạ không tự chuyển tiếp để tránh đốt quota cả ba). Ctrl+C dừng cả cây tiến trình; chạy `--continue` để tiếp.
+- Thứ tự nền tảng, model/effort, timeout mỗi lượt, kiểm tra đăng nhập, đặt lại cooldown: làm trong ai-router (trang `/admin`, hoặc `node bin\ai-router.mjs provider ...`). Các biến `RELAY_*_BIN`, `RELAY_*_MODEL`, `RELAY_ORDER` và các cờ `--preflight`, `--smoke`, `--order`, `--timeout-min`, `--max-runs`, `--reset`, `--quiet` không còn dùng.
+- Relay chỉ dùng CLI thuê bao cấu hình trong ai-router; biến API key bị gỡ khỏi tiến trình CLI. Đừng thêm provider API vào ai-router nếu không muốn relay rơi sang đường tính phí. Relay không commit/push; xem diff trước khi commit.
+- Xem trực tiếp: relay in từng bước (tool, lệnh, file đã sửa, lần chuyển nền tảng). Giao diện chat chung, nhật ký và lịch sử từng lượt xem ở ai-router (`npm run serve` trong thư mục ai-router, mở `/chat` hoặc `/admin`); trang Relay Console cũ (`relay:console`) đã được thay bằng các trang này.
+- Trạng thái nhiệm vụ gần nhất ở `var/relay/router-task.json` (không commit); log thô từng lượt ở `var/runs/` của ai-router.
+- Giới hạn: relay chỉ điều khiển CLI headless, không làm phiên Claude/Codex desktop đang mở tự chuyển. Nhận diện quota dựa vào sự kiện và chữ CLI in ra; khi CLI đổi định dạng thì cập nhật ở ai-router.
 
 ## Hợp đồng và giới hạn
 - [Schema v1](../contracts/core.v1.schema.json), [ERD/trạng thái/quyền/recovery](engineering/P0_DATA_AND_STATE.md), [nghiệm thu P0](engineering/P0_ACCEPTANCE.md).
@@ -83,4 +72,11 @@ Mã nguồn: [tnKiness/english-ai-platform](https://github.com/tnKiness/english-
 
 `npm run worker -- --complaints --once` xử lý một job khiếu nại learner qua gateway đã xác minh. Chỉ claim job khiếu nại; giữ bài nộp/nguồn bằng chứng gốc và thêm nhận định supersedes. Thiếu provider READY thì dừng; `--fake` vẫn chỉ chạy dry-run. Nút yêu cầu xem xét lại nằm ở Tiến độ; review giữ trong Builder & QC để phân loại sự cố.
 
-Provider dự phòng vẫn chờ D-01 riêng và đối chứng có nguồn/quyền D-05. Fixture synthetic không bật hãng thật hay chứng minh chất lượng chấm. Chi tiết [P4_ACCEPTANCE](engineering/P4_ACCEPTANCE.md).
+Provider dự phòng vẫn chờ người dùng chạy D-01 riêng ([D01_CLAUDE_AGY](engineering/D01_CLAUDE_AGY.md)) và đối chứng có nguồn/quyền D-05. Fixture synthetic không bật hãng thật hay chứng minh chất lượng chấm. Chi tiết [P4_ACCEPTANCE](engineering/P4_ACCEPTANCE.md).
+
+
+### Chọn và verify nhiều model (E-22)
+- `npm.cmd run ai -- models <provider>`: ứng viên có nguồn và model đã verify, không gọi inference. Provider: codex, claude-code (hoặc claude), agy.
+- `npm.cmd run ai -- verify <provider> --profile <dir> --models <model-a>,<model-b> [--effort <e>] --out <file-moi.json>`: dùng ID từ danh mục; một synthetic/model, timeout/cancel chung. Bỏ effort cho agy. Hết quota dừng và ghi từng model chưa chạy. Chỉ chạy khi xác nhận extra usage OFF còn hạn.
+- Duyệt/nạp evidence mới kèm probe PASS theo D-01, rồi `npm.cmd run ai -- model <provider> <model> [effort]` để lưu mặc định cho app. Cặp chưa verify bị chặn MODEL_NOT_VERIFIED. Evidence cũ chỉ giữ effort đã ghi; effort mới cần verify riêng.
+- Theo **E-23**: khai báo danh sách model cho phép mà không cần chạy lại `verify` bằng `npm.cmd run ai -- allow-models <provider> <model-a>,<model-b>` (hoặc `npm.cmd run ai -- models <provider> --allow <model-a>,<model-b>`), sau đó chọn mặc định bằng `npm.cmd run ai -- model <provider> <model> [effort]`. Lần đầu dùng một `(provider, model[, effort])` trên phiên bản CLI chưa có canary đạt, gateway tự chạy 1 prompt synthetic ngắn kiểm tra envelope + hợp đồng đầu ra (lỗi bị chặn `MODEL_CANARY_FAILED`). CLI tự cập nhật phiên bản/hash được ghi nhận dạng thông tin trong `npm.cmd run ai -- status` mà không chặn chạy; ranh giới đọc (`RUNTIME_TOOLS_PRESENT`, `RUNTIME_DENY_RULES_CHANGED`, `RUNTIME_TOOL_EXECUTED`, `RUNTIME_CODEX_FEATURES_CHANGED`) và chốt thanh toán được kiểm trong mỗi lượt chạy. Xem [E-22/E-23](engineering/DECISIONS.md), [Codex](engineering/D01_CODEX_READ_BOUNDARY.md), [Claude/agy](engineering/D01_CLAUDE_AGY.md).

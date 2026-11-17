@@ -14,6 +14,8 @@ export interface EnvelopeSpec {
   line_select?: { path: string[]; equals: string };
   result_path: string[];
   error_flag_path: string[] | null;
+  /** Non-true values at error_flag_path (e.g. agy result.status !== 'SUCCESS') also trigger error classification. */
+  error_flag_not_equals?: string;
   /** Observed error texts → error codes. Anything unclassified stops as BILLING_UNVERIFIED (06A §8 chốt 6). */
   error_patterns: { pattern: string; error: ProviderError }[];
 }
@@ -42,9 +44,15 @@ export function parseEnvelope(stdout: string, exitCode: number | null, spec: Env
     // Not an envelope at all: an error banner or interactive prompt. Classify only by recorded patterns.
     return { ok: false, error: exitCode === 0 ? 'INVALID_SCHEMA' : classify(stdout, spec), detail: redact(stdout, 300) };
   }
-  if (spec.error_flag_path && at(envelope, spec.error_flag_path) === true) {
-    const text = JSON.stringify(envelope);
-    return { ok: false, error: classify(text, spec), detail: redact(text, 300) };
+  if (spec.error_flag_path) {
+    const flagVal = at(envelope, spec.error_flag_path);
+    const isErr = spec.error_flag_not_equals !== undefined
+      ? flagVal !== undefined && flagVal !== spec.error_flag_not_equals
+      : flagVal === true;
+    if (isErr) {
+      const text = JSON.stringify(envelope);
+      return { ok: false, error: classify(text, spec), detail: redact(text, 300) };
+    }
   }
   const inner = at(envelope, spec.result_path);
   if (typeof inner !== 'string') return { ok: false, error: 'INVALID_SCHEMA', detail: 'result field missing' };

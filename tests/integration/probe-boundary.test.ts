@@ -193,15 +193,16 @@ describe('gateway accepts enforced_boundary only with a matching PASS report', (
     expect(boundaryReportIssues(opts.reportPath, { evidence: evidence(report, dirs.home!), ...expectOk })).toEqual([]);
     expect(boundaryReportIssues(opts.reportPath, { evidence: evidence(report, dirs.home!), ...expectOk, workspace: 'C:\\se-runner\\work' })).toEqual(['WORKSPACE_MISMATCH']);
     expect(boundaryReportIssues(opts.reportPath, { evidence: evidence(report, dirs.home!), ...expectOk, runnerDir: dirs.local! })).toEqual(['PROFILE_MISMATCH']);
-    expect(boundaryReportIssues(opts.reportPath, { evidence: { ...evidence(report, dirs.home!), cli_version: 'other' }, ...expectOk })).toEqual(['CLI_VERSION_MISMATCH']);
-    expect(boundaryReportIssues(opts.reportPath, { evidence: { ...evidence(report, dirs.home!), entrypoint: { path: 'x', sha256: 'a'.repeat(64), kind: 'native_executable' } }, ...expectOk })).toEqual(['ENTRYPOINT_MISMATCH']);
-    expect(boundaryReportIssues(opts.reportPath, { evidence: { ...evidence(report, dirs.home!), argv: ['exec', '--sandbox', 'workspace-write', '-'] }, ...expectOk })).toEqual(['SANDBOX_CONFIG_MISMATCH']);
+    expect(boundaryReportIssues(opts.reportPath, { evidence: { ...evidence(report, dirs.home!), cli_version: 'other' }, ...expectOk })).toEqual([]);
+    expect(boundaryReportIssues(opts.reportPath, { evidence: { ...evidence(report, dirs.home!), entrypoint: { path: 'x', sha256: 'a'.repeat(64), kind: 'native_executable' } }, ...expectOk })).toEqual([]);
+    expect(boundaryReportIssues(opts.reportPath, { evidence: { ...evidence(report, dirs.home!), argv: ['exec', '--sandbox', 'workspace-write', '-'] }, ...expectOk })).toEqual(['ARGV_MISMATCH', 'SANDBOX_CONFIG_MISMATCH']);
     expect(boundaryReportIssues(opts.reportPath, { evidence: evidence(report, dirs.home!, { cases: ['absolute_path', 'inherited_config', 'plugins_hooks'] }), ...expectOk }))
       .toEqual(['CASE_NOT_PROVEN:inherited_config', 'CASE_NOT_PROVEN:plugins_hooks']);
     // E-15 (3): config cases are accepted from config_inspection when the report proved them…
     expect(boundaryReportIssues(opts.reportPath, { evidence: evidence(report, dirs.home!, CONFIG_CASES), ...expectOk })).toEqual([]);
     expect(boundaryReportIssues(opts.reportPath, { evidence: { ...evidence(report, dirs.home!, CONFIG_CASES), argv: TOOLS_OFF_ARGV.filter((a, i, all) => a !== 'hooks' && all[i + 1] !== 'hooks') }, ...expectOk }))
-      .toEqual(['SANDBOX_CONFIG_MISMATCH']);
+      // E-22 also flags the argv template mismatch; both reasons reject the report.
+      .toEqual(['ARGV_MISMATCH', 'SANDBOX_CONFIG_MISMATCH']);
     // E-17: unified_exec pinned on but %LOCALAPPDATA% blocked by the OS in this probe → config cases accepted too…
     const pinned = setup('contained-pinned');
     const pinnedReport = await probeBoundary(pinned.opts);

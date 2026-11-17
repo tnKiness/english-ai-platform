@@ -59,8 +59,17 @@ export class AiAccountsRepository {
     if (containsSecretLike(json)) throw new Error('Evidence looks like it contains a credential; remove it and record only non-secret observations');
     if (!this.account(evidence.provider)) throw new Error('Register the account profile before recording evidence');
     const id = randomUUID();
-    this.db.prepare('INSERT INTO provider_verifications (verification_id, provider, profile_id, cli_version, entrypoint_sha256, evidence_json, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(id, evidence.provider, evidence.profile_id, evidence.cli_version, evidence.entrypoint.sha256, json, this.now().toISOString());
+    const at = this.now().toISOString();
+    this.db.transaction(() => {
+      this.db.prepare('INSERT INTO provider_verifications (verification_id, provider, profile_id, cli_version, entrypoint_sha256, evidence_json, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(id, evidence.provider, evidence.profile_id, evidence.cli_version, evidence.entrypoint.sha256, json, at);
+      const lastBlock = this.db.prepare('SELECT event_kind, reason FROM provider_runtime_blocks WHERE provider = ? ORDER BY recorded_at DESC, rowid DESC LIMIT 1')
+        .get(evidence.provider) as { event_kind: string; reason: string } | undefined;
+      if (lastBlock?.event_kind === 'BLOCKED') {
+        this.db.prepare("INSERT INTO provider_runtime_blocks (block_id, provider, profile_id, event_kind, reason, detail, recorded_at) VALUES (?, ?, ?, 'CLEARED', ?, 'cleared by new evidence', ?)")
+          .run(randomUUID(), evidence.provider, evidence.profile_id, lastBlock.reason, at);
+      }
+    }).immediate();
     return id;
   }
 
@@ -130,6 +139,12 @@ export class AiAccountsRepository {
       this.db.prepare("UPDATE ai_accounts SET state = 'NEEDS_VERIFICATION', updated_at = ? WHERE profile_id = ?").run(at, acc.profile_id);
       this.db.prepare("INSERT INTO quota_events (event_id, provider, profile_id, event_kind, detail, reset_at, recorded_at) VALUES (?, ?, ?, 'RECOVERED', ?, NULL, ?)")
         .run(randomUUID(), provider, acc.profile_id, detail, at);
+      const lastBlock = this.db.prepare('SELECT event_kind, reason FROM provider_runtime_blocks WHERE provider = ? ORDER BY recorded_at DESC, rowid DESC LIMIT 1')
+        .get(provider) as { event_kind: string; reason: string } | undefined;
+      if (lastBlock?.event_kind === 'BLOCKED') {
+        this.db.prepare("INSERT INTO provider_runtime_blocks (block_id, provider, profile_id, event_kind, reason, detail, recorded_at) VALUES (?, ?, ?, 'CLEARED', ?, ?, ?)")
+          .run(randomUUID(), provider, acc.profile_id, lastBlock.reason, detail, at);
+      }
     }).immediate();
   }
 
@@ -231,5 +246,115 @@ export class AiAccountsRepository {
       },
       ...latest,
     });
+  }
+
+  // ---- E-22: Per-provider model & effort preferences (Settings P3 / `npm run ai -- model`) -------
+  setModelPreference(provider: CliProvider, model: string, effort: string | null = null): { provider: CliProvider; model: string; effort: string | null; updated_at: string } {
+    const trimmedModel = model.trim();
+    const trimmedEffort = effort && effort.trim() ? effort.trim() : null;
+    if (!trimmedModel) throw new Error('Model name cannot be empty');
+    if (containsSecretLike(trimmedModel) || (trimmedEffort && containsSecretLike(trimmedEffort))) {
+      throw new Error('Model or effort looks like a credential');
+    }
+    const at = this.now().toISOString();
+    this.db.prepare(`INSERT INTO provider_model_preferences (provider, model, effort, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT (provider) DO UPDATE SET model = excluded.model, effort = excluded.effort, updated_at = excluded.updated_at`)
+      .run(provider, trimmedModel, trimmedEffort, at);
+    return { provider, model: trimmedModel, effort: trimmedEffort, updated_at: at };
+  }
+
+  modelPreference(provider: CliProvider): { provider: CliProvider; model: string; effort: string | null; updated_at: string } | undefined {
+    return this.db.prepare('SELECT provider, model, effort, updated_at FROM provider_model_preferences WHERE provider = ?').get(provider) as
+      { provider: CliProvider; model: string; effort: string | null; updated_at: string } | undefined;
+  }
+
+  // ---- E-23 (3)/(4): Danh sách model được phép độc lập phiên bản CLI + canary model + chặn ranh giới runtime ----
+  /** Khai báo danh sách `models_allowed` cho provider mà không cần chạy lại `verify`; giữ qua các lần CLI tự cập nhật. */
+  setAllowedModels(provider: CliProvider, models: readonly string[]): string[] {
+    const cleaned = [...new Set(models.map((m) => m.trim()).filter(Boolean))];
+    if (!cleaned.length) throw new Error('Allowed models list cannot be empty');
+    for (const m of cleaned) {
+      if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(m)) throw new Error(`Invalid model identifier: ${m}`);
+      if (containsSecretLike(m)) throw new Error('Model name looks like a credential');
+    }
+    const json = canonicalJson(cleaned);
+    this.db.prepare('INSERT INTO provider_allowed_models (event_id, provider, models_json, recorded_at) VALUES (?, ?, ?, ?)')
+      .run(randomUUID(), provider, json, this.now().toISOString());
+    return cleaned;
+  }
+
+  /** Trả về danh sách model người dùng cho phép mới nhất; nếu chưa khai báo riêng thì lấy từ bằng chứng D-01. */
+  allowedModels(provider: CliProvider): string[] {
+    const row = this.db.prepare('SELECT models_json FROM provider_allowed_models WHERE provider = ? ORDER BY recorded_at DESC, rowid DESC LIMIT 1')
+      .get(provider) as { models_json: string } | undefined;
+    if (row) return JSON.parse(row.models_json) as string[];
+    return [...(this.latestEvidence(provider)?.evidence.models_allowed ?? [])];
+  }
+
+  /** Ghi lại kết quả canary cho một bộ (provider, cli_version, model, effort). */
+  recordModelCanary(input: { provider: CliProvider; cli_version: string; model: string; effort?: string | null; passed: boolean; reason?: string | null }): {
+    canary_id: string; provider: CliProvider; cli_version: string; model: string; effort: string | null; passed: boolean; reason: string | null; recorded_at: string;
+  } {
+    const effortKey = input.effort && input.effort.trim() ? input.effort.trim() : '';
+    const reason = input.reason ?? null;
+    if (reason && containsSecretLike(reason)) throw new Error('Canary reason looks like a credential');
+    const id = randomUUID();
+    const at = this.now().toISOString();
+    this.db.prepare('INSERT INTO provider_model_canaries (canary_id, provider, cli_version, model, effort, passed, reason, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, input.provider, input.cli_version, input.model, effortKey, input.passed ? 1 : 0, reason, at);
+    return { canary_id: id, provider: input.provider, cli_version: input.cli_version, model: input.model, effort: effortKey || null, passed: input.passed, reason, recorded_at: at };
+  }
+
+  /** Tra cứu kết quả canary gần nhất của (provider, cli_version, model, effort). */
+  modelCanary(provider: CliProvider, cliVersion: string, model: string, effort?: string | null): {
+    canary_id: string; provider: CliProvider; cli_version: string; model: string; effort: string | null; passed: boolean; reason: string | null; recorded_at: string;
+  } | undefined {
+    const effortKey = effort && effort.trim() ? effort.trim() : '';
+    const row = this.db.prepare('SELECT * FROM provider_model_canaries WHERE provider = ? AND cli_version = ? AND model = ? AND effort = ? ORDER BY recorded_at DESC, rowid DESC LIMIT 1')
+      .get(provider, cliVersion, model, effortKey) as {
+        canary_id: string; provider: CliProvider; cli_version: string; model: string; effort: string; passed: number; reason: string | null; recorded_at: string;
+      } | undefined;
+    return row && {
+      canary_id: row.canary_id, provider: row.provider, cli_version: row.cli_version, model: row.model,
+      effort: row.effort || null, passed: row.passed === 1, reason: row.reason, recorded_at: row.recorded_at,
+    };
+  }
+
+  /** Liệt kê kết quả canary mới nhất theo từng (cli_version, model, effort) của một provider. */
+  modelCanaries(provider: CliProvider, cliVersion?: string): {
+    cli_version: string; model: string; effort: string | null; passed: boolean; reason: string | null; recorded_at: string;
+  }[] {
+    const rows = (cliVersion
+      ? this.db.prepare('SELECT cli_version, model, effort, passed, reason, recorded_at FROM provider_model_canaries WHERE provider = ? AND cli_version = ? ORDER BY recorded_at, rowid').all(provider, cliVersion)
+      : this.db.prepare('SELECT cli_version, model, effort, passed, reason, recorded_at FROM provider_model_canaries WHERE provider = ? ORDER BY recorded_at, rowid').all(provider)) as {
+        cli_version: string; model: string; effort: string; passed: number; reason: string | null; recorded_at: string;
+      }[];
+    const latest = new Map<string, { cli_version: string; model: string; effort: string | null; passed: boolean; reason: string | null; recorded_at: string }>();
+    for (const r of rows) {
+      latest.set(`${r.cli_version}\0${r.model}\0${r.effort}`, {
+        cli_version: r.cli_version, model: r.model, effort: r.effort || null, passed: r.passed === 1, reason: r.reason, recorded_at: r.recorded_at,
+      });
+    }
+    return [...latest.values()];
+  }
+
+  /** E-23 (2): Chuyển provider sang trạng thái chặn có lý do khi runtime self-check phát hiện vi phạm ranh giới. */
+  recordRuntimeBoundaryBlock(provider: CliProvider, reason: string, detail: string): void {
+    const acc = this.account(provider);
+    if (!acc) return;
+    const safeDetail = containsSecretLike(detail) ? '[redacted]' : detail.slice(0, 240);
+    const at = this.now().toISOString();
+    this.db.transaction(() => {
+      this.db.prepare("UPDATE ai_accounts SET state = 'NEEDS_VERIFICATION', updated_at = ? WHERE profile_id = ?").run(at, acc.profile_id);
+      this.db.prepare("INSERT INTO provider_runtime_blocks (block_id, provider, profile_id, event_kind, reason, detail, recorded_at) VALUES (?, ?, ?, 'BLOCKED', ?, ?, ?)")
+        .run(randomUUID(), provider, acc.profile_id, reason, safeDetail, at);
+    }).immediate();
+  }
+
+  /** Kiểm tra xem provider hiện có đang bị chặn bởi runtime self-check hay không. */
+  activeRuntimeBlock(provider: CliProvider): { reason: string; detail: string; recorded_at: string } | undefined {
+    const row = this.db.prepare('SELECT event_kind, reason, detail, recorded_at FROM provider_runtime_blocks WHERE provider = ? ORDER BY recorded_at DESC, rowid DESC LIMIT 1')
+      .get(provider) as { event_kind: string; reason: string; detail: string; recorded_at: string } | undefined;
+    return row?.event_kind === 'BLOCKED' ? { reason: row.reason, detail: row.detail, recorded_at: row.recorded_at } : undefined;
   }
 }

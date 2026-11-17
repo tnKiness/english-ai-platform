@@ -1,172 +1,73 @@
-// Dev-tooling relay: runs one coding task on subscription CLIs and hands it to the next CLI when a quota/rate
-// limit is hit. Usage: see README "Relay AI lập trình". State lives in var/relay (gitignored).
-import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+// Dev-tooling relay: runs one coding task through ai-router, which picks a subscription CLI (Claude Code, Codex,
+// Antigravity) and moves the task to the next one when a quota/rate limit is hit. Usage: see README "Relay AI lập trình".
+// This file only adds the project's rules to the task and remembers the conversation for --continue (var/relay).
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import {
-  PROVIDERS, applyFailure, buildPrompt, earliestReset, emptyState, pickProvider, subscriptionEnv,
-  type Handoff, type ProviderId,
-} from './core.js';
-import {
-  HISTORY, LIVE, ROOT, STATE, TASK, acquireLock, appendLive, ensureDirs, execute, loadState, readJson, writeJson, type SessionRecord,
-} from './engine.js';
-import { DEFAULT_MODELS, providerSpecs } from './providers.js';
-import { resumeCommand } from './stream.js';
+import { buildPrompt, continuePrompt, relayOutcome, type RelayStatus, type RouterResult } from './core.js';
 
-export interface TaskFile { task: string; handoffs: Handoff[]; status: 'RUNNING' | 'DONE' | 'BLOCKED' | 'STOPPED' | 'EXHAUSTED'; updated_at: string }
+const ROOT = resolve(import.meta.dirname, '..', '..');
+const DIR = join(ROOT, 'var', 'relay');
+const TASK = join(DIR, 'router-task.json');
+const PROMPT = join(DIR, 'router-prompt.md');
+/** ai-router's launcher: a sibling checkout by default. */
+const ROUTER = resolve(process.env.AI_ROUTER_BIN ?? join(ROOT, '..', 'ai-router', 'bin', 'ai-router.mjs'));
+
+interface TaskFile { title: string; threadId: string; status: RelayStatus; updated_at: string }
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: {
-    'task-file': { type: 'string' }, continue: { type: 'boolean' }, status: { type: 'boolean' },
-    preflight: { type: 'boolean' }, smoke: { type: 'boolean' }, reset: { type: 'string' },
-    order: { type: 'string' }, 'timeout-min': { type: 'string' }, 'max-runs': { type: 'string' },
-    wait: { type: 'boolean' }, quiet: { type: 'boolean' },
-  },
+  options: { 'task-file': { type: 'string' }, continue: { type: 'boolean' }, status: { type: 'boolean' }, wait: { type: 'boolean' }, provider: { type: 'string' } },
 });
 
-const git = (...args: string[]) => spawnSync('git', args, { cwd: ROOT, encoding: 'utf8', shell: false, windowsHide: true }).stdout ?? '';
-const local = (iso: string | Date) => new Date(iso).toLocaleString('vi-VN', { hour12: false });
-/** Relay-level messages go to the screen and live.log; per-step CLI progress is printed unless --quiet. */
-const say = (line: string) => { console.log(line); appendLive(line); };
+const readTask = (): TaskFile | null => { try { return JSON.parse(readFileSync(TASK, 'utf8')) as TaskFile; } catch { return null; } };
+const local = (iso: string) => new Date(iso).toLocaleString('vi-VN', { hour12: false });
 
-function parseOrder(raw: string | undefined): ProviderId[] {
-  const ids = (raw ?? process.env.RELAY_ORDER ?? 'claude,codex,agy').split(',').map((s) => s.trim()).filter(Boolean);
-  const bad = ids.filter((id) => !PROVIDERS.includes(id as ProviderId));
-  if (bad.length || !ids.length) throw new Error(`--order không hợp lệ: ${bad.join(',') || '(trống)'}; dùng ${PROVIDERS.join(',')}`);
-  return ids as ProviderId[];
-}
-
-function printStatus(order: ProviderId[]) {
-  const state = loadState(); const now = new Date();
-  for (const id of order) {
-    const s = state[id];
-    const note = s.status === 'COOLDOWN' && s.until ? (new Date(s.until) <= now ? 'hết cooldown, dùng được' : `tới ${local(s.until)} (${s.reason})`) : (s.reason ?? '');
-    console.log(`${id.padEnd(7)} ${s.status.padEnd(12)} ${note}`);
-  }
-  const task = readJson<TaskFile | null>(TASK, null);
-  if (task) console.log(`\nNhiệm vụ gần nhất: ${task.status}, ${task.handoffs.length} lần chuyển, cập nhật ${local(task.updated_at)}`);
-  const sessions = readJson<SessionRecord[]>(HISTORY, []).slice(-8);
-  if (sessions.length) {
-    console.log('\nPhiên gần đây (mở lại trong CLI tương ứng, tại thư mục dự án):');
-    for (const s of sessions) console.log(`  ${local(s.started_at)}  ${s.provider.padEnd(6)} ${s.outcome.padEnd(8)} ${s.resume}`);
-  }
-}
-
-function preflight(order: ProviderId[]): Set<ProviderId> {
-  const specs = providerSpecs(); const { env, removed } = subscriptionEnv(process.env); const ok = new Set<ProviderId>();
-  if (removed.length) console.log(`Đã gỡ khỏi env tiến trình con: ${removed.join(', ')}`);
-  for (const id of order) {
-    const spec = specs[id];
-    const check = spec.checkSubscription(env);
-    const mark = check.ok === false ? 'CHẶN' : check.ok === null ? 'CHƯA XÁC MINH GÓI' : 'OK';
-    const m = DEFAULT_MODELS[id]; const model = 'effort' in m ? `${m.model}/${m.effort}` : m.model;
-    console.log(`${id.padEnd(7)} ${mark.padEnd(18)} ${model.padEnd(24)} ${check.detail}${spec.bin ? `  [${spec.bin}]` : ''}`);
-    if (check.ok !== false) ok.add(id);
-  }
-  return ok;
-}
-
-async function smoke(order: ProviderId[]) {
-  const usable = preflight(order); const specs = providerSpecs(); const { env } = subscriptionEnv(process.env);
-  for (const id of order) {
-    const spec = specs[id];
-    if (!usable.has(id) || !spec.bin) { console.log(`${id}: bỏ qua`); continue; }
-    const run = await execute({ provider: id, spec, prompt: 'Không dùng công cụ nào. Trả lời đúng hai dòng: "RELAY_SMOKE_OK" rồi "RELAY_STATUS: DONE".',
-      mode: 'read', userLabel: 'relay --smoke', timeoutMs: 180_000, env, live: false });
-    const ok = run.outcome.kind === 'DONE' && run.facts.finalText.includes('RELAY_SMOKE_OK');
-    console.log(`${id}: ${ok ? 'OK' : 'LỖI'} exit=${run.exitCode} ${run.seconds}s phiên=${run.facts.sessionId ?? '?'}` +
-      (ok ? '' : `\n  ${run.outcome.kind} ${[...run.facts.diagnostics, run.facts.finalText].join(' ').slice(-600)}`));
-    // A smoke run is real evidence of quota/login state, so record it the same way a work run would.
-    const state = loadState();
-    if (run.outcome.kind === 'SWITCH') writeJson(STATE, applyFailure(state, id, run.outcome, new Date()));
-    else if (ok) { state[id] = emptyState()[id]; writeJson(STATE, state); }
-  }
-}
-
-async function relay(order: ProviderId[], task: TaskFile) {
-  const specs = providerSpecs(); const { env, removed } = subscriptionEnv(process.env);
-  const timeoutMs = Number(values['timeout-min'] ?? 60) * 60_000;
-  const maxRuns = Number(values['max-runs'] ?? 6);
-  const usable = preflight(order);
-  if (removed.length) console.log('(Relay chỉ dùng đăng nhập thuê bao; không fallback API tính phí.)');
-  console.log(`Theo dõi trực tiếp: npm.cmd run relay:console, hoặc Get-Content -Wait -Encoding UTF8 ${LIVE}`);
-  const abort = new AbortController();
-  process.once('SIGINT', () => { say('\nĐang dừng, chạy lại với --continue để tiếp tục.'); abort.abort(); });
-  const title = `Relay: ${task.task.split(/\r?\n/).find((l) => l.trim())?.replace(/^#+\s*/, '').slice(0, 70) ?? 'nhiệm vụ'}`;
-
-  const save = (status: TaskFile['status']) => { task.status = status; task.updated_at = new Date().toISOString(); writeJson(TASK, task); };
-  save('RUNNING');
-  for (let runs = 0; runs < maxRuns && !abort.signal.aborted; runs++) {
-    let state = loadState(); const now = new Date();
-    const excluded = new Set(order.filter((id) => !usable.has(id) || !specs[id].bin));
-    const id = pickProvider(state, order, now, excluded);
-    if (!id) {
-      const reset = earliestReset(state, order.filter((p) => !excluded.has(p)));
-      if (!values.wait || !reset) {
-        save('EXHAUSTED');
-        say(`\nKhông còn nền tảng khả dụng.${reset ? ` Sớm nhất mở lại lúc ${local(reset)}.` : ''} Chạy lại với --continue (hoặc thêm --wait).`);
-        return 75;
-      }
-      const ms = Math.max(0, reset.getTime() - Date.now()) + 30_000;
-      say(`\nMọi nền tảng đang hết quota; chờ tới ${local(new Date(Date.now() + ms))}...`);
-      await new Promise((r) => { const t = setTimeout(r, ms); abort.signal.addEventListener('abort', () => { clearTimeout(t); r(null); }, { once: true }); });
-      runs--; continue;
-    }
-    const spec = specs[id];
-    say(`\n=== [${local(now)}] Lượt ${runs + 1}/${maxRuns}: ${spec.label} ===`);
-    const run = await execute({ provider: id, spec, prompt: [buildPrompt(task.task, task.handoffs), spec.promptNote].filter(Boolean).join('\n\n'), mode: 'work',
-      userLabel: `${title}${task.handoffs.length ? ` (tiếp nối lần ${task.handoffs.length})` : ''}`, timeoutMs, env, signal: abort.signal,
-      onEvent: (e) => { if (e.kind === 'progress' && !values.quiet) console.log(`  ${e.text}`); } });
-    if (abort.signal.aborted) { save('STOPPED'); return 130; }
-    const { outcome, facts } = run;
-    if (facts.sessionId) say(`Phiên ${spec.label}: ${resumeCommand(id, facts.sessionId)}`);
-
-    if (outcome.kind === 'DONE') { save('DONE'); say(`\n✔ ${spec.label} báo hoàn thành. Xem PROGRESS.md và git diff trước khi commit.`); return 0; }
-    if (outcome.kind === 'BLOCKED') { save('BLOCKED'); say(`\n⏸ ${spec.label} cần người dùng quyết định: ${outcome.reason}`); return 2; }
-    if (outcome.kind === 'STOP') {
-      save('STOPPED');
-      say(`\n✖ ${spec.label} dừng: ${outcome.reason}. Không chuyển tiếp vì lỗi không phải quota; xem log trong var/relay/runs, sửa rồi chạy --continue.`);
-      return 1;
-    }
-    state = applyFailure(loadState(), id, outcome, new Date()); writeJson(STATE, state);
-    const reason = outcome.failure === 'TIMEOUT' ? `quá thời gian ${timeoutMs / 60_000} phút`
-      : `${outcome.failure}${state[id].until ? `, mở lại ${local(state[id].until as string)}` : ''}`;
-    task.handoffs.push({ from: id, reason, at: new Date().toISOString(), gitStatus: git('status', '--short').slice(0, 4000),
-      diffStat: git('diff', '--stat').slice(0, 4000), summary: facts.finalText.slice(-3000), sessionId: facts.sessionId });
-    save('RUNNING');
-    say(`\n↪ ${spec.label} dừng (${reason}); chuyển nền tảng tiếp theo.`);
-  }
-  if (!abort.signal.aborted) { save('STOPPED'); say(`\nĐạt giới hạn ${maxRuns} lượt; chạy --continue nếu muốn tiếp.`); }
-  return 1;
+/** Runs `ai-router ask`: progress goes straight to the terminal, the result comes back as one JSON line on stdout. */
+function ask(prompt: string, threadId: string | null): Promise<RouterResult> {
+  // Through a file: the Windows command line cannot carry a long task.
+  writeFileSync(PROMPT, prompt, 'utf8');
+  const args = [ROUTER, 'ask', '--task-file', PROMPT, '--workspace', ROOT, '--mode', 'edit', '--json',
+    ...(threadId ? ['--thread', threadId] : []), ...(values.wait ? ['--wait'] : []), ...(values.provider ? ['--provider', values.provider] : [])];
+  return new Promise((done, fail) => {
+    const child = spawn(process.execPath, args, { cwd: ROOT, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'inherit'] });
+    let out = '';
+    child.stdout.on('data', (c: Buffer) => { out += c.toString('utf8'); });
+    child.once('error', fail);
+    child.once('close', () => {
+      const line = out.trim().split(/\r?\n/).at(-1) ?? '';
+      try { done(JSON.parse(line) as RouterResult); } catch { fail(new Error(`ai-router không trả kết quả: ${out.trim().slice(-400) || '(trống)'}`)); }
+    });
+  });
 }
 
 async function main(): Promise<number> {
-  const order = parseOrder(values.order);
-  ensureDirs();
-  if (values.status) { printStatus(order); return 0; }
-  if (values.reset !== undefined) {
-    const state = loadState(); const ids = values.reset === 'all' || values.reset === '' ? PROVIDERS : parseOrder(values.reset);
-    for (const id of ids) state[id] = emptyState()[id];
-    writeJson(STATE, state); printStatus(order); return 0;
+  if (!existsSync(ROUTER)) throw new Error(`Không thấy ai-router tại ${ROUTER}. Đặt AI_ROUTER_BIN trỏ tới bin/ai-router.mjs.`);
+  mkdirSync(DIR, { recursive: true });
+  const prev = readTask();
+  if (values.status) {
+    spawnSync(process.execPath, [ROUTER, 'status'], { stdio: 'inherit', shell: false, windowsHide: true });
+    if (prev) console.log(`\nNhiệm vụ gần nhất: ${prev.status}, cập nhật ${local(prev.updated_at)} — ${prev.title}\n  cuộc trò chuyện ${prev.threadId} (xem trong ai-router: /chat)`);
+    return 0;
   }
-  if (values.preflight) { preflight(order); return 0; }
-  const release = acquireLock();
-  try {
-    if (values.smoke) { await smoke(order); return 0; }
-    let task: TaskFile;
-    if (values.continue) {
-      const prev = readJson<TaskFile | null>(TASK, null);
-      if (!prev || prev.status === 'DONE') throw new Error('Không có nhiệm vụ dở để --continue.');
-      task = prev;
-    } else {
-      const text = values['task-file'] ? readFileSync(resolve(values['task-file']), 'utf8') : positionals.join(' ');
-      if (!text.trim()) throw new Error('Thiếu nhiệm vụ: truyền mô tả, --task-file <file> hoặc --continue.');
-      task = { task: text, handoffs: [], status: 'RUNNING', updated_at: new Date().toISOString() };
-    }
-    return await relay(order, task);
-  } finally { release(); }
+  let prompt: string; let threadId: string | null = null; let title: string;
+  if (values.continue) {
+    if (!prev || prev.status === 'DONE') throw new Error('Không có nhiệm vụ dở để --continue.');
+    prompt = continuePrompt(); threadId = prev.threadId; title = prev.title;
+  } else {
+    const text = values['task-file'] ? readFileSync(resolve(values['task-file']), 'utf8') : positionals.join(' ');
+    if (!text.trim()) throw new Error('Thiếu nhiệm vụ: truyền mô tả, --task-file <file> hoặc --continue.');
+    prompt = buildPrompt(text);
+    title = text.split(/\r?\n/).find((l) => l.trim())?.replace(/^#+\s*/, '').slice(0, 70) ?? 'nhiệm vụ';
+  }
+  console.log('(Relay chạy qua ai-router: chỉ dùng CLI thuê bao đã cấu hình ở đó. Theo dõi trực tiếp tại trang /chat của ai-router khi "serve" đang chạy.)');
+  const result = await ask(prompt, threadId);
+  const outcome = relayOutcome(result);
+  writeFileSync(TASK, JSON.stringify({ title, threadId: result.threadId, status: outcome.status, updated_at: new Date().toISOString() } satisfies TaskFile, null, 2), 'utf8');
+  if (result.finalText.trim()) console.log(`\n${result.finalText.trim()}`);
+  console.log(`\n${outcome.exitCode === 0 ? '✔' : outcome.exitCode === 2 ? '⏸' : '✖'} ${result.providerId ?? 'relay'}: ${outcome.note}`);
+  return outcome.exitCode;
 }
 
 main().then((code) => { process.exitCode = code; }, (error: unknown) => {
