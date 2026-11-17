@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import { ComplaintService } from '../application/learning/complaints.js';
+import { DailyTracker, type ActivityInput } from '../application/learning/daily-tracker.js';
 import { ReadingWorkflow } from '../application/learning/reading-workflow.js';
 import type { ReadingAnswer } from '../domain/learning/reading.js';
 import { AudioWorkflow, AUDIO_MAX_BYTES } from '../application/learning/audio-workflow.js';
@@ -226,6 +227,24 @@ export function createApp(deps: AppDeps = {}) {
   app.post<{ Params: { id: string }; Body: { request_key: string } }>('/api/learning/attempts/:id/start-7a', {
     schema: body({ request_key: str }),
   }, async (r) => learningWorkflow.startStep7A(r.params.id, r.body.request_key));
+
+  // ---- P5-1 Daily tracking & in-app reminders (06A §9, 02 §5.C.2; E-25) ----------------------------
+  const tracker = new DailyTracker(store);
+  const dayStr = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' } as const;
+  app.post<{ Body: { events: ActivityInput[] } }>('/api/learning/tracking/activity', {
+    schema: body({ events: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'object', additionalProperties: false,
+      required: ['client_event_id', 'activity', 'surface', 'span_seconds', 'occurred_at'],
+      properties: { client_event_id: str, activity: { enum: ['writing', 'reading', 'listening', 'speaking', 'thinking', 'review'] },
+        surface: { enum: ['workspace', 'reading', 'audio', 'today', 'progress'] }, attempt_id: { anyOf: [str, { type: 'null' }] },
+        span_seconds: { type: 'integer', minimum: 1, maximum: 120 }, occurred_at: { type: 'string', minLength: 10, maxLength: 40 }, offline: { type: 'boolean' } } } } }),
+  }, async (r) => tracker.recordActivity(r.body.events));
+  app.post<{ Body: { request_key: string; study_day: string; kind: 'planned_rest' | 'offline' | 'budget'; active: boolean; minutes?: number | null; note?: string } }>('/api/learning/tracking/day', {
+    schema: body({ request_key: str, study_day: dayStr, kind: { enum: ['planned_rest', 'offline', 'budget'] }, active: { type: 'boolean' },
+      minutes: { anyOf: [{ type: 'integer', minimum: 0, maximum: 480 }, { type: 'null' }] }, note: { type: 'string', maxLength: 500 } }, ['request_key', 'study_day', 'kind', 'active']),
+  }, async (r) => tracker.declare(r.body));
+  app.get<{ Querystring: { days?: string } }>('/api/learning/tracking', async (r) => tracker.overview(r.query.days !== undefined ? Number(r.query.days) : 7));
+  app.get('/api/learning/notifications', async () => tracker.notifications());
+  app.post<{ Params: { id: string } }>('/api/learning/notifications/:id/dismiss', { schema: body({}, []) }, async (r) => tracker.dismiss(r.params.id));
 
   app.get('/api/learning/progress', async () => learningWorkflow.progressView());
   app.get('/api/learning/settings', async () => ({

@@ -72,6 +72,12 @@ npm.cmd run router:sync              # chép lại, rồi npm.cmd run check
 - Worker kiểm lại job `WAITING_QUOTA` mỗi 5 phút (`--quota-recheck-ms` để đổi); khi một provider trong `eligible_providers` dùng được thì job quay lại hàng đợi, giữ nguyên ngân sách 3 lần chạy. Lần kiểm không gọi model.
 - Không đưa vào ứng dụng: provider API trả phí, xoay tài khoản cùng hãng, chat/handoff, MCP và Admin của ai-router (06A §1.5–1.6). Chọn hãng vẫn do `subscriptionGuard` + cổng D-05 quyết định.
 
+## Theo dõi học hằng ngày (P5-1, E-25)
+- **Học hôm nay** có khung "Ngày học hôm nay": nhắc học trong ứng dụng (tối đa 1 lần/ngày), nút *Hôm nay nghỉ có kế hoạch*, đặt *quỹ thời gian hôm nay*, ghi *đã học ngoài ứng dụng* (số phút tự khai, không bắt buộc).
+- Thời gian được ghi tự động mỗi phút khi màn Workspace/Reading/Audio đang hiển thị hoặc audio đang phát; mất kết nối thì lưu tạm trong trình duyệt và gửi lại sau (ngày đó hiện "offline").
+- **Tiến độ** có bảng 7 ngày: trạng thái ngày, phút ghi nhận/quỹ, vòng học, nhận định, độ lệch lộ trình, kèm thời điểm tính (giờ Việt Nam).
+- Ngày không có dữ liệu ghi "thiếu dữ liệu quan sát", không phải bỏ học; thiếu giờ không cộng dồn sang ngày sau và không làm giảm hồ sơ năng lực.
+
 ## Hợp đồng và giới hạn
 - [Schema v1](../contracts/core.v1.schema.json), [ERD/trạng thái/quyền/recovery](engineering/P0_DATA_AND_STATE.md), [nghiệm thu P0](engineering/P0_ACCEPTANCE.md).
 - JSON Schema không kiểm chứng nội dung IELTS hay quyền thuê bao. FakeAdapter chỉ trả dữ liệu synthetic, không ghi bằng chứng học thật.

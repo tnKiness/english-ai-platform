@@ -129,3 +129,16 @@ ID / ngày / trạng thái (đề xuất, áp dụng kỹ thuật, người dùn
 - Không đưa vào: provider API, xoay tài khoản, thứ tự "near limit", chat/handoff/MCP/Admin của ai-router; REFUSAL vẫn không chuyển hãng.
 - Kiểm chứng: `tests/unit/router-core-failover.test.ts`, `tests/integration/e24-router-core.test.ts`; hồi quy toàn bộ `npm.cmd run check`.
 - Giới hạn: lõi nhận diện theo chữ/sự kiện CLI; khi CLI đổi định dạng, sửa ở ai-router rồi đồng bộ. Worker vẫn từ chối khởi động khi lúc khởi động không provider nào READY (hành vi P2 cũ), nên vòng kiểm lại chỉ có tác dụng khi worker đang chạy.
+
+## E-25 — P5-1 Theo dõi học hằng ngày (Daily Tracker) và nhắc học theo luật (17/11/2026)
+- Trạng thái: áp dụng kỹ thuật (người dùng yêu cầu "tiếp tục triển khai dự án"); có thể đảo ngược bằng migration/code mới. Nguồn: 06A §9.1–9.3, §10.A; 02 §5.C.2; 06 §2.A.3–4; IMPLEMENTATION_PLAN P5. Không đặt ngưỡng sư phạm (D-02 vẫn mở).
+- Lựa chọn:
+  - Migration `0010_daily_tracking.sql`: `study_activity_events` (heartbeat, idempotent theo `client_event_id`, append-only), `daily_study_logs` (khai báo nghỉ có kế hoạch / học ngoài ứng dụng kèm phút tự khai / quỹ thời gian ngày; bản mới nhất mỗi loại thắng, giữ lịch sử), `notification_outbox` (dedupe_key duy nhất, chỉ kênh `in_app`), `scheduler_runs` (`last_run_day`). Không lưu nội dung bài làm, đáp án hay audio.
+  - Ngày học theo Asia/Bangkok; thời điểm lưu UTC. Thời gian = hợp các khoảng [thời điểm − span, thời điểm] của heartbeat (span ≤ 120 s, client gửi 60 s/lần khi màn học hiển thị hoặc audio đang phát), nên hai tab/gửi lại không đếm trùng; đọc/nghe/suy nghĩ được tính theo màn đang mở, không theo phím gõ.
+  - Trạng thái ngày: nghỉ có kế hoạch > học ngoài ứng dụng/offline (khai báo hoặc heartbeat đồng bộ muộn) > có ghi nhận > không có dữ liệu: ngày đã qua là **thiếu dữ liệu quan sát**, hôm nay là "chưa có dữ liệu", trước khi bắt đầu theo dõi thì không tính. Không có trạng thái "bỏ học".
+  - Quỹ ngày = quỹ khai báo của chính ngày đó, nếu không thì `daily_minutes` của mục tiêu; ngày nghỉ = 0. Hàm không nhận phần thiếu của ngày trước (không nợ phút). Không đọc/ghi hồ sơ năng lực.
+  - Bốn nhóm 06A §9.1 (chỉ mô tả): thời gian & cam kết; vòng học (bắt đầu, nộp gốc, nộp sửa, nhiệm vụ lịch xong); bằng chứng & sổ lỗi (nhận định learner theo outcome, giả thuyết lỗi cập nhật theo trạng thái); độ lệch lộ trình (nhiệm vụ quá hạn hiện tại, phiên bản lịch). Mọi báo cáo kèm `as_of`.
+  - Nhắc học theo luật, không dùng AI: tối đa một lần/ngày học (`scheduler_runs` + dedupe key), không nhắc ngày nghỉ, không bù các ngày máy tắt; chạy khi đọc `/api/learning/notifications`.
+  - Giới hạn kỹ thuật: heartbeat đồng bộ muộn tối đa 14 ngày, lệch đồng hồ 5 phút; khai báo trong 14 ngày trước tới 30 ngày sau (học ngoài ứng dụng chỉ tới hôm nay).
+- Chưa làm (P5 tiếp): tạo đề xuất lịch bù (`replan_proposals`) — phần xếp hạng phụ thuộc D-02; kênh Telegram/email.
+- Kiểm chứng: `tests/unit/study-day.test.ts`, `tests/integration/p5-tracking.test.ts`; hồi quy `npm.cmd run check`.

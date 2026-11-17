@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { get, post, requestId } from './api.js';
+import { useStudyHeartbeat } from './tracking.js';
 import type { ReadingWorkflow } from '../application/learning/reading-workflow.js';
 import type { ReadingAnswer } from '../domain/learning/reading.js';
 
@@ -8,6 +9,7 @@ type Catalog = { items: { item_id: string; version: string; title: string }[]; a
 export function ReadingScreen() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [view, setView] = useState<View | null>(null);
+  useStudyHeartbeat('reading', 'reading', view?.attempt_id ?? null);
   const [answers, setAnswers] = useState<ReadingAnswer[]>([]);
   const [mode, setMode] = useState('self_practice');
   const [error, setError] = useState('');

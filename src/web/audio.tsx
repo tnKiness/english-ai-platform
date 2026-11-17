@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { get, post, requestId } from './api.js';
+import { useStudyHeartbeat } from './tracking.js';
 import type { AudioWorkflow } from '../application/learning/audio-workflow.js';
 
 type View = ReturnType<AudioWorkflow['view']>;
 export function AudioScreen() {
   const [view, setView] = useState<View | null>(null);
+  useStudyHeartbeat('audio', 'speaking', view?.attempt_id ?? null);
   const [sessions, setSessions] = useState<{ attempt_id: string }[]>([]);
   const [text, setText] = useState('');
   const [recordingId, setRecordingId] = useState('');

@@ -2,6 +2,7 @@
 // gợi mở từng nấc + bổ sung kiến thức + 7A sạch), Tiến độ & Hồ sơ năng lực (4 thành phần, không bịa số, nhãn synthetic,
 // D-02 "chưa đủ kết luận") và Cài đặt.
 import { useCallback, useEffect, useState } from 'react';
+import { DayPanel, TrackingPanel, useStudyHeartbeat } from './tracking.js';
 import { get, post, requestId } from './api.js';
 
 type Mode = 'guided' | 'self_practice' | 'exam';
@@ -243,6 +244,7 @@ export function WorkspaceScreen({ attemptId, onSwitchAttempt, onBack }: { attemp
   const [error, setError] = useState<string | null>(null);
   const [conceptAnswer, setConceptAnswer] = useState('');
   const [inputSupportOpened, setInputSupportOpened] = useState<{ outline_suggestions: string[]; vocabulary_frame: string[] } | null>(null);
+  useStudyHeartbeat('workspace', 'writing', attemptId);
 
   const load = useCallback(() => {
     setError(null);
@@ -515,6 +517,8 @@ export function TodayScreen({ onOpenAttempt }: { onOpenAttempt: (attemptId: stri
 
     {!data.goal && <GoalForm initial={null} onSaved={() => load()} />}
 
+    <DayPanel />
+
     <article className="card">
       <h3>Quỹ thời gian phiên này</h3>
       <div className="actions">
@@ -614,6 +618,7 @@ export function ProgressScreen() {
 
   return <section>
     <h2>Tiến độ &amp; Hồ sơ năng lực (02 §2, 06 §2.4)</h2>
+    <TrackingPanel />
     <article className="card">
       <p><b>Giới hạn suy luận (D-02):</b> {data.disclaimer}</p>
       <p className="mono">Trạng thái chính sách: {data.policy_status} · Báo điểm Band: {data.band_reporting_enabled ? 'Bật' : 'Tắt (chưa có bộ đối chứng & chính sách được duyệt)'}</p>

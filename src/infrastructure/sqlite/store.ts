@@ -12,11 +12,12 @@ import { SqliteJobQueue } from './job-queue.js';
 import { KnowledgeRepository } from './knowledge-repository.js';
 import { LearningRepository } from './learning-repository.js';
 import { ResultCache } from './result-cache.js';
+import { TrackingRepository } from './tracking-repository.js';
 
 export interface Store {
   db: Db; paths: DataPaths; uow: UnitOfWork; now: () => Date;
   json: JsonStore; media: MediaStore; knowledge: KnowledgeRepository; learning: LearningRepository; queue: SqliteJobQueue;
-  builder: BuilderRepository; cache: ResultCache; aiAccounts: AiAccountsRepository;
+  builder: BuilderRepository; cache: ResultCache; aiAccounts: AiAccountsRepository; tracking: TrackingRepository;
   close(): void;
 }
 
@@ -37,6 +38,7 @@ export async function openStore(paths: DataPaths, options: OpenOptions & { now?:
     builder: new BuilderRepository(db, now),
     cache: new ResultCache(db, now),
     aiAccounts: new AiAccountsRepository(db, now),
+    tracking: new TrackingRepository(db, now),
     close: () => db.close(),
   };
 }
