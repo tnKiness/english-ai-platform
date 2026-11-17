@@ -148,3 +148,14 @@ ID / ngày / trạng thái (đề xuất, áp dụng kỹ thuật, người dùn
 - Lựa chọn: `docs/HUONG_DAN_SU_DUNG.md` gồm phần viết tay (mục 1–13: tổng quan, cài, chạy, học, Builder & QC, AI thật, worker, sao lưu, relay, kiểm tra, sự cố, giới hạn) và các khối `AUTO` (mục 14) do `scripts/user-guide.mjs` sinh từ `package.json`, USAGE của `src/cli/{ai,backup}.ts`, cờ `src/worker/main.ts`, route `src/server/app.ts`, `migrations/`, DECISIONS và bảng PROGRESS.
 - Cưỡng chế: `npm run check` chạy `docs:guide -- --check` sau lint; thất bại khi khối AUTO cũ, khi có lệnh npm/route/cờ worker mới chưa có mô tả, hoặc còn mô tả cho thứ đã xóa. AGENTS.md mục 5a bắt AI lập trình sửa phần viết tay trong cùng lượt. Git hook tùy chọn `.githooks/pre-commit` (bật bằng `npm run hooks:install` = `git config core.hooksPath .githooks`) tự sinh lại khối AUTO trước commit.
 - Giới hạn: phần viết tay không kiểm được bằng máy; độ đúng của nó dựa vào quy định AGENTS.md và người duyệt. Phần mô tả lệnh `ai`/`backup` lấy nguyên văn USAGE tiếng Anh trong mã.
+
+## E-27 — P5-2 Tra cứu kho tri thức FTS5/BM25 lọc quyền trong cùng truy vấn (17/11/2026)
+- Trạng thái: áp dụng kỹ thuật (người dùng yêu cầu tiếp tục triển khai); đảo ngược được (chỉ mục là projection). Nguồn: 06A §7.A.2, §10.B bước 5; 05 §C.5; 06 §5.B.1; 04 §2 (cắt quyền trước truy xuất).
+- Lựa chọn:
+  - Migration `0011_knowledge_search.sql`: bảng FTS5 `knowledge_search(title, body)` tokenizer `unicode61 remove_diacritics 2` + `knowledge_search_units` (rowid ↔ unit, `content_hash`). Không chép quyền, trạng thái phát hành hay thu hồi vào chỉ mục.
+  - `KnowledgeSearch` (`src/infrastructure/sqlite/knowledge-search.ts`): `sync()` đánh chỉ mục unit mới/đổi hash, đọc file JSON qua hash đã ghi; `rebuild()` xóa và dựng lại; `search()` lọc trong cùng câu SQL theo vai trò (`roles_json`), trạng thái phát hành (`released`: chỉ `active`; `builder`: thêm `draft`/`suspended`) và thu hồi (unit hoặc gói), rồi xếp BM25 (trọng số tiêu đề 5). Chỉ trả tham chiếu, tiêu đề, loại unit, gói, trạng thái, điểm; nội dung vẫn phải đọc qua `scopedReader`.
+  - Chỉ đánh chỉ mục chuỗi nội dung ngoài khối `governance`; gộp đ→d để gõ không dấu tìm được. Từ khóa người dùng được tách thành từ và đặt trong ngoặc kép (tối đa 12 từ, từ ≥ 2 ký tự): không cú pháp FTS nào của người gọi tới được `MATCH`.
+  - Console: `GET /api/console/search?q=&role=`, `POST /api/console/search/rebuild`; khung tìm ở tab Gói tri thức.
+- Giới hạn: thống kê BM25 tính trên toàn chỉ mục, nên unit bị ẩn có thể làm lệch thứ hạng (không bao giờ được trả về). Chưa nối vào bước đóng gói ngữ cảnh của job AI (context hiện là manifest cố định theo item/rubric đã ghim); dùng khi có tác vụ cần tra cứu tham khảo.
+- Kiểm chứng: `tests/integration/p5-search.test.ts`; hồi quy `npm.cmd run check`.
+

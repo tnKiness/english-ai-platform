@@ -15,6 +15,29 @@ interface Gateway { provider: string; ready: boolean; error: string | null; reas
 
 const LABEL: Record<string, string> = { PASS: 'Đạt', FAIL: 'Chưa đạt', NOT_RUN: 'Chưa chạy' };
 
+interface Hit { kind: string; object_id: string; version: string; unit_type: string; title: string; package_id: string; package_version: string; release_state: string; score: number }
+const ROLES = ['verifier', 'assessor', 'blind_solver', 'repair_tutor', 'task_generator'] as const;
+
+/** P5-2 (E-27): BM25 search. Results are references and titles only; opening content still goes through the recorded-exposure flow. */
+function Search({ onError }: { onError: (e: unknown) => void }) {
+  const [q, setQ] = useState('');
+  const [role, setRole] = useState<(typeof ROLES)[number]>('verifier');
+  const [hits, setHits] = useState<Hit[] | null>(null);
+  const run = () => get<{ hits: Hit[] }>(`/api/console/search?q=${encodeURIComponent(q)}&role=${role}`).then((r) => setHits(r.hits)).catch(onError);
+  return <article className="card">
+    <h3>Tìm trong kho tri thức</h3>
+    <div className="actions">
+      <input value={q} placeholder="Từ khóa (có thể gõ không dấu)" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run(); }} />
+      <label>Theo quyền của vai trò:{' '}
+        <select value={role} onChange={(e) => setRole(e.target.value as (typeof ROLES)[number])}>{ROLES.map((r) => <option key={r} value={r}>{r}</option>)}</select></label>
+      <button onClick={() => void run()}>Tìm</button>
+      <button onClick={() => post('/api/console/search/rebuild').then(() => run()).catch(onError)}>Dựng lại chỉ mục</button>
+    </div>
+    {hits && (hits.length === 0 ? <p>Không có kết quả mà vai trò này được phép thấy.</p>
+      : <ul>{hits.map((h) => <li key={`${h.kind}/${h.object_id}@${h.version}`}><b>{h.title}</b> <span className="mono">{h.kind}/{h.object_id}@{h.version} · {h.unit_type} · gói {h.package_id}@{h.package_version} ({h.release_state})</span></li>)}</ul>)}
+  </article>;
+}
+
 function Packages({ onError }: { onError: (e: unknown) => void }) {
   const [list, setList] = useState<Pkg[]>([]);
   const [content, setContent] = useState<{ title: string; body: string } | null>(null);
@@ -97,7 +120,7 @@ export function BuilderConsole() {
     <nav className="tabs">{([['packages', 'Gói tri thức'], ['issues', 'Cần xử lý'], ['runs', 'Lần chạy']] as const).map(([k, label]) =>
       <button key={k} className={tab === k ? 'active' : ''} onClick={() => { setError(null); setTab(k); }}>{label}</button>)}</nav>
     {error && <p role="alert" className="error">{error}</p>}
-    {tab === 'packages' && <Packages onError={onError} />}
+    {tab === 'packages' && <><Search onError={onError} /><Packages onError={onError} /></>}
     {tab === 'issues' && <Issues onError={onError} />}
     {tab === 'runs' && <Runs onError={onError} />}
   </section>;

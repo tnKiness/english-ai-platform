@@ -92,6 +92,8 @@ const ROUTES = {
   'POST /api/console/packages/:id/:version/withdraw': 'Ngừng (suspended) hoặc loại bỏ (retired) gói.',
   'POST /api/console/packages/:id/:version/dry-run': 'Chạy thử (dry-run) với văn bản nhập, không thành bằng chứng học.',
   'POST /api/console/revoke': 'Thu hồi item/rubric/gói/tri thức; lan truyền tới cache và nhận định.',
+  'GET /api/console/search': 'Tìm gói tri thức (BM25) theo vai trò: `?q=&role=`; chỉ trả tham chiếu + tiêu đề, không trả nội dung.',
+  'POST /api/console/search/rebuild': 'Dựng lại chỉ mục tìm kiếm từ các file JSON bất biến.',
   'GET /api/console/issues': 'Mục "Cần xử lý": review mở và job bị dừng.',
   'POST /api/console/issues/:reviewId/resolve': 'Đóng một review với cách xử lý đã chọn.',
   'GET /api/console/runs': 'Các lần chạy AI gần đây.',

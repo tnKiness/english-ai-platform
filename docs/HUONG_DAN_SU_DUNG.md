@@ -130,6 +130,7 @@ Thu âm (WAV/WebM/OGG, tối đa 8 MiB), nghe lại, thu lại; mọi bản thu 
 ## 5. Builder & QC
 
 Dành cho việc tạo/kiểm định gói nội dung. Ba tab:
+- **Tìm trong kho tri thức** (đầu tab Gói tri thức): gõ từ khóa (gõ không dấu cũng được), chọn **vai trò** để xem đúng những gì vai trò đó được phép thấy (ví dụ `blind_solver` không bao giờ thấy đáp án), bấm *Tìm*. Kết quả xếp theo BM25, chỉ hiện tham chiếu + tiêu đề, không hiện nội dung; muốn xem nội dung thì mở gói bên dưới (được ghi vào nhật ký tiếp xúc). Nội dung bị thu hồi hoặc gói đã loại bỏ biến mất khỏi kết quả ngay. *Dựng lại chỉ mục* tạo lại chỉ mục từ các file JSON (an toàn, không mất dữ liệu).
 - **Gói tri thức**: chạy QC1–3 (kiểm tra xác định), xác nhận QC2/QC3 ngữ nghĩa trên đúng hash, chạy QC4 (giải mù + đối chiếu bằng AI qua worker), **Phát hành** khi đủ QC1–4, **Ngừng**/**Loại bỏ**, xem nội dung (được ghi vào nhật ký tiếp xúc để không dùng bài đã lộ làm bài kiểm chứng).
 - **Cần xử lý**: review mở (sau thu hồi, khiếu nại…) và job bị dừng; chọn cách xử lý.
 - **Lần chạy**: các lần chạy AI và trạng thái gateway.
@@ -253,6 +254,7 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 | Provider `QUOTA_EXHAUSTED`/`COOLDOWN` | Hết hạn mức | Chờ tới giờ mở lại (tự về READY); job tự chạy tiếp nếu worker đang chạy |
 | `MODEL_NOT_VERIFIED` / `MODEL_CANARY_FAILED` | Model chưa được phép hoặc canary hỏng | `ai -- allow-models` hoặc chọn model khác bằng `ai -- model` |
 | `npm run check` báo hướng dẫn cũ | Mã đổi mà hướng dẫn chưa sinh lại | `npm.cmd run docs:guide`, bổ sung mô tả còn thiếu, xem lại phần viết tay |
+| Tìm trong kho không ra kết quả | Vai trò được chọn không có quyền với nội dung đó, gói chưa phát hành/đã loại bỏ, hoặc đã bị thu hồi; từ khóa dưới 2 ký tự bị bỏ | Đổi vai trò, kiểm tra trạng thái gói; *Dựng lại chỉ mục* nếu nghi chỉ mục lỗi |
 | `router:sync -- --check` báo LỆCH | ai-router đã đổi lõi | `npm.cmd run router:sync` rồi `npm.cmd run check` |
 | Theo dõi ngày báo "Thiếu dữ liệu quan sát" dù có học | Học ngoài ứng dụng hoặc trình duyệt chặn lưu tạm | Khai báo *Đã học ngoài ứng dụng* cho ngày đó (trong 14 ngày) |
 
@@ -261,7 +263,7 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 - **Chưa báo Band, chưa kết luận năng lực** (D-02: chưa có chính sách ngưỡng được duyệt).
 - **Nội dung thật và bộ đối chứng** chưa có (D-05); bài học hiện là synthetic. Provider dự phòng chỉ được tự động dùng khi có báo cáo đối chứng D-05.
 - **Chưa có ASR/chấm phát âm** (D-06).
-- Chưa có đề xuất lịch bù tự động (P5-2), tra cứu FTS/BM25, export/retention, lịch sao lưu tự động, kênh Telegram/email.
+- Chưa có đề xuất lịch bù tự động, export/retention, lịch sao lưu tự động, kênh Telegram/email.
 - Danh sách quyết định còn mở: [DECISIONS — Điểm mở](engineering/DECISIONS.md).
 
 ## 13. Cách tài liệu này được giữ đúng
@@ -414,6 +416,8 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `POST /api/console/packages/:id/:version/withdraw` | Ngừng (suspended) hoặc loại bỏ (retired) gói. |
 | `POST /api/console/packages/:id/:version/dry-run` | Chạy thử (dry-run) với văn bản nhập, không thành bằng chứng học. |
 | `POST /api/console/revoke` | Thu hồi item/rubric/gói/tri thức; lan truyền tới cache và nhận định. |
+| `GET /api/console/search` | Tìm gói tri thức (BM25) theo vai trò: `?q=&role=`; chỉ trả tham chiếu + tiêu đề, không trả nội dung. |
+| `POST /api/console/search/rebuild` | Dựng lại chỉ mục tìm kiếm từ các file JSON bất biến. |
 | `GET /api/console/issues` | Mục "Cần xử lý": review mở và job bị dừng. |
 | `POST /api/console/issues/:reviewId/resolve` | Đóng một review với cách xử lý đã chọn. |
 | `GET /api/console/runs` | Các lần chạy AI gần đây. |
@@ -434,6 +438,7 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `0008_provider_model_preferences.sql` | 0008_provider_model_preferences — E-22: per-provider default model & effort preferences. |
 | `0009_runtime_canary.sql` | 0009_runtime_canary — E-23: user-declared allowed models, per-CLI-version model canary records and |
 | `0010_daily_tracking.sql` | P5-1 Daily tracking (06A §9, §10.A; 02 §5.C.2; decision E-25). Append-only activity and declarations; the daily |
+| `0011_knowledge_search.sql` | P5-2 Knowledge search (06A §7.A.2 "lọc quyền trước khi tra cứu bằng SQLite FTS/BM25", 05 §C.5, 06 §5.B.1; E-27). |
 <!-- AUTO:migrations:END -->
 
 ### Quyết định kỹ thuật
@@ -466,6 +471,7 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | E-24 | Dùng lõi định tuyến của ai-router làm nền xử lý AI của ứng dụng (17/11/2026) |
 | E-25 | P5-1 Theo dõi học hằng ngày (Daily Tracker) và nhắc học theo luật (17/11/2026) |
 | E-26 | Hướng dẫn sử dụng tự cập nhật (17/11/2026) |
+| E-27 | P5-2 Tra cứu kho tri thức FTS5/BM25 lọc quyền trong cùng truy vấn (17/11/2026) |
 <!-- AUTO:decisions:END -->
 
 ### Trạng thái công việc

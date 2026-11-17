@@ -7,6 +7,7 @@ import { AudioWorkflow, AUDIO_MAX_BYTES } from '../application/learning/audio-wo
 import { LearningWorkflowService } from '../application/learning/writing-workflow.js';
 import { ConsoleService } from '../application/qc/console.js';
 import type { BuilderPipeline } from '../application/qc/pipeline.js';
+import type { ContextRole } from '../application/context/scoped-reader.js';
 import type { Mode, Opportunity, Purpose } from '../domain/evidence/types.js';
 import { gatewayFor } from '../infrastructure/ai/gateway/compose.js';
 import { ConsoleQueries } from '../infrastructure/sqlite/console-queries.js';
@@ -157,6 +158,13 @@ export function createApp(deps: AppDeps = {}) {
   }, async (r) => pipeline.revoke({ target_kind: r.body.target_kind, target_id: r.body.target_id, target_version: r.body.target_version }, r.body.reason));
 
   // Tab 2 "Cần xử lý": review items with impact, plus jobs parked for review.
+  // P5-2 (E-27): BM25 search filtered by role, release state and revocations in the same query; refs only, no content.
+  app.get<{ Querystring: { q?: string; role?: string; limit?: string } }>('/api/console/search', async (r) => {
+    const role = r.query.role ?? 'verifier';
+    if (!['blind_solver', 'verifier', 'assessor', 'repair_tutor', 'task_generator'].includes(role)) throw Object.assign(new Error('Unknown role'), { statusCode: 400 });
+    return { hits: store.search.search({ query: r.query.q ?? '', role: role as ContextRole, scope: 'builder', limit: r.query.limit ? Number(r.query.limit) : 20 }) };
+  });
+  app.post('/api/console/search/rebuild', { schema: body({}, []) }, async () => store.search.rebuild());
   app.get('/api/console/issues', async () => ({ reviews: store.builder.reviews('open'), jobs: queries.stoppedJobs() }));
   app.post<{ Params: { reviewId: string }; Body: { resolution: 'ai_fix_and_requalify' | 'suspended_or_retired' | 'manual_review_done' | 'deferred' } }>('/api/console/issues/:reviewId/resolve', {
     schema: body({ resolution: { enum: ['ai_fix_and_requalify', 'suspended_or_retired', 'manual_review_done', 'deferred'] } }),

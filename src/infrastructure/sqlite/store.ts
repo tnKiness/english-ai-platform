@@ -13,11 +13,12 @@ import { KnowledgeRepository } from './knowledge-repository.js';
 import { LearningRepository } from './learning-repository.js';
 import { ResultCache } from './result-cache.js';
 import { TrackingRepository } from './tracking-repository.js';
+import { KnowledgeSearch } from './knowledge-search.js';
 
 export interface Store {
   db: Db; paths: DataPaths; uow: UnitOfWork; now: () => Date;
   json: JsonStore; media: MediaStore; knowledge: KnowledgeRepository; learning: LearningRepository; queue: SqliteJobQueue;
-  builder: BuilderRepository; cache: ResultCache; aiAccounts: AiAccountsRepository; tracking: TrackingRepository;
+  builder: BuilderRepository; cache: ResultCache; aiAccounts: AiAccountsRepository; tracking: TrackingRepository; search: KnowledgeSearch;
   close(): void;
 }
 
@@ -27,10 +28,11 @@ export async function openStore(paths: DataPaths, options: OpenOptions & { now?:
   const now = options.now ?? (() => new Date());
   const db = await openDatabase(paths.db, options);
   const knowledge = new KnowledgeRepository(db, now);
+  const json = new JsonStore(db, paths.knowledge, paths.staging, now);
   return {
     db, paths, now,
     uow: { run: <T>(fn: () => T): T => db.transaction(fn).immediate() },
-    json: new JsonStore(db, paths.knowledge, paths.staging, now),
+    json,
     media: new MediaStore(db, paths.media, paths.staging, now),
     knowledge,
     learning: new LearningRepository(db, knowledge, now),
@@ -39,6 +41,7 @@ export async function openStore(paths: DataPaths, options: OpenOptions & { now?:
     cache: new ResultCache(db, now),
     aiAccounts: new AiAccountsRepository(db, now),
     tracking: new TrackingRepository(db, now),
+    search: new KnowledgeSearch(db, json, now),
     close: () => db.close(),
   };
 }
