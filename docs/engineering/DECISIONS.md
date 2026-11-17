@@ -89,7 +89,7 @@ Ngày lập: 19/10/2026. Các quy định engineering là bổ sung triển khai
 | D-04 | ĐÃ ĐẠT spike Windows runner/SQLite, backup phối hợp (P1-4), kiểm entrypoint native + sha256 và từ chối shim (P2-3); chưa xác minh với CLI thật và quyền file thực | Tích hợp thật P2 | Xử lý shim .cmd/.ps1 bằng entrypoint đã xác minh, quyền file thực |
 | D-05 | Chưa có gói nội dung, quyền sử dụng và đối chứng | Phát hành gói học / báo Band | Nguồn được phép dùng, QC1–4 đúng hash, coverage manifest, bộ đối chứng riêng; thiếu phần nào chặn phần đó |
 | D-06 | Chưa chọn ASR/TTS và kiểm chứng audio | Phát âm sâu / sinh Listening thật | Năng lực đo được trên audio gốc, công cụ/phiên bản/tài nguyên; thiếu audio path giữ chưa đủ kết luận |
-| D-07 | Chính sách giữ log/context/media, hạn mức ổ đĩa | Dùng dữ liệu cá nhân dài hạn | Cấu hình retention minh bạch, xử lý đầy ổ, export/backup/restore; không xóa lịch sử tự động khi chưa có chính sách |
+| D-07 | Chính sách giữ log/context/media, hạn mức ổ đĩa. Đã có phần độc lập (E-28): xuất dữ liệu học tập và báo cáo dung lượng, không xóa gì; còn mở: thời hạn lưu giữ, tự dọn, ngưỡng đầy ổ | Dùng dữ liệu cá nhân dài hạn | Cấu hình retention minh bạch, xử lý đầy ổ, export/backup/restore; không xóa lịch sử tự động khi chưa có chính sách |
 
 Người thực hiện hạng mục chịu trách nhiệm thu bằng chứng; AI không tự đóng điểm mở bằng lời khẳng định. Điểm cần quyết định nghiệp vụ đưa cho chủ dự án, phần kỹ thuật xử lý trong quyền đã được giao.
 
@@ -158,4 +158,15 @@ ID / ngày / trạng thái (đề xuất, áp dụng kỹ thuật, người dùn
   - Console: `GET /api/console/search?q=&role=`, `POST /api/console/search/rebuild`; khung tìm ở tab Gói tri thức.
 - Giới hạn: thống kê BM25 tính trên toàn chỉ mục, nên unit bị ẩn có thể làm lệch thứ hạng (không bao giờ được trả về). Chưa nối vào bước đóng gói ngữ cảnh của job AI (context hiện là manifest cố định theo item/rubric đã ghim); dùng khi có tác vụ cần tra cứu tham khảo.
 - Kiểm chứng: `tests/integration/p5-search.test.ts`; hồi quy `npm.cmd run check`.
+
+## E-28 — P5-3 Xuất dữ liệu học tập và báo cáo dung lượng (17/11/2026)
+- Trạng thái: áp dụng kỹ thuật (người dùng yêu cầu triển khai phần tiếp theo); phần độc lập của D-07. Không xóa hay sửa dữ liệu; chính sách lưu giữ vẫn chờ người dùng.
+- Lựa chọn:
+  - `exportLearnerData` (`src/infrastructure/export/learner-export.ts`): một transaction đọc; ghi `data/<bảng>.json` cho 25 bảng dữ liệu người học (lọc `scope = 'learner'` hoặc theo attempt learner), sao nguyên byte bản thu âm sau khi kiểm SHA-256, `manifest.json` (định dạng `study-english-learner-export` v1, phiên bản schema, số dòng + SHA-256 từng file, danh sách loại trừ), `DOC_TRUOC.txt`. Thư mục `.partial` chỉ đổi tên khi xong; lỗi thì xóa.
+  - Không xuất: nội dung tri thức/đáp án/rubric (chỉ tham chiếu), `writing_diagnoses.hints_json` (gợi ý chưa chắc đã mở; không lộ gợi ý tương lai), dry-run, tài khoản/bằng chứng/hạn mức AI, job/run và đầu ra thô.
+  - Mặc định ghi vào `var/exports/` (gitignored); `--out` từ chối thư mục trong repo ngoài `var/`.
+  - `storageUsage`: dung lượng từng khu dưới `var/`, chỗ trống ổ (`statfs`), 10 bảng nhiều dòng nhất; `retention.policy = 'none'`.
+  - Giao diện: CLI `npm run export -- create|usage`; `POST /api/learning/export`, `GET /api/learning/storage`; khung "Dữ liệu của bạn" ở Cài đặt.
+- Chưa làm (chờ D-07): thời hạn lưu giữ, tự dọn backup/export/log, ngưỡng và hành vi khi đầy ổ, nhập lại (import) bản xuất.
+- Kiểm chứng: `tests/integration/p5-export.test.ts`; hồi quy `npm.cmd run check`.
 

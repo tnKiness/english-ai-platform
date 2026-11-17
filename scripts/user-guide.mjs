@@ -31,6 +31,7 @@ const SCRIPTS = {
   ai: 'Quản trị AI thật: trạng thái provider, tài khoản, bằng chứng D-01, đồng ý dữ liệu, model (xem mục lệnh `ai`).',
   worker: 'Worker xử lý job AI trong hàng đợi (xem mục cờ worker).',
   backup: 'Sao lưu / khôi phục DB + JSON + media (xem mục lệnh `backup`).',
+  export: 'Xuất dữ liệu học tập cá nhân ra thư mục riêng, hoặc xem dung lượng đang dùng (xem mục lệnh `export`).',
   'qc:real': 'Chạy QC1–4 thật bằng provider READY trên gói synthetic trong kho tạm `var/qc-real/` (tốn vài prompt thuê bao).',
   'seed:reading': 'Nạp gói Reading synthetic đã qua QC vào kho để thử luồng Reading.',
 };
@@ -78,6 +79,8 @@ const ROUTES = {
   'GET /api/learning/tracking': 'Theo dõi N ngày gần nhất (`?days=1..31`), kèm `as_of`.',
   'GET /api/learning/notifications': 'Lời nhắc trong ứng dụng (tạo nhắc của hôm nay nếu chưa có).',
   'POST /api/learning/notifications/:id/dismiss': 'Đánh dấu đã xem một lời nhắc.',
+  'POST /api/learning/export': 'Xuất dữ liệu học tập vào `var/exports/` (chỉ đọc, không xóa gì).',
+  'GET /api/learning/storage': 'Dung lượng dữ liệu trong `var/`, dung lượng trống của ổ, các bảng lớn nhất.',
   'GET /api/learning/progress': 'Tiến độ & hồ sơ năng lực (chưa báo Band, chờ D-02).',
   'GET /api/learning/settings': 'Cài đặt: mục tiêu và trạng thái gateway AI.',
   'POST /api/learning/complaints': 'Yêu cầu xem xét lại một nhận định (tạo job tái đánh giá).',
@@ -163,7 +166,7 @@ function statusBlock() {
 }
 
 const BLOCKS = {
-  scripts: scriptsBlock, 'ai-cli': () => usageBlock('src/cli/ai.ts'), 'backup-cli': () => usageBlock('src/cli/backup.ts'),
+  scripts: scriptsBlock, 'ai-cli': () => usageBlock('src/cli/ai.ts'), 'backup-cli': () => usageBlock('src/cli/backup.ts'), 'export-cli': () => usageBlock('src/cli/export.ts'),
   'worker-flags': workerBlock, routes: routesBlock, migrations: migrationsBlock, decisions: decisionsBlock, status: statusBlock,
 };
 

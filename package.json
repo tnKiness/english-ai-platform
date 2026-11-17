@@ -25,6 +25,7 @@
     "ai": "tsx src/cli/ai.ts",
     "worker": "tsx src/worker/main.ts",
     "backup": "tsx src/cli/backup.ts",
+    "export": "tsx src/cli/export.ts",
     "qc:real": "tsx scripts/qc-real-synthetic.ts",
     "seed:reading": "tsx scripts/seed-reading.ts"
   },

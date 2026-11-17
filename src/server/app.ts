@@ -10,6 +10,7 @@ import type { BuilderPipeline } from '../application/qc/pipeline.js';
 import type { ContextRole } from '../application/context/scoped-reader.js';
 import type { Mode, Opportunity, Purpose } from '../domain/evidence/types.js';
 import { gatewayFor } from '../infrastructure/ai/gateway/compose.js';
+import { exportLearnerData, storageUsage } from '../infrastructure/export/learner-export.js';
 import { ConsoleQueries } from '../infrastructure/sqlite/console-queries.js';
 import { builderPipeline, type Store } from '../infrastructure/sqlite/store.js';
 import { parseCookies, SESSION_COOKIE, SessionManager } from './session.js';
@@ -253,6 +254,13 @@ export function createApp(deps: AppDeps = {}) {
   app.get<{ Querystring: { days?: string } }>('/api/learning/tracking', async (r) => tracker.overview(r.query.days !== undefined ? Number(r.query.days) : 7));
   app.get('/api/learning/notifications', async () => tracker.notifications());
   app.post<{ Params: { id: string } }>('/api/learning/notifications/:id/dismiss', { schema: body({}, []) }, async (r) => tracker.dismiss(r.params.id));
+
+  // ---- P5-3 Export & storage report (D-07 independent part; E-28): read-only, nothing is deleted -------------
+  app.post('/api/learning/export', { schema: body({}, []) }, async () => {
+    const { dir, manifest } = exportLearnerData(store.db, store.paths, { now: store.now });
+    return { dir, created_at: manifest.created_at, tables: Object.fromEntries(Object.entries(manifest.tables).map(([k, v]) => [k, v.rows])), media: manifest.media.length, excluded: manifest.excluded };
+  });
+  app.get('/api/learning/storage', async () => storageUsage(store.db, store.paths));
 
   app.get('/api/learning/progress', async () => learningWorkflow.progressView());
   app.get('/api/learning/settings', async () => ({

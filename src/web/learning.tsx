@@ -715,5 +715,37 @@ export function SettingsScreen() {
         ))}
       </ul>
     </article>
+    <DataPanel />
   </section>;
+}
+
+interface Storage { root: string; total_bytes: number; areas: Record<string, number>; disk: { free_bytes: number; total_bytes: number }; retention: { note: string } }
+const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+
+/** P5-3 (E-28): export your data and see disk usage. Nothing here deletes data (retention policy D-07 is open). */
+function DataPanel() {
+  const [usage, setUsage] = useState<Storage | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(() => { get<Storage>('/api/learning/storage').then(setUsage).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e))); }, []);
+  useEffect(load, [load]);
+  const exportNow = async () => {
+    setError(null); setResult('Đang xuất…');
+    try {
+      const r = await post<{ dir: string; tables: Record<string, number>; media: number }>('/api/learning/export');
+      setResult(`Đã xuất vào ${r.dir} (${Object.values(r.tables).reduce((s, n) => s + n, 0)} dòng, ${r.media} bản thu âm). Giữ thư mục này riêng tư.`);
+      load();
+    } catch (e) { setResult(null); setError(e instanceof Error ? e.message : String(e)); }
+  };
+  return <article className="card">
+    <h3>Dữ liệu của bạn</h3>
+    {error && <p role="alert" className="error">{error}</p>}
+    {usage && <>
+      <p>Đang dùng {mb(usage.total_bytes)} trong <span className="mono">{usage.root}</span> · ổ đĩa còn trống {mb(usage.disk.free_bytes)}</p>
+      <p className="mono">{Object.entries(usage.areas).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${mb(v)}`).join(' · ')}</p>
+      <p className="mono">{usage.retention.note}</p>
+    </>}
+    <div className="actions"><button onClick={() => void exportNow()}>Xuất dữ liệu học tập</button></div>
+    {result && <p>{result}</p>}
+  </article>;
 }

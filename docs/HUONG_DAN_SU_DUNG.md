@@ -12,7 +12,7 @@ Tài liệu này là **sổ tay vận hành** cho người dùng: cài đặt, c
 5. [Builder & QC](#5-builder--qc)
 6. [AI thật: gateway thuê bao](#6-ai-thật-gateway-thuê-bao)
 7. [Worker và hàng đợi AI](#7-worker-và-hàng-đợi-ai)
-8. [Sao lưu và khôi phục](#8-sao-lưu-và-khôi-phục)
+8. [Sao lưu, khôi phục và xuất dữ liệu](#8-sao-lưu-khôi-phục-và-xuất-dữ-liệu)
 9. [Relay AI lập trình và ai-router](#9-relay-ai-lập-trình-và-ai-router)
 10. [Kiểm tra và phát triển](#10-kiểm-tra-và-phát-triển)
 11. [Xử lý sự cố](#11-xử-lý-sự-cố)
@@ -91,7 +91,7 @@ Lưu ý:
 Thanh điều hướng: **Học hôm nay** · **Tiến độ** · **Builder & QC**, và nút **Cài đặt & Mục tiêu** ở góc trên.
 
 ### 4.1. Cài đặt & Mục tiêu
-Nhập Band mục tiêu tổng và từng kỹ năng, loại thi (Academic/General), ngày thi dự kiến, **số phút học mỗi ngày** và **mỗi tuần**. Số phút/ngày là quỹ thời gian mặc định cho mỗi ngày học. Màn này cũng cho xem trạng thái gateway AI.
+Nhập Band mục tiêu tổng và từng kỹ năng, loại thi (Academic/General), ngày thi dự kiến, **số phút học mỗi ngày** và **mỗi tuần**. Số phút/ngày là quỹ thời gian mặc định cho mỗi ngày học. Màn này cũng cho xem trạng thái gateway AI, và khung **Dữ liệu của bạn** (dung lượng, nút xuất dữ liệu; xem [mục 8](#8-sao-lưu-khôi-phục-và-xuất-dữ-liệu)).
 
 ### 4.2. Học hôm nay
 - **Ngày học hôm nay** (theo giờ Việt Nam):
@@ -182,7 +182,7 @@ npm.cmd run worker
 - Danh sách đầy đủ các cờ: [bảng tự động](#cờ-worker).
 - Worker chỉ xử lý một job một lúc; khởi động lại an toàn (job đang chạy dở được thu hồi khi hết lease).
 
-## 8. Sao lưu và khôi phục
+## 8. Sao lưu, khôi phục và xuất dữ liệu
 
 ```powershell
 npm.cmd run backup -- create
@@ -198,6 +198,24 @@ Chỉ khi kiểm tra đạt, **dừng server và worker**, rồi thay `var/` (b�
 npm.cmd run backup -- promote <thư_mục_mới> --confirm
 ```
 Nên sao lưu trước khi cập nhật code có migration mới. Chưa có lịch sao lưu tự động.
+
+### Xuất dữ liệu học tập
+Khác với sao lưu (để khôi phục ứng dụng), **bản xuất** là dữ liệu cá nhân của bạn ở dạng đọc được: mang đi, lưu trữ riêng, hoặc xem bằng công cụ khác.
+
+```powershell
+npm.cmd run export -- create
+```
+- Tạo thư mục `var/exports/learner-export-<thời điểm>/` gồm `data/*.json` (mục tiêu, bài làm và mọi bản nháp/bản nộp, hỗ trợ đã dùng, nhận định, giả thuyết lỗi, khiếu nại, Reading, bản chép lời, lịch, theo dõi ngày, lời nhắc, đồng ý chia sẻ dữ liệu), `media/` (bản thu âm gốc, sao nguyên byte), `manifest.json` (số dòng, SHA-256 từng file, danh sách những gì **cố ý không xuất**) và `DOC_TRUOC.txt`.
+- **Không xuất**: nội dung đề/đáp án/rubric (chỉ có tham chiếu), gợi ý sinh sẵn mà bạn chưa mở, bài dry-run của Builder & QC, tài khoản AI và bằng chứng D-01.
+- `--out <thư_mục>` để xuất ra chỗ khác (ví dụ ổ ngoài). Lệnh từ chối thư mục nằm trong repo nhưng ngoài `var/`, vì dữ liệu cá nhân có thể bị commit nhầm.
+- Đang làm dở mà xuất bị lỗi (ví dụ file audio bị thay đổi trên đĩa) thì không để lại thư mục dở dang.
+- Trên giao diện: **Cài đặt & Mục tiêu → Dữ liệu của bạn → Xuất dữ liệu học tập**.
+
+### Dung lượng
+```powershell
+npm.cmd run export -- usage
+```
+Cho biết `var/` đang dùng bao nhiêu theo từng khu (database, media, backups, exports, …), ổ đĩa còn trống bao nhiêu và các bảng nhiều dòng nhất. Cùng thông tin này hiện ở **Cài đặt & Mục tiêu → Dữ liệu của bạn**. **Hệ thống không tự xóa dữ liệu**: chính sách lưu giữ (D-07) chưa được chốt; tự dọn thì xóa các bản `var/backups/` và `var/exports/` cũ bạn không cần nữa.
 
 ## 9. Relay AI lập trình và ai-router
 
@@ -255,6 +273,7 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 | `MODEL_NOT_VERIFIED` / `MODEL_CANARY_FAILED` | Model chưa được phép hoặc canary hỏng | `ai -- allow-models` hoặc chọn model khác bằng `ai -- model` |
 | `npm run check` báo hướng dẫn cũ | Mã đổi mà hướng dẫn chưa sinh lại | `npm.cmd run docs:guide`, bổ sung mô tả còn thiếu, xem lại phần viết tay |
 | Tìm trong kho không ra kết quả | Vai trò được chọn không có quyền với nội dung đó, gói chưa phát hành/đã loại bỏ, hoặc đã bị thu hồi; từ khóa dưới 2 ký tự bị bỏ | Đổi vai trò, kiểm tra trạng thái gói; *Dựng lại chỉ mục* nếu nghi chỉ mục lỗi |
+| Ổ đĩa sắp đầy | Backup/export cũ, nhiều bản thu âm | `npm.cmd run export -- usage` xem khu nào lớn; xóa bản `var/backups/`, `var/exports/` cũ không cần (hệ thống không tự xóa) |
 | `router:sync -- --check` báo LỆCH | ai-router đã đổi lõi | `npm.cmd run router:sync` rồi `npm.cmd run check` |
 | Theo dõi ngày báo "Thiếu dữ liệu quan sát" dù có học | Học ngoài ứng dụng hoặc trình duyệt chặn lưu tạm | Khai báo *Đã học ngoài ứng dụng* cho ngày đó (trong 14 ngày) |
 
@@ -263,12 +282,12 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 - **Chưa báo Band, chưa kết luận năng lực** (D-02: chưa có chính sách ngưỡng được duyệt).
 - **Nội dung thật và bộ đối chứng** chưa có (D-05); bài học hiện là synthetic. Provider dự phòng chỉ được tự động dùng khi có báo cáo đối chứng D-05.
 - **Chưa có ASR/chấm phát âm** (D-06).
-- Chưa có đề xuất lịch bù tự động, export/retention, lịch sao lưu tự động, kênh Telegram/email.
+- Chưa có chính sách lưu giữ/tự dọn dữ liệu (D-07: chỉ có xuất dữ liệu và báo cáo dung lượng), đề xuất lịch bù tự động, lịch sao lưu tự động, kênh Telegram/email.
 - Danh sách quyết định còn mở: [DECISIONS — Điểm mở](engineering/DECISIONS.md).
 
 ## 13. Cách tài liệu này được giữ đúng
 
-- **Phần tự động** (mục 14) do `scripts/user-guide.mjs` sinh từ: `package.json` (lệnh npm), `src/cli/ai.ts` và `src/cli/backup.ts` (USAGE), `src/worker/main.ts` (cờ), `src/server/app.ts` (route), `migrations/`, `docs/engineering/DECISIONS.md`, bảng công việc trong `PROGRESS.md`.
+- **Phần tự động** (mục 14) do `scripts/user-guide.mjs` sinh từ: `package.json` (lệnh npm), `src/cli/ai.ts`, `src/cli/backup.ts` và `src/cli/export.ts` (USAGE), `src/worker/main.ts` (cờ), `src/server/app.ts` (route), `migrations/`, `docs/engineering/DECISIONS.md`, bảng công việc trong `PROGRESS.md`.
 - `npm.cmd run check` thất bại khi:
   - phần tự động khác với mã hiện tại;
   - có lệnh npm, route hoặc cờ worker mới chưa có mô tả trong `scripts/user-guide.mjs`;
@@ -302,6 +321,7 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 | `npm.cmd run ai` | Quản trị AI thật: trạng thái provider, tài khoản, bằng chứng D-01, đồng ý dữ liệu, model (xem mục lệnh `ai`). |
 | `npm.cmd run worker` | Worker xử lý job AI trong hàng đợi (xem mục cờ worker). |
 | `npm.cmd run backup` | Sao lưu / khôi phục DB + JSON + media (xem mục lệnh `backup`). |
+| `npm.cmd run export` | Xuất dữ liệu học tập cá nhân ra thư mục riêng, hoặc xem dung lượng đang dùng (xem mục lệnh `export`). |
 | `npm.cmd run qc:real` | Chạy QC1–4 thật bằng provider READY trên gói synthetic trong kho tạm `var/qc-real/` (tốn vài prompt thuê bao). |
 | `npm.cmd run seed:reading` | Nạp gói Reading synthetic đã qua QC vào kho để thử luồng Reading. |
 <!-- AUTO:scripts:END -->
@@ -338,6 +358,16 @@ Usage: npm run backup -- <command>
   promote <target_dir> --confirm      replace var/ with a verified restore (stop server and worker first)
 ```
 <!-- AUTO:backup-cli:END -->
+
+### Lệnh `export`
+<!-- AUTO:export-cli:START — tự động, không sửa tay -->
+```text
+Usage: npm run export -- <command>
+  create [--out <parent_dir>]   export your learning data (JSON + your audio + manifest with SHA-256) into var/exports
+                                or <parent_dir>; refuses a folder inside the repository but outside var/
+  usage                         disk space used under var/, free space, largest tables (nothing is deleted)
+```
+<!-- AUTO:export-cli:END -->
 
 ### Cờ worker
 <!-- AUTO:worker-flags:START — tự động, không sửa tay -->
@@ -398,6 +428,8 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `GET /api/learning/tracking` | Theo dõi N ngày gần nhất (`?days=1..31`), kèm `as_of`. |
 | `GET /api/learning/notifications` | Lời nhắc trong ứng dụng (tạo nhắc của hôm nay nếu chưa có). |
 | `POST /api/learning/notifications/:id/dismiss` | Đánh dấu đã xem một lời nhắc. |
+| `POST /api/learning/export` | Xuất dữ liệu học tập vào `var/exports/` (chỉ đọc, không xóa gì). |
+| `GET /api/learning/storage` | Dung lượng dữ liệu trong `var/`, dung lượng trống của ổ, các bảng lớn nhất. |
 | `GET /api/learning/progress` | Tiến độ & hồ sơ năng lực (chưa báo Band, chờ D-02). |
 | `GET /api/learning/settings` | Cài đặt: mục tiêu và trạng thái gateway AI. |
 
@@ -472,6 +504,7 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | E-25 | P5-1 Theo dõi học hằng ngày (Daily Tracker) và nhắc học theo luật (17/11/2026) |
 | E-26 | Hướng dẫn sử dụng tự cập nhật (17/11/2026) |
 | E-27 | P5-2 Tra cứu kho tri thức FTS5/BM25 lọc quyền trong cùng truy vấn (17/11/2026) |
+| E-28 | P5-3 Xuất dữ liệu học tập và báo cáo dung lượng (17/11/2026) |
 <!-- AUTO:decisions:END -->
 
 ### Trạng thái công việc
