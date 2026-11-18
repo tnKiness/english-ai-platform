@@ -22,7 +22,20 @@ export interface VerificationResult {
   schema_version: '1'; job_id: string; context_manifest_id: string; verdict: 'consistent' | 'conflict' | 'ambiguous';
   competing_answers: { question_id: string; answer: string; rationale: string }[]; findings: string[]; synthetic: boolean;
 }
-export type AiResult = Assessment | BlindSolveResult | VerificationResult;
+/** P5-5 (E-35) learning.v1 writing_assessment_result: the AI proposes; the application decides what is recorded or shown. */
+export interface WritingAssessment {
+  schema_version: '1'; job_id: string; context_manifest_id: string; synthetic: boolean;
+  processing: 'processed' | 'missing_data' | 'technical_error';
+  competencies: { competency_id: string; outcome: 'met' | 'not_met' | 'inconclusive'; measurement_quality: 'sufficient' | 'insufficient' | 'unknown'; opportunity: 'observed' | 'absent' | 'unknown'; evidence_refs: string[]; rationale: string }[];
+  diagnosis: {
+    priority_issues: { competency_id: string; location: string; symptom: string; hypothesis: string; expected_verification: string; impact: number; certainty: number }[];
+    other_issues: string[];
+    hints: { level_1: string; level_2: string; level_3_explanation: string; model_rewrite: string; concept_check_question: string; concept_check_expected: string } | null;
+  };
+  limitations: string[];
+}
+export const isWritingAssessment = (r: unknown): r is WritingAssessment => typeof r === 'object' && r !== null && Array.isArray((r as { competencies?: unknown }).competencies);
+export type AiResult = Assessment | WritingAssessment | BlindSolveResult | VerificationResult;
 /** reset_at (E-24): thời điểm hãng báo mở lại hạn mức/giới hạn tốc độ, nếu đọc được từ lỗi của CLI. */
 export type AdapterResult = { ok: true; result: AiResult } | { ok: false; error: ProviderError; reset_at?: string | null };
 export interface ProviderAdapter {

@@ -22,6 +22,7 @@ Lệnh vận hành P2:
 ```powershell
 npm.cmd run worker                 # thoát mã 3 nếu gateway chặn mọi provider
 npm.cmd run worker -- --fake       # chỉ job dry-run bằng FakeAdapter (synthetic)
+npm.cmd run worker -- --learning   # chấm Writing của bạn bằng AI thật (app chạy với STUDY_ENGLISH_LEARNING_AI=real)
 npm.cmd run ai -- status           # lý do từng provider bị chặn; không gọi model
 npm.cmd run backup -- create       # restore <backup> <thư mục mới> ; promote <thư mục> --confirm
 ```

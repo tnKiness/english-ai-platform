@@ -42,6 +42,7 @@ const WORKER_FLAGS = {
   '--fake': 'Khi không có provider READY: chạy job dry-run bằng FakeAdapter (kết quả synthetic, không thành bằng chứng học).',
   '--fake-blind-answers': 'Kèm `--fake`: đáp án giải mù giả lập, ví dụ `"q1=FALSE,q2=NOT GIVEN"`.',
   '--complaints': 'Chỉ xử lý job khiếu nại/tái đánh giá của người học qua gateway.',
+  '--learning': 'Chấm bài Writing của người học bằng AI thật qua gateway (bài nộp khi app chạy với `STUDY_ENGLISH_LEARNING_AI=real`). Không dùng được với `--fake`.',
   '--poll-ms': 'Khoảng nghỉ khi hàng đợi trống (mặc định 2000 ms).',
   '--quota-recheck-ms': 'Chu kỳ kiểm lại job `WAITING_QUOTA` (mặc định 300000 ms = 5 phút); không gọi model.',
 };

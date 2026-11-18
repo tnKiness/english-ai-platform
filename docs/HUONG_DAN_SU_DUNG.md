@@ -203,6 +203,18 @@ npm.cmd run worker
 - Mọi provider **chỉ đang hết hạn mức**: worker không thoát mà **chờ**, kiểm lại mỗi 5 phút (đổi bằng `--quota-recheck-ms`, không gọi model) và tự bắt đầu khi có provider mở lại. `Ctrl+C` để dừng.
 - Không có provider nào `READY` vì lý do khác (thiếu bằng chứng D-01, hết hạn xác nhận extra usage, cần đăng nhập…): worker in lý do và thoát (mã 3). Dùng `--fake` để thử với dữ liệu synthetic (chỉ job dry-run).
 - `--complaints`: xử lý job khiếu nại/tái đánh giá.
+- `--learning`: **chấm bài Writing của bạn bằng AI thật** (P5-5). Cần chạy app với biến môi trường `STUDY_ENGLISH_LEARNING_AI=real`, mở thêm một terminal cho worker:
+  ```powershell
+  $env:STUDY_ENGLISH_LEARNING_AI = 'real'; npm.cmd run app
+  ```
+  ```powershell
+  npm.cmd run worker -- --learning
+  ```
+  - Bài nộp vào hàng đợi; Workspace hiện *Đang chờ worker chấm* / *AI đang chấm…* và tự tải lại mỗi 3 giây.
+  - Mỗi lần nộp (bài gốc hoặc bản sửa) tốn **một lượt gọi model** trên gói thuê bao của provider đã xác minh (Codex). Không có provider sẵn sàng thì worker không chạy; hết hạn mức thì bài chờ tới khi mở lại.
+  - AI chỉ nhận đề bài, tiêu chí của từng kỹ năng, chế độ làm bài và bài viết của bạn; không nhận lịch sử học, gợi ý cũ hay kho đáp án. AI chỉ **đề xuất**: kết quả từng tiêu chí, tối đa 3 lỗi trọng tâm (kèm điểm ảnh hưởng/độ chắc chắn 0–3) và 3 nấc gợi ý. Ứng dụng tự quyết mức hỗ trợ, giới hạn trọng tâm, trạng thái giả thuyết; gợi ý nấc 1–2 nào lộ câu mẫu nấc 3 bị **loại bỏ toàn bộ** (lượt đó không có gợi ý).
+  - Không đặt biến (mặc định): vẫn chấm synthetic ngay trong app như trước, không tốn hạn mức.
+  - Đề bài hiện vẫn là gói synthetic, nên theo quy tắc G0 kết quả **không** vào mức năng lực cho tới khi có nội dung thật (D-05); bạn vẫn nhận chẩn đoán và gợi ý thật.
 - Danh sách đầy đủ các cờ: [bảng tự động](#cờ-worker).
 - Worker chỉ xử lý một job một lúc; khởi động lại an toàn (job đang chạy dở được thu hồi khi hết lease).
 
@@ -322,8 +334,8 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 
 ## 12. Giới hạn hiện tại
 
-- **Chưa báo Band** (D-05). Mức năng lực theo D-02 v1 là tham số **đã duyệt nhưng chưa kiểm định thực nghiệm**; nên xem lại sau 4–6 tuần dùng thật. Chưa có adapter nào trả 2 chiều điểm AI (ảnh hưởng, độ chắc chắn) nên cả hai đang lấy mặc định 1; chưa có dữ liệu "điều kiện ủng hộ riêng một giả thuyết" nên sổ lỗi chỉ xác nhận được qua nhiệm vụ phân biệt nguyên nhân (chưa có). Bài kiểm chứng 7B/Bước 9 tự xếp đang dùng bài synthetic (chờ nội dung thật D-05).
-- **Nội dung thật và bộ đối chứng** chưa có (D-05); bài học hiện là synthetic. Provider dự phòng chỉ được tự động dùng khi có báo cáo đối chứng D-05.
+- **Chưa báo Band** (D-05). Mức năng lực theo D-02 v1 là tham số **đã duyệt nhưng chưa kiểm định thực nghiệm**; nên xem lại sau 4–6 tuần dùng thật. Hai chiều điểm AI (ảnh hưởng, độ chắc chắn) chỉ có khi chấm bằng AI thật (`--learning`); chế độ synthetic lấy mặc định 1; chưa có dữ liệu "điều kiện ủng hộ riêng một giả thuyết" nên sổ lỗi chỉ xác nhận được qua nhiệm vụ phân biệt nguyên nhân (chưa có). Bài kiểm chứng 7B/Bước 9 tự xếp đang dùng bài synthetic (chờ nội dung thật D-05).
+- **Nội dung thật và bộ đối chứng** chưa có (D-05); bài học hiện là synthetic. Chấm bằng AI thật (P5-5) mới là lựa chọn bật tay, chưa được đối chứng chất lượng (D-05) và chỉ chạy qua Codex. Provider dự phòng chỉ được tự động dùng khi có báo cáo đối chứng D-05.
 - **Chưa có ASR/chấm phát âm** (D-06).
 - Chỉ backup cũ được tự dọn (E-30); dữ liệu học, audio, bản xuất không bao giờ tự xóa. Sao lưu tự động chỉ chạy khi ứng dụng đang mở (không có dịch vụ nền của Windows). Chưa có kênh nhắc qua Telegram/email.
 - Danh sách quyết định còn mở: [DECISIONS — Điểm mở](engineering/DECISIONS.md).
@@ -424,6 +436,7 @@ Usage: npm run export -- <command>
 | `--fake` | Khi không có provider READY: chạy job dry-run bằng FakeAdapter (kết quả synthetic, không thành bằng chứng học). |
 | `--once` | Xử lý đúng một job rồi thoát, in kết quả JSON. |
 | `--quota-recheck-ms` | Chu kỳ kiểm lại job `WAITING_QUOTA` (mặc định 300000 ms = 5 phút); không gọi model. |
+| `--learning` | Chấm bài Writing của người học bằng AI thật qua gateway (bài nộp khi app chạy với `STUDY_ENGLISH_LEARNING_AI=real`). Không dùng được với `--fake`. |
 | `--fake-blind-answers` | Kèm `--fake`: đáp án giải mù giả lập, ví dụ `"q1=FALSE,q2=NOT GIVEN"`. |
 | `--complaints` | Chỉ xử lý job khiếu nại/tái đánh giá của người học qua gateway. |
 | `--poll-ms` | Khoảng nghỉ khi hàng đợi trống (mặc định 2000 ms). |
@@ -563,6 +576,7 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | E-32 | Sao lưu tự động mỗi ngày + diễn tập khôi phục mỗi tuần (18/11/2026, người dùng chốt "Bật cả hai") |
 | E-33 | Chốt chính sách D-02 v1 (18/11/2026, người dùng chốt) |
 | E-34 | Triển khai chính sách D-02 v1 (18/11/2026, người dùng yêu cầu "Triển khai D-02") |
+| E-35 | P5-5: chấm Writing bằng AI thật qua worker (18/11/2026, áp dụng kỹ thuật, đảo ngược được) |
 <!-- AUTO:decisions:END -->
 
 ### Trạng thái công việc

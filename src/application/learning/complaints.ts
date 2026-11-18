@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Store } from '../../infrastructure/sqlite/store.js';
-import type { AiResult } from '../ai/provider-adapter.js';
+import { isWritingAssessment, type AiResult } from '../ai/provider-adapter.js';
 import type { ClaimedRun, ObservationDraft } from '../ports.js';
 
 /** Learner disputes never change an outcome themselves. Reassessment is a new, fenced job. */
@@ -47,8 +47,13 @@ export class ComplaintService {
     const old = this.store.db.prepare(`SELECT o.* FROM learner_complaints c JOIN observations o ON o.observation_id = c.target_observation_id
       WHERE c.reeval_job_id = ? AND c.state = 'RE_EVALUATING'`).get(claim.job_id) as
       { observation_id: string; observation_key: string; competency_id: string; measurement_quality: ObservationDraft['measurement_quality']; opportunity: ObservationDraft['opportunity']; support_impact: ObservationDraft['support_impact'] } | undefined;
-    if (!old || !('outcome' in result)) throw new Error('INVALID_REASSESSMENT_RESULT');
+    if (!old) throw new Error('INVALID_REASSESSMENT_RESULT');
+    // P5-5: a learning.v1 result carries one judgement per competency; only the disputed competency is used.
+    const judged = isWritingAssessment(result)
+      ? (() => { const c = result.competencies.find((x) => x.competency_id === old.competency_id); return c ? { processing: result.processing, outcome: c.outcome } : null; })()
+      : 'outcome' in result ? { processing: result.processing, outcome: result.outcome } : null;
+    if (!judged) throw new Error('INVALID_REASSESSMENT_RESULT');
     return [{ observation_key: old.observation_key, competency_id: old.competency_id, supersedes_id: old.observation_id,
-      processing: result.processing, outcome: result.outcome, measurement_quality: old.measurement_quality, opportunity: old.opportunity, support_impact: old.support_impact }];
+      processing: judged.processing, outcome: judged.outcome, measurement_quality: old.measurement_quality, opportunity: old.opportunity, support_impact: old.support_impact }];
   }
 }

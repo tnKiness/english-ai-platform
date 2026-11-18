@@ -609,3 +609,35 @@ P0–P3 đã hoàn tất phần code và nghiệm thu trên gói synthetic (D-01
   - E1: chưa có dữ liệu "ủng hộ riêng giả thuyết" hay nhiệm vụ phân biệt nguyên nhân.
   - Bài 7B/9 tự xếp là synthetic (D-05).
   - Tham số chưa kiểm định thực nghiệm.
+
+### 18/11/2026 — P5-5 / E-35 Chấm Writing bằng AI thật qua worker (tùy chọn) / DONE phần code + test; chưa chạy Codex thật
+- **Nguồn:** người dùng yêu cầu "tiếp tục triển khai". Lỗ hổng tìm thấy: vòng Writing luôn chấm bằng FakeAdapter, và job chấm của người học không worker nào xử lý (`interpret: () => []`, worker chỉ nhận dry-run hoặc khiếu nại).
+- **File mới:**
+  - `contracts/learning.v1.schema.json`
+  - `src/application/learning/writing-assessment.ts`: ngữ cảnh người chấm; diễn giải nhận định; chẩn đoán + kiểm tra tiết lộ
+  - `tests/integration/p55-real-ai.test.ts` (7 ca)
+- **File sửa:**
+  - `provider-adapter.ts`: `WritingAssessment`, `isWritingAssessment`
+  - `validate.ts`, `result-contracts.ts`, `task-instructions.ts`: lệnh chấm Writing mới, schema đã gộp `$ref`
+  - `submit-for-assessment.ts`: tham số `context`
+  - `ports.ts`, `job-queue.ts`: `excludeComplaints`
+  - `writing-workflow.ts`:
+    - `aiMode`, `interpretWriting`/`interpretJob`, `finalizeAssessment`/`finalizeReal`/`advanceLoop`, `WRITING_COMPETENCIES`
+    - Workspace tự ghi chẩn đoán khi đọc lại và trả `assessment`
+    - D1 lấy điểm AI; nhãn synthetic theo provider thật
+    - Không chép câu bị cấm vào thông báo
+  - `complaints.ts`: nhận kết quả learning.v1
+  - `src/worker/main.ts`: `--learning`
+  - `src/server/main.ts`, `app.ts`: `learning_ai_mode`
+  - `src/web/learning.tsx`: trạng thái chấm, tự tải lại 3 giây, điểm AI, nhãn AI thật
+  - `scripts/user-guide.mjs`: cờ `--learning`
+  - Hướng dẫn sử dụng mục 7, 12; `README.md`, `docs/README.vi.md`; DECISIONS E-35
+- **Lệnh và kết quả:**
+  - `npx.cmd vitest run tests/integration/p55-real-ai.test.ts`: 7/7. Lần chạy đầu bắt được rò rỉ câu mẫu qua thông báo lỗi kiểm tra tiết lộ; đã sửa.
+  - `npm.cmd run docs:guide`, rồi `npm.cmd run check`: lint, guide check, typecheck, 323/323 test (42 file), build đều đạt.
+- **Chưa làm / giới hạn:**
+  - Chưa gọi Codex thật. Adapter trong test chỉ là bản giả `synthetic: false`, không chứng minh CLI trả đúng schema mới.
+  - Lần chạy thật đầu tiên nên dùng `npm.cmd run worker -- --learning --once` và xem kết quả.
+  - Chất lượng chấm chưa được đối chứng (D-05).
+  - Đề vẫn là synthetic, nên G0 loại kết quả khỏi mức năng lực.
+- **Tiếp theo:** người dùng thử chấm thật một bài (tốn 1 lượt Codex), rồi rà lại chất lượng chẩn đoán và gợi ý.

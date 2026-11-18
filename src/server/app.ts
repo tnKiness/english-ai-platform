@@ -286,6 +286,7 @@ export function createApp(deps: AppDeps = {}) {
   app.get('/api/learning/settings', async () => ({
     goal: learningWorkflow.getGoal(),
     gateway: await gatewayStatus(),
+    learning_ai_mode: learningWorkflow.aiMode,
     privacy_and_rights_note: 'Mọi dữ liệu học tập được lưu cục bộ trong SQLite + kho JSON bất biến. AI thật chỉ chạy qua Gateway khi provider bên dưới Sẵn sàng (đủ bằng chứng D-01 và đã đồng ý loại dữ liệu); không bao giờ gửi âm thanh.',
   }));
   return app;

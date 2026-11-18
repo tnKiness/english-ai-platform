@@ -84,7 +84,7 @@ Ngày lập: 19/10/2026. Các quy định engineering là bổ sung triển khai
 | ID | Nội dung | Chặn ở đâu | Bằng chứng cần để đóng |
 |---|---|---|---|
 | D-01 | ĐÃ ĐÓNG cho Codex (READY, xem mục D-01 / Codex bên trên và [D01_CODEX_READ_BOUNDARY](D01_CODEX_READ_BOUNDARY.md)). Với `claude-code` và `agy`: đã có adapter + guard + bộ thu `probe-boundary claude\|agy` và `verify claude\|agy` theo E-21 ([D01_CLAUDE_AGY](D01_CLAUDE_AGY.md), `tests/integration/e21-claude-agy.test.ts`); chờ người dùng đăng nhập profile riêng và chạy probe/verify thật | Bật adapter dự phòng thật (`claude-code`, `agy`) ở P4 | Phiên bản + argv/launch path + auth mode không chứa secret + quyền lợi + tình trạng extra usage + báo cáo probe ranh giới PASS (`cli_tools_disabled` cho claude-code, `cli_permission_deny` cho agy) + timeout/cancel + output contract |
-| D-02 | Ngưỡng tin cậy, nâng/hạ trạng thái, lịch ôn và trọng số chưa định lượng. **Đã chốt v1 18/11/2026**: [D02_PROPOSAL](D02_PROPOSAL.md) (A–F người dùng đồng ý + góp ý được đánh giá, đưa vào theo yêu cầu). **Đã triển khai (E-34)**: `policies/competency-policy.v1.json` + Rule Engine A–F, test từng dòng. Còn mở: kiểm định thực nghiệm tham số (xem lại sau 4–6 tuần dùng thật); chiều điểm AI (D1) và dữ liệu "điều kiện ủng hộ riêng giả thuyết" (E1) chưa có adapter cung cấp | Bật chính sách tự động tương ứng | Bảng policy có nguồn, phiên bản, ca đạt/chưa đạt/chưa kết luận; tham số đề xuất cần đánh giá trước khi gọi là chuẩn |
+| D-02 | Ngưỡng tin cậy, nâng/hạ trạng thái, lịch ôn và trọng số chưa định lượng. **Đã chốt v1 18/11/2026**: [D02_PROPOSAL](D02_PROPOSAL.md) (A–F người dùng đồng ý + góp ý được đánh giá, đưa vào theo yêu cầu). **Đã triển khai (E-34)**: `policies/competency-policy.v1.json` + Rule Engine A–F, test từng dòng. Chiều điểm AI (D1) có khi chấm thật (E-35). Còn mở: kiểm định thực nghiệm tham số (xem lại sau 4–6 tuần dùng thật); dữ liệu "điều kiện ủng hộ riêng giả thuyết" (E1) | Bật chính sách tự động tương ứng | Bảng policy có nguồn, phiên bản, ca đạt/chưa đạt/chưa kết luận; tham số đề xuất cần đánh giá trước khi gọi là chuẩn |
 | D-03 | ĐÃ ĐÓNG phần kỹ thuật: schema/state P0, persistence P1, 6 đầu ra tri thức v1 (P2-1, KNOWLEDGE_OUTPUTS). Nội dung gói thật vẫn thuộc D-05 | — | — |
 | D-04 | ĐÃ ĐẠT spike Windows runner/SQLite, backup phối hợp (P1-4), kiểm entrypoint native + sha256 và từ chối shim (P2-3); chưa xác minh với CLI thật và quyền file thực | Tích hợp thật P2 | Xử lý shim .cmd/.ps1 bằng entrypoint đã xác minh, quyền file thực |
 | D-05 | Chưa có gói nội dung, quyền sử dụng và đối chứng | Phát hành gói học / báo Band | Nguồn được phép dùng, QC1–4 đúng hash, coverage manifest, bộ đối chứng riêng; thiếu phần nào chặn phần đó |
@@ -224,3 +224,27 @@ ID / ngày / trạng thái (đề xuất, áp dụng kỹ thuật, người dùn
   - Bài 7B/9 tự xếp đang dùng bài synthetic (chờ D-05).
   - Kết luận được tính lại mỗi lần đọc. Lịch sử chỉ thêm dòng khi bằng chứng hoặc chính sách thay đổi.
 - **Đảo ngược được** bằng cách bỏ file chính sách (ứng dụng quay về "chưa đủ kết luận"), hoặc ra phiên bản v2 với file mới.
+
+## E-35 — P5-5: chấm Writing bằng AI thật qua worker (18/11/2026, áp dụng kỹ thuật, đảo ngược được)
+- **Phạm vi.** Đây là tùy chọn bật tay. Không đặt `STUDY_ENGLISH_LEARNING_AI=real` thì vòng Writing vẫn chấm synthetic ngay trong app (FakeAdapter, không tốn hạn mức). Khi đặt `real`:
+  - Bài nộp được xếp hàng đợi với phạm vi `learner`.
+  - `npm run worker -- --learning` xử lý bài qua gateway và provider đã đạt D-01. Worker bỏ qua job khiếu nại; `--fake` không dùng được cho chế độ này.
+- **Hợp đồng `contracts/learning.v1.schema.json`** (`writing_assessment_result`) gồm:
+  - Kết quả theo từng kỹ năng: outcome, chất lượng đo, cơ hội, căn cứ.
+  - Chẩn đoán tối đa 3 lỗi trọng tâm, mỗi lỗi có điểm ảnh hưởng và độ chắc chắn 0–3.
+  - Lỗi khác và gợi ý theo nấc: nấc 1, nấc 2, giải thích nấc 3, câu mẫu, câu hỏi kiểm tra hiểu.
+  - Không có điểm Band.
+
+  Lệnh gửi cho CLI kèm schema đã gộp `$ref`. Validator vẫn chấp nhận kết quả P0 cũ, dùng cho FakeAdapter và dữ liệu cũ.
+- **Ngữ cảnh người chấm.** Gồm đề, tiêu chí của các kỹ năng mà bài đo, chế độ/vai trò/có phải bản sửa, và bài làm. Không gồm lịch sử, gợi ý hay kho đáp án.
+- **Ứng dụng tự quyết:**
+  - Chỉ ghi kỹ năng mà bài được hỏi, mỗi kỹ năng một lần; kỹ năng AI không trả về thì không tự tạo.
+  - Mức hỗ trợ lấy từ gợi ý đã hiển thị, chế độ hướng dẫn và bản sửa.
+  - Áp giới hạn trọng tâm D5 và kẹp điểm về 0–3.
+  - Trạng thái giả thuyết theo mục E. Mỗi kỹ năng có lỗi trọng tâm chưa đạt thì thêm một giả thuyết `initial`, synthetic = 0.
+  - Kiểm tra tiết lộ: nếu nấc 1 hoặc 2 chứa câu mẫu thì **bỏ toàn bộ gói gợi ý**. Lý do chỉ ghi mã lỗi, không chép câu bị cấm (lỗi rò rỉ này phát hiện khi viết test và đã sửa, kể cả trong hai thông báo lỗi cũ).
+- **Ghi chẩn đoán.** `finalizeAssessment` là bước chung cho cả hai chế độ. Nó chạy khi Workspace đọc lại, bỏ qua nếu job chưa COMPLETED và không ghi trùng.
+- **Điểm ưu tiên.** D1 lấy điểm ảnh hưởng và độ chắc chắn từ chẩn đoán thật gần nhất của kỹ năng.
+- **Khiếu nại.** Kết quả khiếu nại dạng learning.v1 chỉ thay nhận định của đúng kỹ năng bị khiếu nại.
+- **G0 giữ nguyên.** Đề hiện là gói synthetic, nên kết quả thật vẫn bị loại khỏi mức năng lực cho tới khi có nội dung thật (D-05).
+- **Test.** `tests/integration/p55-real-ai.test.ts` (7 ca) dùng adapter giả trả `synthetic: false`, nên không chứng minh CLI thật chạy được. Chưa gọi Codex thật trong lượt này.

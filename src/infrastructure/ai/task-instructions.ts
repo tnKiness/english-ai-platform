@@ -6,8 +6,18 @@ import type { TaskType } from '../../application/ai/provider-adapter.js';
 import { DATA_POLICY } from '../../application/context/scoped-reader.js';
 
 const require = createRequire(import.meta.url);
-const core = require('../../../contracts/core.v1.schema.json') as { $defs: Record<string, unknown> };
 const knowledge = require('../../../contracts/knowledge.v1.schema.json') as { $defs: Record<string, unknown> };
+const learning = require('../../../contracts/learning.v1.schema.json') as { $defs: Record<string, unknown> };
+// The writing result schema refers to shared $defs; inline them so the schema sent to the CLI is self-contained.
+const learningResult = JSON.parse(JSON.stringify(learning.$defs.writing_assessment_result).replace(/\{"\$ref":"#\/\$defs\/(\w+)"\}/g, (_m, name: string) => JSON.stringify(learning.$defs[name]))) as unknown;
+const WRITING_RULES = [
+  'Return one entry in "competencies" for every competency listed in DATA.context.competencies, using exactly its competency_id; judge each against its own criterion.',
+  'Use "inconclusive" when the evidence is incomplete or insufficient; never guess a stronger conclusion. Use opportunity "absent" when the task gave no real chance to show the competency.',
+  'Do not estimate a band score.',
+  'Diagnosis: at most 3 "priority_issues", most important first; each names the competency_id, where it occurs, the symptom, a hypothesis about the cause (a hypothesis, not a verdict), how it should be verified, impact on the quality of this piece (0-3) and how certain the diagnosis is (0-3). Other issues go to "other_issues" briefly.',
+  'Hints (null if every competency is met): level_1 points to the location and asks a guiding question; level_2 reminds the relevant rule or knowledge. Neither level_1 nor level_2 may contain the corrected sentence or any part of "model_rewrite". level_3_explanation explains directly; "model_rewrite" is one corrected example sentence; add one concept-check question and the short key idea of its expected answer.',
+  'Write diagnosis and hints in Vietnamese; keep quoted English text from the submission as is.',
+];
 
 const TASKS: Record<TaskType, { role: string; schema: unknown; rules: string[] }> = {
   'reading.blind_solve': {
@@ -24,16 +34,14 @@ const TASKS: Record<TaskType, { role: string; schema: unknown; rules: string[] }
       'Put each defensible alternative in "competing_answers" with a short rationale; put other observations in "findings".'],
   },
   'writing.assess': {
-    role: 'You are an assessor judging whether the submission in DATA meets the rubric criterion in DATA.',
-    schema: core.$defs.result,
-    rules: ['Use "inconclusive" when the evidence is incomplete or insufficient; never guess a stronger conclusion.',
-      'Do not estimate a band score.'],
+    role: 'You are an IELTS Writing assessor and tutor. Judge the learner submission in DATA against each competency criterion in DATA, for the task in DATA.context.task.',
+    schema: learningResult,
+    rules: WRITING_RULES,
   },
   'repair.assess': {
-    role: 'You are an assessor judging whether the revised submission in DATA meets the rubric criterion in DATA.',
-    schema: core.$defs.result,
-    rules: ['Use "inconclusive" when the evidence is incomplete or insufficient; never guess a stronger conclusion.',
-      'Do not estimate a band score.'],
+    role: 'You are an IELTS Writing assessor and tutor. DATA holds a revised submission (a self-repair). Judge the revised text against each competency criterion in DATA, for the task in DATA.context.task.',
+    schema: learningResult,
+    rules: WRITING_RULES,
   },
 };
 

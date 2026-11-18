@@ -3,7 +3,7 @@
 // gắn nhãn synthetic: true và không bao giờ nâng trạng thái năng lực thật hay suy ra Band (D-02).
 import { createHash, randomUUID } from 'node:crypto';
 import { CLI_PROVIDERS } from '../ai/subscription-guard.js';
-import type { AiResult, Assessment } from '../ai/provider-adapter.js';
+import { isWritingAssessment, type AiResult, type Assessment } from '../ai/provider-adapter.js';
 import { DATA_POLICY } from '../context/scoped-reader.js';
 import { classifyEvidence } from '../../domain/evidence/attribution.js';
 import { concludeCompetency, summarizeEvidence, type ClassifiedObservation, type Conclusion } from '../../domain/evidence/inference.js';
@@ -26,6 +26,7 @@ import type { Store } from '../../infrastructure/sqlite/store.js';
 import { processNextJob } from '../../worker/worker.js';
 import type { ObservationDraft } from '../ports.js';
 import { submitForAssessment } from './submit-for-assessment.js';
+import { assessorContext, diagnosisFromResult, observationsFromLegacy, observationsFromResult, type CompetencyDef } from './writing-assessment.js';
 
 export const SYNTHETIC_COMPETENCY_ID = 'syn.writing.tr.clear_position';
 export const SYNTHETIC_SECONDARY_COMPETENCY_ID = 'syn.writing.cc.paragraph_cohesion';
@@ -64,6 +65,9 @@ export interface PriorityIssue {
   hypothesis: string;
   hypothesis_status: 'initial' | 'insufficient_evidence' | 'confirmed' | 'rejected';
   expected_verification: string;
+  /** D1 dimensions proposed by a real AI assessor (0–3), clamped by the app; absent for synthetic diagnoses. */
+  impact?: number;
+  certainty?: number;
 }
 
 export interface DiagnosisView {
@@ -130,7 +134,22 @@ export interface AttemptWorkspaceView {
     synthetic: boolean;
   } | null;
   diagnosis: DiagnosisView | null;
+  /** P5-5: state of the assessment job of the latest submission while it has no diagnosis yet (real AI mode). */
+  assessment: { submission_id: string; job_state: string; error: string | null; mode: 'synthetic' | 'real' } | null;
 }
+
+/** Competencies of the synthetic Writing pack with the criterion text sent to the assessor (P5-5). */
+export const WRITING_COMPETENCIES: readonly (CompetencyDef & { skill: 'writing' | 'speaking_text'; description: string })[] = [
+  { competency_id: SYNTHETIC_COMPETENCY_ID, title: 'Writing Task 2 — Duy trì lập trường nhất quán (Task Response)', skill: 'writing',
+    description: 'Trả lời đầy đủ các phần của đề bài và giữ lập trường rõ ràng, nhất quán xuyên suốt các đoạn văn.',
+    criterion: 'Task Response: addresses all parts of the task and keeps a clear, consistent position from introduction to conclusion.' },
+  { competency_id: SYNTHETIC_SECONDARY_COMPETENCY_ID, title: 'Writing Task 2 — Tổ chức đoạn văn & liên kết (Coherence & Cohesion)', skill: 'writing',
+    description: 'Sắp xếp luận điểm mạch lạc, mỗi đoạn một ý trọng tâm rõ ràng và dùng phương tiện liên kết tự nhiên.',
+    criterion: 'Coherence and Cohesion: logical paragraphing with one clear central idea per paragraph and natural linking.' },
+  { competency_id: SYNTHETIC_SPEAKING_TEXT_COMPETENCY_ID, title: 'Speaking (dạng văn bản theo E-11) — Phát triển ý & từ vựng', skill: 'speaking_text',
+    description: 'Lên ý tưởng, dàn ý và lựa chọn từ vựng dạng văn bản; chưa chấm phát âm hay âm thanh trực tiếp (D-06).',
+    criterion: 'Idea development and vocabulary for a spoken answer written as text; no pronunciation judgement.' },
+];
 
 const DEFAULT_PREGENERATED_HINTS: PreGeneratedHints = {
   level_1: 'Nấc 1 (Chỉ vị trí & câu hỏi định hướng): Hãy xem lại câu cuối mở bài và câu chủ đề đoạn 2. Lập luận của bạn đang nghiêng về bên nào, hay đang tự mâu thuẫn giữa hai đoạn?',
@@ -239,8 +258,14 @@ const SYNTHETIC_ITEMS: readonly SyntheticItemMeta[] = [
 export class LearningWorkflowService {
   /** D-02 v1 (E-33). null = no approved policy file → every conclusion stays "chưa đủ kết luận". */
   readonly policy: LoadedPolicy | null;
-  constructor(private store: Store, policy?: LoadedPolicy | null) {
+  /**
+   * P5-5 (E-35). 'synthetic' (default): FakeAdapter runs inline on synthetic content. 'real': the job waits for the
+   * learning worker (`npm run worker -- --learning`), which goes through the gateway and a D-01 verified provider.
+   */
+  readonly aiMode: 'synthetic' | 'real';
+  constructor(private store: Store, policy?: LoadedPolicy | null, options: { aiMode?: 'synthetic' | 'real' } = {}) {
     this.policy = policy === undefined ? loadCompetencyPolicy() : policy;
+    this.aiMode = options.aiMode ?? (process.env.STUDY_ENGLISH_LEARNING_AI === 'real' ? 'real' : 'synthetic');
   }
 
   /** Khởi tạo gói học Writing synthetic đã kích hoạt để phục vụ luồng P3 độc lập (idempotent). */
@@ -476,7 +501,7 @@ export class LearningWorkflowService {
         const at = this.store.now().toISOString();
         const step = input.purpose === '7A' || input.purpose === '7B' ? 7 : input.purpose === '9' ? 9 : 3;
         this.store.db.prepare(`INSERT INTO writing_loop_states (attempt_id, origin_attempt_id, competency_id, step, unlocked_hint_level, synthetic, updated_at)
-          VALUES (?, NULL, ?, ?, 0, 1, ?)`).run(created.attempt_id, competencyId, step, at);
+          VALUES (?, NULL, ?, ?, 0, ?, ?)`).run(created.attempt_id, competencyId, step, this.aiMode === 'real' ? 0 : 1, at);
       }
 
       if (input.task_id) {
@@ -572,61 +597,96 @@ export class LearningWorkflowService {
       eligible_providers: [...CLI_PROVIDERS],
       timeout_seconds: 60,
       policy_version: 'context-policy-1',
+      context: this.assessorContextFor(attempt.item.id, attempt.mode, attempt.purpose, isRepair),
     });
 
-    // Nếu trước đó có mở gợi mở mà chưa có post_snapshot_id thì gắn snapshot của bản sửa này.
-    const adapter = input.adapter ?? new FakeAdapter('success');
-    const opportunity: Opportunity = input.opportunity_override
-      ?? (input.content.includes('[SYNTHETIC_NO_OPPORTUNITY]') ? 'absent' : 'observed');
+    // Real AI mode: the job waits in the queue for the learning worker; the workspace finalises it when it completes.
+    if (this.aiMode === 'real' && !input.adapter) return this.getWorkspaceView(input.attempt_id);
 
     await processNextJob({
       queue: this.store.queue,
-      adapter,
+      adapter: input.adapter ?? new FakeAdapter('success'),
       loadContext: (id) => this.store.learning.loadManifestPayload(id),
-      interpret: (result: AiResult): ObservationDraft[] => {
-        const assess = result as Assessment;
-        const loop = this.store.db.prepare('SELECT unlocked_hint_level FROM writing_loop_states WHERE attempt_id = ?').get(input.attempt_id) as { unlocked_hint_level: number } | undefined;
-        const usedHints = (loop?.unlocked_hint_level ?? 0) > 0;
-        const supportImpact = isRepair || usedHints || attempt.mode === 'guided' ? 'affected' : 'no_related_effect_detected';
-        return [
-          {
-            observation_key: `${submission.submission_id}:${SYNTHETIC_COMPETENCY_ID}`,
-            competency_id: SYNTHETIC_COMPETENCY_ID,
-            processing: assess.processing,
-            outcome: assess.outcome,
-            measurement_quality: 'sufficient',
-            opportunity,
-            support_impact: supportImpact,
-          },
-          {
-            observation_key: `${submission.submission_id}:${SYNTHETIC_SECONDARY_COMPETENCY_ID}`,
-            competency_id: SYNTHETIC_SECONDARY_COMPETENCY_ID,
-            processing: assess.processing,
-            outcome: input.content.includes('[SYNTHETIC_CC_REGRESSION]') ? 'not_met' : assess.outcome === 'not_met' ? 'met' : assess.outcome,
-            measurement_quality: 'sufficient',
-            opportunity: 'observed',
-            support_impact: supportImpact,
-          },
-        ];
-      },
+      interpret: (result: AiResult): ObservationDraft[] => this.interpretWriting(result, submission.submission_id, input.opportunity_override),
       owner: 'p3-synthetic-worker',
       leaseMs: 60_000,
       heartbeatMs: 10_000,
       provider: 'fake',
+      claimOptions: { jobId: job.job_id },
     });
+    this.finalizeAssessment(submission.submission_id);
+    return this.getWorkspaceView(input.attempt_id);
+  }
 
-    this.store.uow.run(() => {
-      const existingDiag = this.store.db.prepare('SELECT diagnosis_id FROM writing_diagnoses WHERE submission_id = ?').get(submission.submission_id);
-      if (existingDiag) return;
+  /** Assessor context for a Writing item: task text, criteria of its competencies, conditions. No answers or history. */
+  private assessorContextFor(itemId: string, mode: Mode, purpose: Purpose, isRepair: boolean) {
+    const meta = SYNTHETIC_ITEMS.find((m) => m.id === itemId);
+    const ids = meta?.competencies ?? [SYNTHETIC_COMPETENCY_ID];
+    return assessorContext({
+      task: { title: meta?.title ?? itemId, prompt: meta?.prompt ?? '', genre: meta?.genre ?? '', min_words: 150 },
+      competencies: WRITING_COMPETENCIES.filter((c) => ids.includes(c.competency_id)),
+      mode, purpose, is_repair: isRepair,
+    });
+  }
+
+  /**
+   * Observations from an assessment result (inline FakeAdapter or the learning worker). The AI proposes outcomes;
+   * support impact comes from what the learner was actually shown (hints, guided mode, self-repair).
+   */
+  interpretWriting(result: AiResult, submissionId: string, opportunityOverride?: Opportunity): ObservationDraft[] {
+    const sub = this.store.db.prepare('SELECT attempt_id, kind, content FROM submissions WHERE submission_id = ?').get(submissionId) as { attempt_id: string; kind: 'original' | 'repair'; content: string } | undefined;
+    if (!sub) return [];
+    const attempt = this.store.learning.getAttempt(sub.attempt_id);
+    if (!attempt) return [];
+    const loop = this.store.db.prepare('SELECT unlocked_hint_level FROM writing_loop_states WHERE attempt_id = ?').get(sub.attempt_id) as { unlocked_hint_level: number } | undefined;
+    const supportImpact = sub.kind === 'repair' || (loop?.unlocked_hint_level ?? 0) > 0 || attempt.mode === 'guided' ? 'affected' : 'no_related_effect_detected';
+    const allowed = SYNTHETIC_ITEMS.find((m) => m.id === attempt.item.id)?.competencies ?? [SYNTHETIC_COMPETENCY_ID];
+    if (isWritingAssessment(result)) return observationsFromResult(result, { submission_id: submissionId, allowed, support_impact: supportImpact });
+    const opportunity: Opportunity = opportunityOverride ?? (sub.content.includes('[SYNTHETIC_NO_OPPORTUNITY]') ? 'absent' : 'observed');
+    return observationsFromLegacy(result as Assessment, { submission_id: submissionId, primary: SYNTHETIC_COMPETENCY_ID, secondary: SYNTHETIC_SECONDARY_COMPETENCY_ID,
+      opportunity, regression: sub.content.includes('[SYNTHETIC_CC_REGRESSION]'), support_impact: supportImpact });
+  }
+
+  /** Learning worker hook: observations for a claimed learner job. */
+  interpretJob(result: AiResult, jobId: string): ObservationDraft[] {
+    const job = this.store.queue.get(jobId);
+    return job ? this.interpretWriting(result, job.submission_id) : [];
+  }
+
+  /**
+   * Bước 4–5 after the assessment committed: diagnosis, error ledger, loop step and verification chain. Idempotent;
+   * does nothing until the job is COMPLETED. A real (non-synthetic) result supplies its own diagnosis and hints,
+   * which are stored only after the disclosure check; synthetic runs keep the fixture diagnosis.
+   */
+  finalizeAssessment(submissionId: string): boolean {
+    return this.store.uow.run(() => {
+      if (this.store.db.prepare('SELECT 1 FROM writing_diagnoses WHERE submission_id = ?').get(submissionId)) return false;
+      const submission = this.store.db.prepare('SELECT submission_id, attempt_id, kind, evidence_source_id FROM submissions WHERE submission_id = ?').get(submissionId) as
+        { submission_id: string; attempt_id: string; kind: 'original' | 'repair'; evidence_source_id: string } | undefined;
+      if (!submission) return false;
+      const job = this.store.db.prepare('SELECT job_id, state FROM ai_jobs WHERE submission_id = ? ORDER BY created_at DESC LIMIT 1').get(submissionId) as { job_id: string; state: string } | undefined;
+      if (!job || job.state !== 'COMPLETED') return false;
+      const attempt = this.store.learning.getAttempt(submission.attempt_id)!;
+      const input = { attempt_id: submission.attempt_id };
+      const isRepair = submission.kind === 'repair';
+      const result = this.store.queue.result(job.job_id);
+      const provider = this.store.queue.runs(job.job_id).find((r) => r.state === 'COMPLETED')?.provider ?? 'fake';
+      const real = isWritingAssessment(result) && result.synthetic === false && provider !== 'fake';
 
       const obsRow = this.store.db.prepare('SELECT outcome, opportunity FROM observations WHERE submission_id = ? AND competency_id = ?')
         .get(submission.submission_id, SYNTHETIC_COMPETENCY_ID) as { outcome: Outcome; opportunity: Opportunity } | undefined;
       const outcome: Outcome = obsRow?.outcome ?? 'inconclusive';
+      const opportunity: Opportunity = obsRow?.opportunity ?? 'unknown';
+      if (real) {
+        this.finalizeReal(result, { job_id: job.job_id, submission_id: submission.submission_id, evidence_source_id: submission.evidence_source_id, attempt_id: submission.attempt_id, mode: attempt.mode, purpose: attempt.purpose, item_id: attempt.item.id });
+        this.advanceLoop(attempt.attempt_id, attempt.purpose, submission.submission_id, outcome, opportunity, isRepair);
+        return true;
+      }
 
       // Kiểm duyệt chính sách tiết lộ trước khi lưu gói gợi mở sinh sẵn ở server (04 §2.D, 06A §7.C.3).
       const disclosureCheck = verifyHintDisclosurePolicy(DEFAULT_PREGENERATED_HINTS);
       if (!disclosureCheck.ok) {
-        throw new Error(`Pre-generated hints failed disclosure policy: ${disclosureCheck.reasons.join(', ')}`);
+        throw new Error(`Pre-generated hints failed disclosure policy: ${[...new Set(disclosureCheck.reasons.map((r) => r.split(':')[0]))].join(', ')}`);
       }
 
       const priorityIssues: PriorityIssue[] = outcome === 'met'
@@ -674,19 +734,48 @@ export class LearningWorkflowService {
         );
       }
 
-      // Chuyển bước trong vòng học:
-      if (attempt.purpose === '7A' || attempt.purpose === '7B' || attempt.purpose === '9') {
-        this.applyVerificationStep8And9(input.attempt_id, attempt.purpose, submission.submission_id, outcome, obsRow?.opportunity ?? opportunity, at);
-      } else {
-        const nextStep = outcome === 'met' ? 6 : 5;
-        this.store.db.prepare('UPDATE writing_loop_states SET step = ?, updated_at = ? WHERE attempt_id = ?')
-          .run(nextStep, at, input.attempt_id);
-        if (!isRepair) this.integratedStep9(input.attempt_id, SYNTHETIC_COMPETENCY_ID, outcome, obsRow?.opportunity ?? opportunity, at);
-      }
-      this.refreshHypotheses(SYNTHETIC_COMPETENCY_ID, at);
+      this.advanceLoop(attempt.attempt_id, attempt.purpose, submission.submission_id, outcome, opportunity, isRepair);
+      return true;
     });
+  }
 
-    return this.getWorkspaceView(input.attempt_id);
+  /** Loop step, verification chain (C) and error ledger (E) after an assessment, for both synthetic and real results. */
+  private advanceLoop(attemptId: string, purpose: Purpose, submissionId: string, outcome: Outcome, opportunity: Opportunity, isRepair: boolean): void {
+    const at = this.store.now().toISOString();
+    if (purpose === '7A' || purpose === '7B' || purpose === '9') {
+      this.applyVerificationStep8And9(attemptId, purpose, submissionId, outcome, opportunity, at);
+    } else {
+      const nextStep = outcome === 'met' ? 6 : 5;
+      this.store.db.prepare('UPDATE writing_loop_states SET step = ?, updated_at = ? WHERE attempt_id = ?').run(nextStep, at, attemptId);
+      if (!isRepair) this.integratedStep9(attemptId, SYNTHETIC_COMPETENCY_ID, outcome, opportunity, at);
+    }
+    for (const c of WRITING_COMPETENCIES) this.refreshHypotheses(c.competency_id, at);
+  }
+
+  /** Diagnosis and ledger entries proposed by a real assessor, after the application's checks (P5-5). */
+  private finalizeReal(result: AiResult, ctx: { job_id: string; submission_id: string; evidence_source_id: string; attempt_id: string; mode: Mode; purpose: Purpose; item_id: string }): void {
+    if (!isWritingAssessment(result)) return;
+    const allowed = SYNTHETIC_ITEMS.find((m) => m.id === ctx.item_id)?.competencies ?? [SYNTHETIC_COMPETENCY_ID];
+    const complex = ctx.purpose === '7B' || ctx.purpose === '9' || ctx.mode === 'exam';
+    const limit = this.policy ? focusLimit(complex, this.policy.params) : 3;
+    const d = diagnosisFromResult(result, { allowed, focus_limit: limit });
+    const at = this.store.now().toISOString();
+    const outcomes = new Map((this.store.db.prepare('SELECT competency_id, outcome FROM observations WHERE submission_id = ?').all(ctx.submission_id) as { competency_id: string; outcome: Outcome }[])
+      .map((o) => [o.competency_id, o.outcome]));
+    const priority: PriorityIssue[] = d.priority_issues.map((i) => ({ issue_id: i.issue_id, competency_id: i.competency_id, location: i.location, symptom: i.symptom, hypothesis: i.hypothesis,
+      hypothesis_status: this.hypothesisStatusFor(ctx.attempt_id), expected_verification: i.expected_verification, impact: i.impact, certainty: i.certainty }));
+    const notes = d.disclosure.ok ? [] : [`Gợi ý theo nấc bị loại vì không qua kiểm tra tiết lộ (${[...new Set(d.disclosure.reasons.map((r) => r.split(':')[0]))].join(', ')}).`];
+    this.store.db.prepare(`INSERT INTO writing_diagnoses (diagnosis_id, attempt_id, submission_id, job_id, priority_issues_json, other_issues_json, hints_json, disclosure_checked, synthetic, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`).run(randomUUID(), ctx.attempt_id, ctx.submission_id, ctx.job_id, canonicalJson(priority), canonicalJson([...d.other_issues, ...notes]),
+      canonicalJson(d.hints), d.hints ? 1 : 0, at);
+    // E0: one initial hypothesis per competency with a not_met priority issue in this attempt (the AI proposes, E decides later).
+    for (const i of d.priority_issues) {
+      if (outcomes.get(i.competency_id) !== 'not_met') continue;
+      if (this.store.db.prepare('SELECT 1 FROM error_hypotheses WHERE attempt_id = ? AND competency_id = ?').get(ctx.attempt_id, i.competency_id)) continue;
+      this.store.db.prepare(`INSERT INTO error_hypotheses (hypothesis_id, competency_id, evidence_source_id, attempt_id, symptom, hypothesis, status, verification_note, synthetic, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'initial', ?, 0, ?, ?)`).run(randomUUID(), i.competency_id, ctx.evidence_source_id, ctx.attempt_id, i.symptom, i.hypothesis,
+        'Giả thuyết ban đầu do AI đề xuất; cần kiểm chứng qua tự sửa và bài mới không gợi ý.', at, at);
+    }
   }
 
   /**
@@ -760,11 +849,12 @@ export class LearningWorkflowService {
     const diag = this.store.db.prepare('SELECT hints_json FROM writing_diagnoses WHERE submission_id = ?')
       .get(latestSub.submission_id) as { hints_json: string } | undefined;
     if (!diag) throw Object.assign(new Error('No diagnosis available for this attempt'), { statusCode: 404 });
-    const bundle = JSON.parse(diag.hints_json) as PreGeneratedHints;
+    const bundle = JSON.parse(diag.hints_json) as PreGeneratedHints | null;
+    if (!bundle) throw Object.assign(new Error('No checked hint levels for this diagnosis'), { statusCode: 409, code: 'HINTS_UNAVAILABLE' });
 
     const policyCheck = verifyHintDisclosurePolicy(bundle);
     if (!policyCheck.ok) {
-      throw Object.assign(new Error(`Hint bundle failed disclosure check: ${policyCheck.reasons.join(', ')}`), { statusCode: 500 });
+      throw Object.assign(new Error(`Hint bundle failed disclosure check: ${[...new Set(policyCheck.reasons.map((r) => r.split(':')[0]))].join(', ')}`), { statusCode: 500 });
     }
 
     this.store.uow.run(() => {
@@ -842,7 +932,8 @@ export class LearningWorkflowService {
     if (!latestSub) throw Object.assign(new Error('No submission found'), { statusCode: 400 });
     const diag = this.store.db.prepare('SELECT hints_json FROM writing_diagnoses WHERE submission_id = ?')
       .get(latestSub.submission_id) as { hints_json: string } | undefined;
-    const bundle = JSON.parse(diag!.hints_json) as PreGeneratedHints;
+    const bundle = diag ? JSON.parse(diag.hints_json) as PreGeneratedHints | null : null;
+    if (!bundle) throw Object.assign(new Error('No checked hint levels for this diagnosis'), { statusCode: 409, code: 'HINTS_UNAVAILABLE' });
 
     this.store.uow.run(() => {
       const preSnap = this.store.learning.saveSnapshot(attemptId, 'pre_assistance', currentDraftText);
@@ -967,6 +1058,10 @@ export class LearningWorkflowService {
     this.ensureSyntheticWritingCatalog();
     const attempt = this.store.learning.getAttempt(attemptId);
     if (!attempt) throw Object.assign(new Error('Unknown attempt'), { statusCode: 404, code: 'UNKNOWN_ATTEMPT' });
+    // P5-5: a job finished by the learning worker is finalised on the next read (idempotent).
+    const pendingSub = this.store.db.prepare(`SELECT s.submission_id FROM submissions s WHERE s.attempt_id = ? AND NOT EXISTS (SELECT 1 FROM writing_diagnoses d WHERE d.submission_id = s.submission_id)
+      ORDER BY s.revision DESC LIMIT 1`).get(attemptId) as { submission_id: string } | undefined;
+    if (pendingSub) this.finalizeAssessment(pendingSub.submission_id);
 
     const itemObj = this.store.json.get('item', attempt.item.id, attempt.item.version, attempt.item.hash) as {
       title: string; prompt: string; skill: 'writing' | 'speaking_text'; genre: string; min_words: number;
@@ -982,12 +1077,13 @@ export class LearningWorkflowService {
     }[];
 
     const submissions = subRows.map((s) => {
-      const obs = this.store.db.prepare('SELECT outcome FROM observations WHERE submission_id = ? AND competency_id = ?')
-        .get(s.submission_id, SYNTHETIC_COMPETENCY_ID) as { outcome: Outcome } | undefined;
+      const obs = this.store.db.prepare('SELECT outcome, ai_run_id FROM observations WHERE submission_id = ? AND competency_id = ?')
+        .get(s.submission_id, SYNTHETIC_COMPETENCY_ID) as { outcome: Outcome; ai_run_id: string } | undefined;
       return {
         ...s,
         outcome: obs?.outcome ?? null,
-        synthetic: true,
+        // Synthetic unless a real provider assessed it (P5-5).
+        synthetic: obs ? this.providerOf(obs.ai_run_id) === 'fake' : this.aiMode !== 'real',
       };
     });
 
@@ -1007,10 +1103,10 @@ export class LearningWorkflowService {
         diagnosis_id: string; submission_id: string; job_id: string; priority_issues_json: string; other_issues_json: string; hints_json: string; synthetic: number;
       } | undefined;
       if (diagRow) {
-        const fullHints = JSON.parse(diagRow.hints_json) as PreGeneratedHints;
+        const fullHints = JSON.parse(diagRow.hints_json) as PreGeneratedHints | null;
         const unlocked = isExam ? 0 : (loopRow?.unlocked_hint_level ?? 0);
-        // Cắt quyền: chỉ trả các nấc đã mở!
-        const sliced = sliceUnlockedHints(fullHints, unlocked);
+        // Cắt quyền: chỉ trả các nấc đã mở! Không có gói gợi ý hợp lệ (bị loại khi kiểm tra tiết lộ) → không có nấc nào.
+        const sliced = fullHints ? sliceUnlockedHints(fullHints, unlocked) : { unlocked_level: 0 as const, hints: [], concept_check_question: null };
         const otherIssues = JSON.parse(diagRow.other_issues_json) as string[];
         diagnosis = {
           diagnosis_id: diagRow.diagnosis_id,
@@ -1072,6 +1168,10 @@ export class LearningWorkflowService {
       };
     }
 
+    const latestNoDiag = latestSub && !this.store.db.prepare('SELECT 1 FROM writing_diagnoses WHERE submission_id = ?').get(latestSub.submission_id) ? latestSub : null;
+    const jobRow = latestNoDiag ? this.store.db.prepare('SELECT job_id, state, last_error FROM ai_jobs WHERE submission_id = ? ORDER BY created_at DESC LIMIT 1').get(latestNoDiag.submission_id) as { job_id: string; state: string; last_error: string | null } | undefined : undefined;
+    const assessment = latestNoDiag && jobRow && !isVerification ? { submission_id: latestNoDiag.submission_id, job_state: jobRow.state, error: jobRow.last_error, mode: this.aiMode } : null;
+
     return {
       attempt: {
         attempt_id: attempt.attempt_id,
@@ -1103,32 +1203,14 @@ export class LearningWorkflowService {
       submissions,
       loop,
       diagnosis,
+      assessment,
     };
   }
 
   // ---- Tiến độ & Hồ sơ năng lực (02 §2–4, 06 §2.4, D-02) ---------------------------------------
   progressView() {
     this.ensureSyntheticWritingCatalog();
-    const competencies = [
-      {
-        competency_id: SYNTHETIC_COMPETENCY_ID,
-        title: 'Writing Task 2 — Duy trì lập trường nhất quán (Task Response)',
-        skill: 'writing',
-        description: 'Trả lời đầy đủ các phần của đề bài và giữ lập trường rõ ràng, nhất quán xuyên suốt các đoạn văn.',
-      },
-      {
-        competency_id: SYNTHETIC_SECONDARY_COMPETENCY_ID,
-        title: 'Writing Task 2 — Tổ chức đoạn văn & liên kết (Coherence & Cohesion)',
-        skill: 'writing',
-        description: 'Sắp xếp luận điểm mạch lạc, mỗi đoạn một ý trọng tâm rõ ràng và dùng phương tiện liên kết tự nhiên.',
-      },
-      {
-        competency_id: SYNTHETIC_SPEAKING_TEXT_COMPETENCY_ID,
-        title: 'Speaking (dạng văn bản theo E-11) — Phát triển ý & từ vựng',
-        skill: 'speaking_text',
-        description: 'Lên ý tưởng, dàn ý và lựa chọn từ vựng dạng văn bản; chưa chấm phát âm hay âm thanh trực tiếp (D-06).',
-      },
-    ];
+    const competencies = WRITING_COMPETENCIES;
 
     const profiles = competencies.map((comp) => this.competencyDetail(comp.competency_id, comp.title, comp.skill, comp.description));
 
@@ -1375,7 +1457,7 @@ export class LearningWorkflowService {
     }
   }
 
-  /** D1–D4 inputs of one scheduled task. AI dimensions are not produced by any adapter yet → null (D1 default 1). */
+  /** D1–D4 inputs of one scheduled task. AI dimensions come from real diagnoses only (P5-5); otherwise null → default 1. */
   private priorityInput(row: { task_id: string; competency_id: string; item_id: string; purpose: Purpose; due_at: string; estimated_minutes: number }, policy: LoadedPolicy): PriorityInput {
     const goal = this.getGoal();
     const meta = SYNTHETIC_ITEMS.find((m) => m.id === row.item_id);
@@ -1384,8 +1466,11 @@ export class LearningWorkflowService {
     // D4 "buổi bị bỏ qua": study days with recorded activity after the due day (today excluded) while the task stayed open.
     const skipped = (this.store.db.prepare('SELECT COUNT(DISTINCT study_day) AS n FROM study_activity_events WHERE study_day > ? AND study_day < ?')
       .get(studyDayOf(new Date(row.due_at)), studyDayOf(this.store.now())) as { n: number }).n;
+    // D1: AI dimensions from the latest real (non-synthetic) diagnosis of this competency; none → default (1).
+    const diags = this.store.db.prepare('SELECT priority_issues_json FROM writing_diagnoses WHERE synthetic = 0 ORDER BY created_at DESC LIMIT 20').all() as { priority_issues_json: string }[];
+    const issue = diags.flatMap((d) => JSON.parse(d.priority_issues_json) as PriorityIssue[]).find((i) => i.competency_id === row.competency_id && typeof i.impact === 'number');
     return {
-      task_id: row.task_id, purpose: row.purpose, due_at: row.due_at, estimated_minutes: row.estimated_minutes, ai_impact: null, ai_certainty: null,
+      task_id: row.task_id, purpose: row.purpose, due_at: row.due_at, estimated_minutes: row.estimated_minutes, ai_impact: issue?.impact ?? null, ai_certainty: issue?.certainty ?? null,
       hypothesis_status: hyp?.status ?? null,
       frequency: frequencyScore(this.recentNotMet(row.competency_id, policy.params.priority.frequency_window_days), policy.params),
       relevance: goalRelevance(goal ? { exam_type: goal.exam_type, targets: { writing: goal.target_writing, speaking: goal.target_speaking, reading: goal.target_reading, listening: goal.target_listening } } : null, skill, null),

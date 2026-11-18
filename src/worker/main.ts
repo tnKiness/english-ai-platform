@@ -2,9 +2,11 @@
 // - Real providers run only through the gateway after subscriptionGuard passes (none is verified yet: D-01).
 // - When the gateway blocks every provider, the worker refuses to start unless --fake is given; then it runs
 //   FakeAdapter on dry-run jobs only, so synthetic output can never become learner evidence.
-// - Learner-scope jobs stay queued in P2 (learning flows are P3).
+// - Learner-scope jobs are processed only with --complaints (re-evaluations) or --learning (P5-5: Writing assessments
+//   submitted with STUDY_ENGLISH_LEARNING_AI=real), always through the gateway, never by FakeAdapter.
 import { dataClassesFor, type CliProvider } from '../application/ai/subscription-guard.js';
 import { ComplaintService } from '../application/learning/complaints.js';
+import { LearningWorkflowService } from '../application/learning/writing-workflow.js';
 import { FakeAdapter } from '../infrastructure/ai/fake-adapter.js';
 import { gatewayFor } from '../infrastructure/ai/gateway/compose.js';
 import { GatewayAdapter } from '../infrastructure/ai/gateway/gateway.js';
@@ -41,7 +43,7 @@ try {
   let deps: WorkerDeps;
   if (ready.length === 0) {
     for (const s of status) console.log(`AI thật bị chặn — ${s.provider}: ${s.error} (${s.reasons.join(', ')})`);
-    if (!flag('--fake')) {
+    if (!flag('--fake') || flag('--learning')) {
       console.log('Không chạy. Thêm --fake để xử lý job dry-run bằng FakeAdapter (kết quả synthetic, không phải bằng chứng học).');
       process.exitCode = 3;
       throw new Error('GATEWAY_BLOCKED');
@@ -53,16 +55,24 @@ try {
   } else {
     const provider = ready[0] as CliProvider;
     const queries = new ConsoleQueries(store.db);
-    console.log(`Provider đã xác minh: ${provider}. P2 chỉ xử lý job dry-run.`);
+    console.log(`Provider đã xác minh: ${provider}.${flag('--learning') || flag('--complaints') ? '' : ' Chỉ xử lý job dry-run (thêm --learning để chấm bài của bạn).'}`);
     deps = { ...base, provider, adapter: new GatewayAdapter(gateway, (job) => {
       const facts = queries.jobFacts(job.job_id);
       return { eligible: store.queue.get(job.job_id)?.eligible_providers ?? [provider], job: { billing_policy: job.billing_policy, required_capabilities: job.required_capabilities as ('text' | 'structured_result' | 'direct_audio')[],
         data_classes: facts ? dataClassesFor(facts) : ['learner_profile'] } };
     }) };
+    if (flag('--complaints') && flag('--learning')) throw Object.assign(new Error('Chọn một trong --complaints hoặc --learning'), {});
     if (flag('--complaints')) {
       const complaints = new ComplaintService(store);
       deps.claimOptions = { scopes: ['learner'], complaintsOnly: true };
       deps.interpret = (result, claim) => complaints.interpret(result, claim);
+    }
+    if (flag('--learning')) {
+      // P5-5: Writing assessments of the learner (not complaint re-evaluations). The workspace finalises the diagnosis.
+      const learning = new LearningWorkflowService(store);
+      deps.claimOptions = { scopes: ['learner'], excludeComplaints: true };
+      deps.interpret = (result, claim) => learning.interpretJob(result, claim.job.job_id);
+      console.log('Chế độ --learning: chấm bài Writing của người học bằng provider đã xác minh.');
     }
   }
   if (flag('--once')) {

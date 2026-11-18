@@ -16,6 +16,15 @@ ajv.addSchema(knowledgeSchema);
 const benchmarkSchema = JSON.parse(readFileSync(resolve('contracts/benchmark.v1.schema.json'), 'utf8'));
 const benchmarkValidator = ajv.compile(benchmarkSchema);
 export function validateBenchmarkManifest(value: unknown): boolean { return benchmarkValidator(value) === true; }
+// P5-5 (E-35): Writing assessment result with per-competency outcomes, diagnosis and hint levels.
+const learningSchema = JSON.parse(readFileSync(resolve('contracts/learning.v1.schema.json'), 'utf8'));
+ajv.addSchema(learningSchema);
+export function validateLearning(name: string, value: unknown): { ok: boolean; errors: string[] } {
+  const validate = ajv.getSchema(`${learningSchema.$id}#/$defs/${name}`);
+  if (!validate) throw new Error(`Unknown learning contract: ${name}`);
+  const ok = validate(value) === true;
+  return { ok, errors: ok ? [] : (validate.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message ?? 'invalid'}`) };
+}
 export function validateContract(name: string, value: unknown): boolean {
   const v2 = VERSIONED.has(name) && typeof value === 'object' && value !== null && (value as { schema_version?: unknown }).schema_version === '2';
   const validate = ajv.getSchema(`${v2 ? providerSchema.$id : schema.$id}#/$defs/${name}`);

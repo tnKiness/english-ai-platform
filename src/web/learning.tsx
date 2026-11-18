@@ -125,6 +125,8 @@ interface WorkspaceData {
       hypothesis: string;
       hypothesis_status: string;
       expected_verification: string;
+      impact?: number;
+      certainty?: number;
     }[];
     other_issues_count: number;
     other_issues_summary: string[];
@@ -134,7 +136,14 @@ interface WorkspaceData {
       concept_check_question: string | null;
     };
   } | null;
+  assessment: { submission_id: string; job_state: string; error: string | null; mode: 'synthetic' | 'real' } | null;
 }
+
+const JOB_STATE_LABELS: Record<string, string> = {
+  QUEUED: 'Đang chờ worker chấm (chạy `npm.cmd run worker -- --learning`)', RUNNING: 'AI đang chấm…', VALIDATING: 'Đang kiểm tra kết quả…',
+  WAITING_QUOTA: 'Provider đang hết hạn mức; bài sẽ được chấm khi mở lại', NEEDS_REVIEW: 'Kết quả cần xem lại (không tự ghi nhận)',
+  FAILED: 'Chấm thất bại', CANCELLED: 'Đã hủy', COMPLETED: 'Đã chấm, đang ghi nhận…',
+};
 
 interface ProgressData {
   policy_status: string;
@@ -278,6 +287,15 @@ export function WorkspaceScreen({ attemptId, onSwitchAttempt, onBack }: { attemp
   }, [attemptId]);
 
   useEffect(load, [load]);
+  // P5-5: while a real-AI assessment is in flight, re-read every 3 s; stop once it is finalised or ends.
+  const pending = data?.assessment && ['QUEUED', 'RUNNING', 'VALIDATING', 'WAITING_QUOTA', 'COMPLETED'].includes(data.assessment.job_state);
+  useEffect(() => {
+    if (!pending) return undefined;
+    const t = setInterval(() => {
+      get<WorkspaceData>(`/api/learning/attempts/${encodeURIComponent(attemptId)}`).then(setData).catch(() => { /* keep showing the last state */ });
+    }, 3000);
+    return () => clearInterval(t);
+  }, [pending, attemptId]);
 
   const triggerAutosave = (nextText: string) => {
     setSaveState('saving');
@@ -402,10 +420,12 @@ export function WorkspaceScreen({ attemptId, onSwitchAttempt, onBack }: { attemp
         <article className="card">
           <h3>3. Chẩn đoán &amp; Gợi mở theo nấc (Bước 4–6)</h3>
           {!data.diagnosis ? (
-            <p>Nộp bài gốc để nhận chẩn đoán ưu tiên và gợi mở từng nấc từ máy chủ.</p>
+            data.assessment
+              ? <p role="status" className={data.assessment.job_state === 'FAILED' ? 'FAIL' : 'mono'}>{JOB_STATE_LABELS[data.assessment.job_state] ?? data.assessment.job_state}{data.assessment.error ? ` — ${data.assessment.error}` : ''}</p>
+              : <p>Nộp bài gốc để nhận chẩn đoán ưu tiên và gợi mở từng nấc từ máy chủ.</p>
           ) : (
             <div>
-              <p className="mono">Chẩn đoán từ job {data.diagnosis.job_id.slice(0, 8)}… <span className="tag">synthetic</span></p>
+              <p className="mono">Chẩn đoán từ job {data.diagnosis.job_id.slice(0, 8)}… <span className="tag">{data.diagnosis.synthetic ? 'synthetic' : 'AI thật — chỉ là đề xuất'}</span></p>
               {data.diagnosis.priority_issues.length === 0 ? (
                 <p className="PASS">Không phát hiện vấn đề trọng tâm cần sửa lại ở lượt này.</p>
               ) : (
@@ -415,6 +435,7 @@ export function WorkspaceScreen({ attemptId, onSwitchAttempt, onBack }: { attemp
                     <p><b>Biểu hiện (Lớp 1):</b> {iss.symptom}</p>
                     <p><b>Giả thuyết nguyên nhân (Lớp 2 — {iss.hypothesis_status}):</b> {iss.hypothesis}</p>
                     <p><b>Hướng kiểm chứng (Lớp 3):</b> {iss.expected_verification}</p>
+                    {typeof iss.impact === 'number' && <p className="mono">AI đánh giá: ảnh hưởng {iss.impact}/3 · độ chắc chắn {iss.certainty ?? '—'}/3</p>}
                   </div>
                 ))
               )}
@@ -426,6 +447,7 @@ export function WorkspaceScreen({ attemptId, onSwitchAttempt, onBack }: { attemp
               )}
 
               <h4>Gợi mở theo nấc (chỉ tải nấc đã mở từ server — đã mở {data.diagnosis.scaffold.unlocked_level}/3)</h4>
+              {!data.diagnosis.synthetic && data.diagnosis.priority_issues.length > 0 && data.diagnosis.other_issues_summary.some((o) => o.startsWith('Gợi ý theo nấc bị loại')) && <p className="FAIL">Lượt chấm này không có gợi ý theo nấc hợp lệ; hãy tự sửa theo chẩn đoán hoặc nộp lại.</p>}
               {data.diagnosis.scaffold.hints.map((h) => (
                 <div key={h.level} className="card">
                   <p>{h.content}</p>

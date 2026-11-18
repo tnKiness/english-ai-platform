@@ -78,6 +78,7 @@ Useful commands:
 ```powershell
 npm run check              # lint → typecheck → tests → build (same as CI)
 npm run worker -- --fake   # process queued jobs with the synthetic adapter
+npm run worker -- --learning   # assess learner Writing with a verified provider (app started with STUDY_ENGLISH_LEARNING_AI=real)
 npm run ai -- status       # why each AI provider is currently blocked (no model call)
 npm run backup -- create   # coordinated DB + JSON + media backup
 ```

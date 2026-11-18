@@ -17,6 +17,7 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('STU
 const app = createApp({ store, webRoot: serveWeb ? webRoot : undefined, port });
 await app.listen({ host: '127.0.0.1', port });
 console.log(`Study English: ${serveWeb ? `http://127.0.0.1:${port} (giao diện + API)` : `API ở http://127.0.0.1:${port} (giao diện: npm run dev)`} · dữ liệu: ${store.paths.root}`);
+if (process.env.STUDY_ENGLISH_LEARNING_AI === 'real') console.log('Chấm Writing bằng AI thật: bài nộp chờ worker — chạy thêm `npm.cmd run worker -- --learning`.');
 // E-32: daily backup + weekly restore drill while the app runs (STUDY_ENGLISH_AUTO_BACKUP=0 turns it off).
 const stopAutoBackup = process.env.STUDY_ENGLISH_AUTO_BACKUP === '0' ? () => undefined : scheduleAutoBackup(store);
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

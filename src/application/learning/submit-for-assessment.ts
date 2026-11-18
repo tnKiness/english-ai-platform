@@ -11,6 +11,8 @@ export interface SubmitForAssessment {
   eligible_providers: NewJob['eligible_providers'];
   timeout_seconds: number;
   policy_version: string;
+  /** P5-5: assessor context (task text, criteria, conditions). Never learner history, answers or hidden targets. */
+  context?: Record<string, unknown>;
 }
 
 /**
@@ -25,7 +27,7 @@ export function submitForAssessment(deps: { uow: UnitOfWork; learning: LearningS
     // Assessor view: the submission and its pinned rubric only — no learner history, credentials or answer bank.
     const manifest = deps.learning.createManifest({
       manifest_id: `ctx_${submission.submission_id}`, role: 'assessor', phase, policy_version: input.policy_version, rubric: input.rubric, knowledge: [],
-      disclosure_level: 0, allowed_resource_ids: [], payload: { submission_id: submission.submission_id, submission_text: input.content, rubric: input.rubric },
+      disclosure_level: 0, allowed_resource_ids: [], payload: { submission_id: submission.submission_id, submission_text: input.content, rubric: input.rubric, ...(input.context ?? {}) },
     });
     const job = deps.queue.enqueue({
       idempotency_key: `${submission.submission_id}:${input.task_type}:${input.rubric.version}`, attempt_id: input.attempt_id, submission_id: submission.submission_id,
