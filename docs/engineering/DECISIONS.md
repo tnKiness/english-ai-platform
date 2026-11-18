@@ -170,3 +170,12 @@ ID / ngày / trạng thái (đề xuất, áp dụng kỹ thuật, người dùn
 - Chưa làm (chờ D-07): thời hạn lưu giữ, tự dọn backup/export/log, ngưỡng và hành vi khi đầy ổ, nhập lại (import) bản xuất.
 - Kiểm chứng: `tests/integration/p5-export.test.ts`; hồi quy `npm.cmd run check`.
 
+## E-29 — P5-4 Chạy một lệnh, dữ liệu/cổng tùy chọn, diễn tập khôi phục (18/11/2026)
+- Trạng thái: áp dụng kỹ thuật (người dùng yêu cầu triển khai phần tiếp theo); đảo ngược được. Nguồn: IMPLEMENTATION_PLAN P5 ("tài liệu cài/chạy/phục hồi và trải nghiệm sử dụng thật"; "restore thực nghiệm thành công"); 06 §5.B.6.
+- Lựa chọn:
+  - Backend phục vụ giao diện đã build (`dist/web`) cùng origin (`src/server/static-web.ts`, không thêm dependency): chỉ GET/HEAD ngoài `/api`, đường dẫn giải trong thư mục web (chặn `..`, mã hóa, symlink), đường không có đuôi trả `index.html`, file thiếu trả 404; `nosniff`, `X-Frame-Options: DENY`, `no-referrer`; `index.html` no-store, asset có hash cache dài. Giao diện tĩnh không cần phiên; mọi `/api` và mọi thao tác ghi vẫn cần phiên + CSRF, Host/Origin vẫn kiểm.
+  - `npm run app` = build + chạy; `npm start` chạy bản đã build. `STUDY_ENGLISH_DATA_DIR` (thư mục dữ liệu khác), `STUDY_ENGLISH_PORT` (mặc định 4317; allowlist Host/Origin suy ra từ cổng), `STUDY_ENGLISH_SERVE_WEB=0`.
+  - `npm run backup -- drill [backup_dir]` (`src/infrastructure/backup/drill.ts`): backup mới hoặc chỉ định → `restoreBackup` vào thư mục tạm → `openStore` → so số dòng 25 bảng dữ liệu học với file DB của backup → đọc lại qua đường xuất dữ liệu (kiểm SHA-256 audio) → xóa bản tạm; nối kết quả vào `var/backups/restore-drills.jsonl`. Không đụng `var/` đang dùng.
+- Kiểm tra giao diện thật (18/11/2026) trên dữ liệu thử (`STUDY_ENGLISH_DATA_DIR` trong scratchpad, cổng 4327, không đụng dữ liệu thật hay `dev:server` đang chạy) phát hiện và sửa 3 lỗi P5-1: nhắc học tạo trước khi có mục tiêu thì sai quỹ cả ngày (nay chỉ tạo khi đã có mục tiêu); hôm nay hiện "Trước khi bắt đầu theo dõi" (nay luôn "chưa có dữ liệu"); khung ngày không tải lại sau khi lưu mục tiêu. Kèm: ngày trước khi theo dõi hiện "—" thay vì "0 / quỹ"; bỏ hai câu cố định sai với dữ liệu thật ("AI thật chưa được kích hoạt", "đang bị khóa… chờ D-01").
+- Kiểm chứng: `tests/integration/p5-app.test.ts`; `p5-tracking`, `study-day` bổ sung ca; hồi quy `npm.cmd run check`.
+

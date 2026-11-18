@@ -101,6 +101,8 @@ it('rejects bad input, future beats, stale syncs and writes without CSRF', async
 
 it('one rule-based reminder per study day, none on rest, none duplicated after a restart, no backfill', async () => {
   const { a, s, c, dir } = await setup();
+  // No goal yet: no reminder, and the day is not used up (found on the real UI, 18/11/2026).
+  expect((await get(a, '/api/learning/notifications', s)).json().notifications).toHaveLength(0);
   await post(a, '/api/learning/goals', s, goal);
   let n = (await get(a, '/api/learning/notifications', s)).json().notifications;
   expect(n).toHaveLength(1);

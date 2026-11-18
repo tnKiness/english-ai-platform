@@ -28,8 +28,8 @@ Tài liệu này là **sổ tay vận hành** cho người dùng: cài đặt, c
 
 | Thành phần | Vai trò | Chạy bằng |
 |---|---|---|
-| **Backend** (`src/server`) | API cục bộ ở `127.0.0.1:4317`, phiên + CSRF, mở dữ liệu trong `var/` | `npm.cmd run dev:server` |
-| **Giao diện web** (`src/web`) | Học hôm nay, Workspace, Reading, Luyện nói, Tiến độ, Cài đặt, Builder & QC | `npm.cmd run dev` → http://127.0.0.1:5173 |
+| **Backend** (`src/server`) | API cục bộ ở `127.0.0.1:4317`, phiên + CSRF, mở dữ liệu trong `var/`; khi đã build thì phục vụ luôn giao diện | `npm.cmd run app` (dùng hằng ngày) hoặc `npm.cmd run dev:server` (phát triển) |
+| **Giao diện web** (`src/web`) | Học hôm nay, Workspace, Reading, Luyện nói, Tiến độ, Cài đặt, Builder & QC | cùng địa chỉ http://127.0.0.1:4317 khi chạy `app`; khi phát triển: `npm.cmd run dev` → http://127.0.0.1:5173 |
 | **Worker** (`src/worker`) | Lấy job AI trong hàng đợi, gọi AI thật qua gateway, ghi kết quả có kiểm tra | `npm.cmd run worker` |
 | **Gateway AI** (`src/infrastructure/ai/gateway`) | Chỉ gọi CLI thuê bao (Codex, Claude Code, Antigravity) khi đủ bằng chứng D-01; không bao giờ dùng API tính phí | dùng bởi worker |
 | **Lõi định tuyến** (`src/infrastructure/ai/router-core`) | Bản sao lõi ai-router: nhận diện hết hạn mức/giới hạn tốc độ/mất đăng nhập, giờ mở lại | `npm.cmd run router:sync` |
@@ -63,7 +63,15 @@ Tùy chọn:
 
 ## 3. Chạy hằng ngày
 
-Mở hai terminal tại thư mục gốc của repo (bắt buộc chạy từ root để nạp migration):
+Mở một terminal tại thư mục gốc của repo (bắt buộc chạy từ root để nạp migration) và chạy:
+
+```powershell
+npm.cmd run app
+```
+
+Lệnh này build rồi chạy giao diện + API ở **http://127.0.0.1:4317**. Nếu không đổi code từ lần build trước, `npm.cmd start` khởi động nhanh hơn (không build lại).
+
+Khi phát triển (sửa code, muốn tự tải lại), dùng hai terminal thay vì `app`, rồi mở http://127.0.0.1:5173:
 
 ```powershell
 npm.cmd run dev:server
@@ -73,7 +81,7 @@ npm.cmd run dev:server
 npm.cmd run dev
 ```
 
-Mở http://127.0.0.1:5173. Khi có job AI cần xử lý (chấm bài, QC), mở thêm terminal thứ ba:
+Khi có job AI cần xử lý (chấm bài, QC), mở thêm một terminal:
 
 ```powershell
 npm.cmd run worker
@@ -84,7 +92,12 @@ Dừng: `Ctrl+C` trong từng terminal (đừng đóng cửa sổ npm đột ng�
 Lưu ý:
 - Backend chỉ nghe `127.0.0.1`; **không** mở ra LAN/Internet.
 - Lần đầu chạy sau khi cập nhật code, backend tự áp migration mới vào `var/db/study.db`. Nên `npm.cmd run backup -- create` trước khi cập nhật lớn.
-- Thông báo "AI thật chưa được kích hoạt" trên đầu trang là trạng thái của gateway, không phải lỗi.
+- Trạng thái AI thật (provider nào Sẵn sàng) xem ở **Cài đặt & Mục tiêu**.
+- **Chạy thử trên dữ liệu riêng** mà không đụng `var/`: đặt `STUDY_ENGLISH_DATA_DIR` (thư mục dữ liệu khác) và, nếu bản thật đang chạy, `STUDY_ENGLISH_PORT` (ví dụ 4327):
+  ```powershell
+  $env:STUDY_ENGLISH_DATA_DIR = "D:\study-english-thu"; $env:STUDY_ENGLISH_PORT = "4327"; npm.cmd start
+  ```
+  Mở http://127.0.0.1:4327. Đóng terminal (hoặc xóa hai biến) để quay về dữ liệu thật. `STUDY_ENGLISH_SERVE_WEB=0` tắt phục vụ giao diện (chỉ API).
 
 ## 4. Học trên giao diện
 
@@ -199,6 +212,13 @@ npm.cmd run backup -- promote <thư_mục_mới> --confirm
 ```
 Nên sao lưu trước khi cập nhật code có migration mới. Chưa có lịch sao lưu tự động.
 
+### Diễn tập khôi phục
+Một bản sao lưu chỉ đáng tin khi đã khôi phục thử thành công:
+```powershell
+npm.cmd run backup -- drill
+```
+Lệnh tạo backup mới (hoặc dùng backup chỉ định: `drill <thư_mục_backup>`), khôi phục vào thư mục tạm, mở bằng chính ứng dụng, đối chiếu số dòng dữ liệu học với backup và đọc lại toàn bộ dữ liệu + kiểm SHA-256 từng bản thu âm, rồi xóa bản tạm. Không đụng `var/` đang dùng. Kết quả (ĐẠT/THẤT BẠI, thời gian, số dòng) ghi thêm vào `var/backups/restore-drills.jsonl`. Nên chạy sau mỗi lần cập nhật lớn hoặc định kỳ.
+
 ### Xuất dữ liệu học tập
 Khác với sao lưu (để khôi phục ứng dụng), **bản xuất** là dữ liệu cá nhân của bạn ở dạng đọc được: mang đi, lưu trữ riêng, hoặc xem bằng công cụ khác.
 
@@ -263,7 +283,10 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 
 | Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
 |---|---|---|
-| Trang báo không kết nối | Backend chưa chạy hoặc chạy sai thư mục | Chạy `npm.cmd run dev:server` từ root repo |
+| Trang báo không kết nối | Backend chưa chạy hoặc chạy sai thư mục | Chạy `npm.cmd run app` từ root repo |
+| `EADDRINUSE` / cổng 4317 đang dùng | Một bản khác (`app`, `start` hoặc `dev:server`) đang chạy | Dùng bản đang chạy, dừng nó bằng `Ctrl+C`, hoặc chạy bản thứ hai với `STUDY_ENGLISH_PORT` khác |
+| `Built web UI not found` | Chưa build giao diện | `npm.cmd run app` (tự build) |
+| `backup -- drill` báo THẤT BẠI | Backup hỏng hoặc thiếu file | Đọc lý do in ra/`restore-drills.jsonl`; tạo backup mới và diễn tập lại trước khi dựa vào bản cũ |
 | `403 HOST_NOT_ALLOWED` / `ORIGIN_NOT_ALLOWED` | Mở bằng địa chỉ khác `127.0.0.1`/`localhost` | Mở đúng http://127.0.0.1:5173 |
 | `401 SESSION_REQUIRED`, `403 CSRF_INVALID` | Phiên cũ sau khi khởi động lại backend | Tải lại trang |
 | `Applied migration N was modified` | File migration đã áp bị sửa | Không sửa migration cũ; khôi phục file gốc, đưa thay đổi vào migration mới |
@@ -306,7 +329,8 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 |---|---|
 | `npm.cmd run dev` | Chạy giao diện web (Vite) ở http://127.0.0.1:5173; cần `dev:server` chạy song song. |
 | `npm.cmd run dev:server` | Chạy backend local ở 127.0.0.1:4317, mở dữ liệu thật trong `var/`, tự áp migration mới. |
-| `npm.cmd run start` | Chạy backend đã build (`dist/`); chưa phục vụ giao diện production. |
+| `npm.cmd run start` | Chạy bản đã build (không build lại): giao diện + API ở http://127.0.0.1:4317. |
+| `npm.cmd run app` | Cách dùng hằng ngày: build rồi chạy giao diện + API ở http://127.0.0.1:4317 bằng một lệnh. |
 | `npm.cmd run lint` | Kiểm tra ESLint. |
 | `npm.cmd run typecheck` | Kiểm tra kiểu TypeScript (không sinh file). |
 | `npm.cmd run test` | Chạy toàn bộ test Vitest (dữ liệu synthetic, CLI giả, không gọi AI thật). |
@@ -356,6 +380,8 @@ Usage: npm run backup -- <command>
   create                              online backup of var/ (DB + JSON + media) into var/backups
   restore <backup_dir> <target_dir>   restore into a NEW/empty directory and verify (does not touch var/)
   promote <target_dir> --confirm      replace var/ with a verified restore (stop server and worker first)
+  drill [backup_dir]                  restore drill: new backup (or the given one) → restore into a temp folder → open with the
+                                      app and read all learner data back → delete the temp copy; logged in var/backups/restore-drills.jsonl
 ```
 <!-- AUTO:backup-cli:END -->
 
@@ -505,6 +531,7 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | E-26 | Hướng dẫn sử dụng tự cập nhật (17/11/2026) |
 | E-27 | P5-2 Tra cứu kho tri thức FTS5/BM25 lọc quyền trong cùng truy vấn (17/11/2026) |
 | E-28 | P5-3 Xuất dữ liệu học tập và báo cáo dung lượng (17/11/2026) |
+| E-29 | P5-4 Chạy một lệnh, dữ liệu/cổng tùy chọn, diễn tập khôi phục (18/11/2026) |
 <!-- AUTO:decisions:END -->
 
 ### Trạng thái công việc

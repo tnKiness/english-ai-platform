@@ -70,8 +70,10 @@ export function dayStatus(input: { day: string; today: string; trackingStartDay:
   if (input.declarations.planned_rest) return 'planned_rest';
   if (input.declarations.offline || input.offlineBeats > 0) return 'offline';
   if (input.recordedMinutes > 0) return 'studied';
+  // Today is never "before tracking": the day is still open.
+  if (input.day >= input.today) return 'today_no_data_yet';
   if (!input.trackingStartDay || input.day < input.trackingStartDay) return 'before_tracking';
-  return input.day >= input.today ? 'today_no_data_yet' : 'missing_telemetry';
+  return 'missing_telemetry';
 }
 
 /**

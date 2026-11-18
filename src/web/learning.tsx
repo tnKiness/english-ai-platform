@@ -517,7 +517,8 @@ export function TodayScreen({ onOpenAttempt }: { onOpenAttempt: (attemptId: stri
 
     {!data.goal && <GoalForm initial={null} onSaved={() => load()} />}
 
-    <DayPanel />
+    {/* Remount when the goal appears so budget and reminder are read again. */}
+    <DayPanel key={data.goal ? 'with-goal' : 'no-goal'} />
 
     <article className="card">
       <h3>Quỹ thời gian phiên này</h3>

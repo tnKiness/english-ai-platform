@@ -3,13 +3,16 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createBackup, promoteRestored, restoreBackup, type RestoreReport } from '../infrastructure/backup/backup.js';
+import { restoreDrill } from '../infrastructure/backup/drill.js';
 import { dataPaths } from '../infrastructure/files/paths.js';
 import { openStore } from '../infrastructure/sqlite/store.js';
 
 const USAGE = `Usage: npm run backup -- <command>
   create                              online backup of var/ (DB + JSON + media) into var/backups
   restore <backup_dir> <target_dir>   restore into a NEW/empty directory and verify (does not touch var/)
-  promote <target_dir> --confirm      replace var/ with a verified restore (stop server and worker first)`;
+  promote <target_dir> --confirm      replace var/ with a verified restore (stop server and worker first)
+  drill [backup_dir]                  restore drill: new backup (or the given one) → restore into a temp folder → open with the
+                                      app and read all learner data back → delete the temp copy; logged in var/backups/restore-drills.jsonl`;
 
 async function main(args: string[]): Promise<number> {
   const [command, a, b] = args;
@@ -20,6 +23,20 @@ async function main(args: string[]): Promise<number> {
       console.log(`Backup OK: ${dir}\n  db sha256 ${manifest.db.sha256}, ${manifest.files.length} files, ${manifest.migrations.length} migrations`);
       return 0;
     } finally { store.close(); }
+  }
+  if (command === 'drill') {
+    let backupDir = a ? resolve(a) : null;
+    const paths = dataPaths();
+    if (!backupDir) {
+      const store = await openStore(paths);
+      try { backupDir = (await createBackup(store.db, store.paths, store.now)).dir; } finally { store.close(); }
+      console.log(`Backup mới: ${backupDir}`);
+    }
+    const r = await restoreDrill(backupDir, paths);
+    if (!r.ok) { console.error(`Diễn tập khôi phục THẤT BẠI: ${r.error}`); return 1; }
+    const rows = Object.values(r.tables ?? {}).reduce((s, n) => s + n, 0);
+    console.log(`Diễn tập khôi phục ĐẠT (${r.duration_ms} ms): ${r.restored?.files} file, ${r.restored?.migrations} migration, ${rows} dòng dữ liệu học, ${r.media} bản thu âm đọc lại được. Bản thử đã xóa; nhật ký: var/backups/restore-drills.jsonl`);
+    return 0;
   }
   if (command === 'restore' && a && b) {
     const report = restoreBackup(resolve(a), resolve(b));

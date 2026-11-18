@@ -11,6 +11,7 @@
     "dev": "vite --host 127.0.0.1",
     "dev:server": "tsx watch src/server/main.ts",
     "start": "node dist/server/main.js",
+    "app": "npm run build && node dist/server/main.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

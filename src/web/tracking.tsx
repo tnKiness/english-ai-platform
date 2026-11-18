@@ -134,7 +134,7 @@ export function TrackingPanel() {
       <thead><tr><th>Ngày</th><th>Trạng thái</th><th>Thời gian (phút)</th><th>Vòng học: bắt đầu / nộp / sửa / nhiệm vụ xong</th><th>Nhận định: đạt / chưa đạt / chưa kết luận</th></tr></thead>
       <tbody>{data.days.map((d) => <tr key={d.study_day}>
         <td>{d.study_day}</td><td>{STATUS_LABELS[d.status]}</td>
-        <td>{d.time.recorded_minutes}{d.time.budget_minutes !== null ? ` / ${d.time.budget_minutes}` : ''}
+        <td>{d.status === 'before_tracking' ? '—' : <>{d.time.recorded_minutes}{d.time.budget_minutes !== null ? ` / ${d.time.budget_minutes}` : ''}</>}
           {Object.entries(d.time.by_activity).length > 0 && <span className="mono"> ({Object.entries(d.time.by_activity).map(([a, m]) => `${ACTIVITY_LABELS[a as Activity]} ${m}`).join(', ')})</span>}
           {d.time.self_reported_offline_minutes !== null && <span className="mono"> + tự khai {d.time.self_reported_offline_minutes}</span>}</td>
         <td>{d.loop.attempts_started} / {d.loop.original_submissions} / {d.loop.repair_submissions} / {d.loop.scheduled_tasks_completed}</td>

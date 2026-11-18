@@ -30,6 +30,7 @@ describe('dayStatus', () => {
     expect(dayStatus({ ...base, day: '2026-11-17' })).toBe('today_no_data_yet');
     expect(dayStatus({ ...base, day: '2026-11-01' })).toBe('before_tracking');
     expect(dayStatus({ ...base, trackingStartDay: null })).toBe('before_tracking');
+    expect(dayStatus({ ...base, day: '2026-11-17', trackingStartDay: null })).toBe('today_no_data_yet');
   });
   it('declared rest wins; offline (declared or synced late) comes before plain studied', () => {
     expect(dayStatus({ ...base, declarations: { ...none, planned_rest: true }, recordedMinutes: 20 })).toBe('planned_rest');

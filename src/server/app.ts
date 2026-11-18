@@ -14,12 +14,17 @@ import { exportLearnerData, storageUsage } from '../infrastructure/export/learne
 import { ConsoleQueries } from '../infrastructure/sqlite/console-queries.js';
 import { builderPipeline, type Store } from '../infrastructure/sqlite/store.js';
 import { parseCookies, SESSION_COOKIE, SessionManager } from './session.js';
+import { registerStaticWeb } from './static-web.js';
 
-const HOSTS = ['127.0.0.1:4317', 'localhost:4317'];
-const ORIGINS = ['http://127.0.0.1:4317', 'http://localhost:4317', 'http://127.0.0.1:5173'];
+/** Default local port; another one only via STUDY_ENGLISH_PORT (the allowlists below follow it). */
+export const DEFAULT_PORT = 4317;
 const SAFE = ['GET', 'HEAD'];
 
-export interface AppDeps { store?: Store; pipeline?: BuilderPipeline; sessions?: SessionManager; gatewayStatus?: () => Promise<unknown> }
+export interface AppDeps { store?: Store; pipeline?: BuilderPipeline; sessions?: SessionManager; gatewayStatus?: () => Promise<unknown>;
+  /** P5-4: serve the built web UI from this folder (dist/web) on the same origin. */
+  webRoot?: string;
+  /** Port the server listens on; Host/Origin allowlists are derived from it (default 4317). */
+  port?: number }
 
 const str = { type: 'string', minLength: 1, maxLength: 200 } as const;
 const hash = { type: 'string', pattern: '^[a-f0-9]{64}$' } as const;
@@ -34,6 +39,10 @@ export function createApp(deps: AppDeps = {}) {
   // Reject unknown fields instead of Fastify's default of silently stripping them.
   const app = Fastify({ logger: false, bodyLimit: 64 * 1024, ajv: { customOptions: { removeAdditional: false, coerceTypes: false } } });
   const sessions = deps.sessions ?? new SessionManager();
+  const port = deps.port ?? DEFAULT_PORT;
+  const HOSTS = [`127.0.0.1:${port}`, `localhost:${port}`];
+  // The Vite dev server (5173) proxies to the default port only.
+  const ORIGINS = [`http://127.0.0.1:${port}`, `http://localhost:${port}`, 'http://127.0.0.1:5173'];
   app.setErrorHandler((error: { statusCode?: number; code?: string; message: string }, _request, reply) => {
     const status = error.statusCode && error.statusCode >= 400 && error.statusCode < 500 ? error.statusCode : 400;
     // Domain/validation errors only; no stack traces or file paths are sent.
@@ -44,7 +53,9 @@ export function createApp(deps: AppDeps = {}) {
     const origin = request.headers.origin;
     if (origin && !ORIGINS.includes(origin)) return reply.code(403).send({ error: 'ORIGIN_NOT_ALLOWED' });
     if (request.headers['sec-fetch-site'] === 'cross-site') return reply.code(403).send({ error: 'CROSS_SITE' });
-    const path = request.url.split('?')[0];
+    const path = request.url.split('?')[0] ?? '/';
+    // The built web UI (static, read-only) needs no session; every /api route below still does.
+    if (!path.startsWith('/api/') && path !== '/api' && SAFE.includes(request.method)) return;
     if (path === '/api/health' || (path === '/api/session' && request.method === 'GET')) return;
     const sid = parseCookies(request.headers.cookie)[SESSION_COOKIE];
     if (!sessions.valid(sid)) return reply.code(401).send({ error: 'SESSION_REQUIRED' });
@@ -64,6 +75,7 @@ export function createApp(deps: AppDeps = {}) {
   });
 
   const store = deps.store;
+  if (deps.webRoot) registerStaticWeb(app, deps.webRoot);
   if (!store) return app;
   const pipeline = deps.pipeline ?? builderPipeline(store);
   const complaints = new ComplaintService(store);
@@ -266,7 +278,7 @@ export function createApp(deps: AppDeps = {}) {
   app.get('/api/learning/settings', async () => ({
     goal: learningWorkflow.getGoal(),
     gateway: await gatewayStatus(),
-    privacy_and_rights_note: 'Mọi dữ liệu học tập được lưu cục bộ trong SQLite + kho JSON bất biến. AI thật đang bị khóa bởi Gateway (chờ D-01); không có dữ liệu bài làm hay âm thanh nào được gửi ra ngoài.',
+    privacy_and_rights_note: 'Mọi dữ liệu học tập được lưu cục bộ trong SQLite + kho JSON bất biến. AI thật chỉ chạy qua Gateway khi provider bên dưới Sẵn sàng (đủ bằng chứng D-01 và đã đồng ý loại dữ liệu); không bao giờ gửi âm thanh.',
   }));
   return app;
 }

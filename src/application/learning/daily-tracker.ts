@@ -117,10 +117,12 @@ export class DailyTracker {
   /**
    * Rule-based daily reminder (06A §9.3): at most one per study day thanks to scheduler_runs.last_run_day and the
    * outbox dedupe key, so reopening the machine or a second process sends nothing twice. Missed days are not backfilled.
-   * No reminder on a planned rest day.
+   * No reminder on a planned rest day, and none before a goal is saved (its budget would be missing).
    */
   runDailyScheduler(): { ran: boolean; enqueued: boolean } {
     const day = this.today();
+    // Without a goal there is no budget to remind about; the day stays unclaimed so the reminder is built once a goal exists.
+    if (!this.goal()) return { ran: false, enqueued: false };
     if (!this.repo.claimSchedulerRun('daily_reminder', day)) return { ran: false, enqueued: false };
     const view = this.dayView(day);
     if (view.status === 'planned_rest') return { ran: true, enqueued: false };

@@ -12,14 +12,11 @@ AI lập trình phải đọc [AGENTS.md](../AGENTS.md), [PROGRESS.md](../PROGRE
 - `better-sqlite3` có native binding; cần tải binary phù hợp khi cài. Không cần API key hoặc đăng nhập AI để chạy P0.
 
 ## Chạy khung ứng dụng
-Mở hai terminal tại root repository:
+Dùng hằng ngày, một terminal tại root repository:
 ```powershell
-npm.cmd run dev:server
+npm.cmd run app
 ```
-```powershell
-npm.cmd run dev
-```
-Mở [ứng dụng local](http://127.0.0.1:5173). Backend chỉ bind `127.0.0.1:4317`, mở store ở `var/` (chạy từ root). Không public server qua LAN/tunnel. UI có mục Builder & QC (Gói tri thức · Cần xử lý · Lần chạy); Học hôm nay/Tiến độ chưa mở. Mọi `/api` trừ health/session cần cookie phiên; thao tác ghi cần thêm Origin + header CSRF.
+Mở [ứng dụng local](http://127.0.0.1:4317) (giao diện + API cùng địa chỉ). Khi phát triển có tự tải lại: hai terminal `npm.cmd run dev:server` và `npm.cmd run dev`, mở http://127.0.0.1:5173. Backend chỉ bind `127.0.0.1:4317`, mở store ở `var/` (chạy từ root). Không public server qua LAN/tunnel. UI có mục Builder & QC (Gói tri thức · Cần xử lý · Lần chạy); Học hôm nay/Tiến độ chưa mở. Mọi `/api` trừ health/session cần cookie phiên; thao tác ghi cần thêm Origin + header CSRF.
 
 Lệnh vận hành P2:
 ```powershell
@@ -40,7 +37,7 @@ npm.cmd run inventory
 - `check`: ESLint → TypeScript → Vitest → build backend và web.
 - `spike`: SQLite transaction/online backup/restore và stdin/EOF/timeout/output/cancel/cây tiến trình Windows, toàn bộ bằng dữ liệu synthetic tạm.
 - `inventory`: chỉ tra executable CLI trên PATH, không đọc auth hoặc gọi inference; không thấy trên PATH không chứng minh chưa cài.
-- Sau build: `npm.cmd start` chạy backend đã biên dịch; chưa có server phục vụ static bundle production. Dùng `dev` để xem UI P0.
+- Sau build: `npm.cmd start` chạy bản đã biên dịch, phục vụ cả giao diện ở http://127.0.0.1:4317 (E-29). `npm.cmd run backup -- drill` diễn tập khôi phục.
 
 ## Relay AI lập trình (chuyển nền tảng khi hết quota)
 Chạy một nhiệm vụ code qua Claude Code → Codex → Antigravity (Gemini); khi một nền tảng hết quota, bị rate limit hoặc mất đăng nhập, lượt được giao tiếp cho nền tảng kế tiếp kèm `git status`, danh sách file đã sửa và báo cáo cuối của lượt trước. Các AI nối mạch qua working tree và PROGRESS.md. Đây là công cụ phát triển, không phải AI của ứng dụng học.

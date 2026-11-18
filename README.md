@@ -67,9 +67,11 @@ Requires **Windows** and **Node.js 22.18+** (see [.node-version](.node-version))
 
 ```powershell
 npm ci
-npm run dev:server   # API on http://127.0.0.1:4317
-npm run dev          # UI  on http://127.0.0.1:5173
+npm run app          # build, then UI + API on http://127.0.0.1:4317
 ```
+
+For development with hot reload, run `npm run dev:server` (API on 4317) and `npm run dev` (UI on 5173) instead.
+`npm run backup -- drill` restores the latest backup into a temporary folder and checks it end to end.
 
 Useful commands:
 

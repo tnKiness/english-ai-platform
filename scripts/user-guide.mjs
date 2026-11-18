@@ -16,7 +16,8 @@ const problems = [];
 const SCRIPTS = {
   dev: 'Chạy giao diện web (Vite) ở http://127.0.0.1:5173; cần `dev:server` chạy song song.',
   'dev:server': 'Chạy backend local ở 127.0.0.1:4317, mở dữ liệu thật trong `var/`, tự áp migration mới.',
-  start: 'Chạy backend đã build (`dist/`); chưa phục vụ giao diện production.',
+  start: 'Chạy bản đã build (không build lại): giao diện + API ở http://127.0.0.1:4317.',
+  app: 'Cách dùng hằng ngày: build rồi chạy giao diện + API ở http://127.0.0.1:4317 bằng một lệnh.',
   lint: 'Kiểm tra ESLint.',
   typecheck: 'Kiểm tra kiểu TypeScript (không sinh file).',
   test: 'Chạy toàn bộ test Vitest (dữ liệu synthetic, CLI giả, không gọi AI thật).',

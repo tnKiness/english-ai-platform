@@ -25,7 +25,7 @@ function App() {
     </div>
     <nav className="tabs">{([['today', 'Học hôm nay'], ['progress', 'Tiến độ'], ['builder', 'Builder & QC']] as const).map(([k, label]) =>
       <button key={k} className={view === k && !activeAttemptId ? 'active' : ''} onClick={() => { setActiveAttemptId(null); setView(k); }}>{label}</button>)}</nav>
-    <p className="status" aria-live="polite">{connected === null ? 'Đang kiểm tra kết nối…' : connected ? 'Đã kết nối ứng dụng cục bộ. AI thật chưa được kích hoạt (chỉ chạy FakeAdapter synthetic).' : 'Chưa kết nối được ứng dụng cục bộ.'}</p>
+    <p className="status" aria-live="polite">{connected === null ? 'Đang kiểm tra kết nối…' : connected ? 'Đã kết nối ứng dụng cục bộ. Trạng thái AI thật xem ở Cài đặt & Mục tiêu.' : 'Chưa kết nối được ứng dụng cục bộ.'}</p>
     {activeAttemptId ? (
       <WorkspaceScreen attemptId={activeAttemptId} onSwitchAttempt={setActiveAttemptId} onBack={() => setActiveAttemptId(null)} />
     ) : view === 'today' ? (
