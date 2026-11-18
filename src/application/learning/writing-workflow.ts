@@ -1,17 +1,25 @@
 // Learning Workflow & Frame service cho P3-1, P3-2, P3-3 (01 Bước 1–9, 02 §2–5, 03 §1–2, 04 §2, 06 §2).
 // Dùng lại repositories P1, Rule Engine P1, pipeline P2 và FakeAdapter. Mọi kết quả từ FakeAdapter đều
 // gắn nhãn synthetic: true và không bao giờ nâng trạng thái năng lực thật hay suy ra Band (D-02).
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { CLI_PROVIDERS } from '../ai/subscription-guard.js';
 import type { AiResult, Assessment } from '../ai/provider-adapter.js';
 import { DATA_POLICY } from '../context/scoped-reader.js';
 import { classifyEvidence } from '../../domain/evidence/attribution.js';
-import { concludeCompetency, summarizeEvidence, type ClassifiedObservation } from '../../domain/evidence/inference.js';
+import { concludeCompetency, summarizeEvidence, type ClassifiedObservation, type Conclusion } from '../../domain/evidence/inference.js';
 import type { Mode, ObservationFacts, Opportunity, Outcome, Purpose } from '../../domain/evidence/types.js';
 import { assessNovelty } from '../../domain/knowledge/novelty.js';
 import { effectiveObservations } from '../../domain/knowledge/revocation.js';
 import { decideStep6Branch, sliceUnlockedHints, verifyHintDisclosurePolicy, type PreGeneratedHints, type Step6Branch, type VisibleHintSlice } from '../../domain/learning/scaffold-hints.js';
 import { filterEligible, type TaskCandidate } from '../../domain/scheduling/eligibility.js';
+import { studyDayOf } from '../../domain/scheduling/study-day.js';
+import { decideCompetency, effectiveSources, isIndependent, type CompetencyDecision, type ConstraintKind, type EvidenceRecord, type Modality, type TaskBreadth } from '../../domain/policy/competency.js';
+import { hypothesisStatus } from '../../domain/policy/hypothesis.js';
+import type { LoadedPolicy } from '../../domain/policy/params.js';
+import { DAY_MS } from '../../domain/policy/params.js';
+import { focusLimit, frequencyScore, goalRelevance, rankTasks, type PriorityInput, type Skill } from '../../domain/policy/priority.js';
+import { afterVerification, needsDirectCheck, verificationStatus, type ScheduleAction } from '../../domain/policy/verification.js';
+import { loadCompetencyPolicy } from '../../infrastructure/policy/competency-policy.js';
 import { FakeAdapter } from '../../infrastructure/ai/fake-adapter.js';
 import { canonicalJson } from '../../infrastructure/files/paths.js';
 import type { Store } from '../../infrastructure/sqlite/store.js';
@@ -144,6 +152,10 @@ interface SyntheticItemMeta {
   mode: Mode;
   estimated_minutes: number;
   meets_min_scope: boolean;
+  /** D-02 A4/A5: short task or composite (whole paragraph / essay). */
+  task_scope: TaskBreadth;
+  /** D-02 condition: situational/meaning constraint vs explicit structure instruction. */
+  constraint: ConstraintKind;
   competencies: string[];
   outline_suggestions: string[];
   vocabulary_frame: string[];
@@ -161,6 +173,8 @@ const SYNTHETIC_ITEMS: readonly SyntheticItemMeta[] = [
     mode: 'guided',
     estimated_minutes: 25,
     meets_min_scope: true,
+    task_scope: 'composite',
+    constraint: 'semantic',
     competencies: [SYNTHETIC_COMPETENCY_ID, SYNTHETIC_SECONDARY_COMPETENCY_ID],
     outline_suggestions: [
       'Mở bài: Paraphrase hai quan điểm và nêu rõ lập trường xuyên suốt của bạn.',
@@ -180,6 +194,8 @@ const SYNTHETIC_ITEMS: readonly SyntheticItemMeta[] = [
     mode: 'self_practice',
     estimated_minutes: 20,
     meets_min_scope: true,
+    task_scope: 'composite',
+    constraint: 'semantic',
     competencies: [SYNTHETIC_COMPETENCY_ID, SYNTHETIC_SECONDARY_COMPETENCY_ID],
     outline_suggestions: [],
     vocabulary_frame: [],
@@ -195,6 +211,8 @@ const SYNTHETIC_ITEMS: readonly SyntheticItemMeta[] = [
     mode: 'self_practice',
     estimated_minutes: 30,
     meets_min_scope: true,
+    task_scope: 'composite',
+    constraint: 'semantic',
     competencies: [SYNTHETIC_COMPETENCY_ID, SYNTHETIC_SECONDARY_COMPETENCY_ID],
     outline_suggestions: [],
     vocabulary_frame: [],
@@ -210,6 +228,8 @@ const SYNTHETIC_ITEMS: readonly SyntheticItemMeta[] = [
     mode: 'exam',
     estimated_minutes: 30,
     meets_min_scope: true,
+    task_scope: 'composite',
+    constraint: 'semantic',
     competencies: [SYNTHETIC_COMPETENCY_ID, SYNTHETIC_SECONDARY_COMPETENCY_ID],
     outline_suggestions: [],
     vocabulary_frame: [],
@@ -217,7 +237,11 @@ const SYNTHETIC_ITEMS: readonly SyntheticItemMeta[] = [
 ];
 
 export class LearningWorkflowService {
-  constructor(private store: Store) {}
+  /** D-02 v1 (E-33). null = no approved policy file → every conclusion stays "chưa đủ kết luận". */
+  readonly policy: LoadedPolicy | null;
+  constructor(private store: Store, policy?: LoadedPolicy | null) {
+    this.policy = policy === undefined ? loadCompetencyPolicy() : policy;
+  }
 
   /** Khởi tạo gói học Writing synthetic đã kích hoạt để phục vụ luồng P3 độc lập (idempotent). */
   ensureSyntheticWritingCatalog(): void {
@@ -312,6 +336,12 @@ export class LearningWorkflowService {
       attempt_id: string; item_id: string; item_version: string; mode: Mode; purpose: Purpose; state: string; updated_at: string;
     }[];
 
+    // C4: a check waiting too long for an opportunity becomes a direct check with a situational constraint.
+    if (this.policy) {
+      const waiting = this.store.db.prepare("SELECT task_id FROM scheduled_tasks WHERE state = 'AWAITING_OPPORTUNITY'").all() as { task_id: string }[];
+      if (waiting.length) this.store.uow.run(() => { for (const w of waiting) this.maybeDirectCheck(w.task_id, nowIso); });
+    }
+
     const scheduledRows = this.store.db.prepare(`SELECT * FROM scheduled_tasks WHERE state IN ('PENDING', 'AWAITING_OPPORTUNITY') ORDER BY due_at, created_at`).all() as {
       task_id: string; origin_attempt_id: string | null; assigned_attempt_id: string | null; competency_id: string; item_id: string; item_version: string;
       rubric_id: string; rubric_version: string; purpose: Purpose; mode: Mode; estimated_minutes: number; meets_min_scope: number; due_at: string; state: string; synthetic: number;
@@ -352,8 +382,14 @@ export class LearningWorkflowService {
       '9': 'Nhiệm vụ Bước 9 (ôn tập giãn cách đến hạn) để kiểm tra duy trì năng lực theo thời gian.',
     };
 
-    const recommended = filtered.eligible.slice(0, 3).map((c) => {
+    // D-02 D: stage-2 ranking after the eligibility filter. AI dimensions are not produced yet → 1 each (D1 default).
+    const policy = this.policy;
+    const ranked = policy ? rankTasks(filtered.eligible.map((c) => this.priorityInput(dueRows.find((r) => r.task_id === c.task_id)!, policy)), this.store.now(), policy.params) : null;
+    const ordered = ranked ? ranked.map((r) => filtered.eligible.find((c) => c.task_id === r.task_id)!) : filtered.eligible;
+
+    const recommended = ordered.slice(0, 3).map((c) => {
       const row = dueRows.find((r) => r.task_id === c.task_id)!;
+      const priority = ranked?.find((r) => r.task_id === c.task_id)?.priority ?? null;
       const meta = SYNTHETIC_ITEMS.find((m) => m.id === c.item.id);
       return {
         task_id: c.task_id,
@@ -369,6 +405,7 @@ export class LearningWorkflowService {
         due_at: row.due_at,
         state: row.state,
         reason: explainPurpose[c.purpose],
+        priority,
         synthetic: row.synthetic === 1,
       };
     });
@@ -601,15 +638,19 @@ export class LearningWorkflowService {
               location: 'Đoạn mở bài & câu chủ đề đoạn 2',
               symptom: 'Hai đoạn thân bài đưa ra kết luận trái ngược nhau mà thiếu mệnh đề nhượng bộ kết nối lập trường.',
               hypothesis: 'Người học liệt kê ý rời rạc theo từng đoạn thay vì duy trì lập trường xuyên suốt (Task Response).',
-              hypothesis_status: isRepair ? 'confirmed' : 'initial',
+              hypothesis_status: this.hypothesisStatusFor(input.attempt_id),
               expected_verification: 'Sửa lại câu chủ đề bằng mệnh đề nhượng bộ (Bước 5) và tự viết bài mới không gợi ý ở Bước 7A.',
             },
           ];
 
+      // D5: 2–3 focuses per session, 1 for whole-task / complex work; the rest stays visible as other issues.
+      const limit = this.policy ? focusLimit(attempt.purpose === '7B' || attempt.purpose === '9' || attempt.mode === 'exam', this.policy.params) : priorityIssues.length;
+      const overflow = priorityIssues.splice(limit);
       const otherIssues = outcome === 'met'
         ? []
         : [
             'Một số cụm từ lặp lại ở đoạn kết (đã gác lại theo nguyên tắc chỉ ưu tiên 1–2 điểm trọng tâm mỗi lượt).',
+            ...overflow.map((i) => i.symptom),
           ];
 
       const at = this.store.now().toISOString();
@@ -631,13 +672,6 @@ export class LearningWorkflowService {
           'Giả thuyết ban đầu từ bài nộp gốc (synthetic); cần kiểm chứng qua Bước 5 và 7A.',
           at, at,
         );
-      } else if (existingHyp) {
-        const nextStatus = outcome === 'met' ? 'confirmed' : 'initial';
-        const note = outcome === 'met'
-          ? 'Đã tự sửa được ở Bước 5 (scaffolded_repair, synthetic); chờ kiểm chứng độc lập ở 7A.'
-          : 'Vẫn còn lúng túng khi tự sửa ở Bước 5.';
-        this.store.db.prepare('UPDATE error_hypotheses SET status = ?, verification_note = ?, updated_at = ? WHERE hypothesis_id = ?')
-          .run(nextStatus, note, at, existingHyp.hypothesis_id);
       }
 
       // Chuyển bước trong vòng học:
@@ -647,7 +681,9 @@ export class LearningWorkflowService {
         const nextStep = outcome === 'met' ? 6 : 5;
         this.store.db.prepare('UPDATE writing_loop_states SET step = ?, updated_at = ? WHERE attempt_id = ?')
           .run(nextStep, at, input.attempt_id);
+        if (!isRepair) this.integratedStep9(input.attempt_id, SYNTHETIC_COMPETENCY_ID, outcome, obsRow?.opportunity ?? opportunity, at);
       }
+      this.refreshHypotheses(SYNTHETIC_COMPETENCY_ID, at);
     });
 
     return this.getWorkspaceView(input.attempt_id);
@@ -662,54 +698,41 @@ export class LearningWorkflowService {
       .get(attemptId) as { origin_attempt_id: string | null; competency_id: string } | undefined;
     const compId = loop?.competency_id ?? SYNTHETIC_COMPETENCY_ID;
 
-    // Kiểm tra xem tiêu chí phụ có bị tụt không (regression check ở 7A/7B).
+    // Kiểm tra xem tiêu chí phụ có bị tụt không (regression check ở 7A/7B): tụt tiêu chí khác thì chưa công nhận bước này.
     const secondaryObs = this.store.db.prepare('SELECT outcome FROM observations WHERE submission_id = ? AND competency_id = ?')
       .get(submissionId, SYNTHETIC_SECONDARY_COMPETENCY_ID) as { outcome: Outcome } | undefined;
     const regressed = secondaryObs?.outcome === 'not_met';
+    this.store.db.prepare('UPDATE writing_loop_states SET step = ?, updated_at = ? WHERE attempt_id = ?').run(purpose === '9' ? 9 : 8, at, attemptId);
 
-    if (purpose === '7A') {
-      this.store.db.prepare('UPDATE writing_loop_states SET step = 8, updated_at = ? WHERE attempt_id = ?').run(at, attemptId);
-      if (loop?.origin_attempt_id) {
-        const hypStatus = outcome === 'met' && !regressed ? 'confirmed' : 'insufficient_evidence';
-        const hypNote = outcome === 'met' && !regressed
-          ? 'Đạt ở 7A không gợi ý (synthetic candidate); đã xếp lịch 7B và Bước 9 để kiểm tra tích hợp & duy trì.'
-          : regressed
-            ? 'Đạt tiêu chí đang sửa ở 7A nhưng làm tụt tiêu chí phụ (Coherence); chưa công nhận ổn định.'
-            : 'Chưa đạt ở nhiệm vụ chuyển giao 7A; cần củng cố thêm.';
-        this.store.db.prepare('UPDATE error_hypotheses SET status = ?, verification_note = ?, updated_at = ? WHERE attempt_id = ?')
-          .run(hypStatus, hypNote, at, loop.origin_attempt_id);
-      }
-
-      if (outcome === 'met' && !regressed) {
-        // Lập lịch 7B (kiểm chứng tích hợp sau 1 ngày) và Bước 9 (kiểm tra duy trì giãn cách sau 3 ngày).
-        const nowMs = this.store.now().getTime();
-        const due7B = new Date(nowMs + 24 * 60 * 60 * 1000).toISOString();
-        const due9 = new Date(nowMs + 3 * 24 * 60 * 60 * 1000).toISOString();
-        const insertTask = this.store.db.prepare(`INSERT INTO scheduled_tasks (task_id, origin_attempt_id, assigned_attempt_id, competency_id, item_id, item_version,
-          rubric_id, rubric_version, purpose, mode, estimated_minutes, meets_min_scope, due_at, state, synthetic, created_at, updated_at)
-          VALUES (?, ?, NULL, ?, ?, 'v1', ?, 'v1', ?, ?, ?, 1, ?, 'PENDING', 1, ?, ?)`);
-        insertTask.run(`task-7b-${attemptId.slice(0, 8)}`, attemptId, compId, SYNTHETIC_ITEM_7B_ID, SYNTHETIC_WRITING_RUBRIC_ID, '7B', 'self_practice', 30, due7B, at, at);
-        insertTask.run(`task-9-${attemptId.slice(0, 8)}`, attemptId, compId, SYNTHETIC_ITEM_9_ID, SYNTHETIC_WRITING_RUBRIC_ID, '9', 'exam', 30, due9, at, at);
-      }
-      this.store.db.prepare("UPDATE scheduled_tasks SET state = 'COMPLETED', updated_at = ? WHERE assigned_attempt_id = ?").run(at, attemptId);
+    const task = this.store.db.prepare('SELECT task_id, step9_index, synthetic FROM scheduled_tasks WHERE assigned_attempt_id = ? ORDER BY updated_at DESC LIMIT 1')
+      .get(attemptId) as { task_id: string; step9_index: number | null; synthetic: number } | undefined;
+    if (!this.policy) {
+      // Không có chính sách được duyệt: chỉ đóng nhiệm vụ, không tự xếp lịch mới.
+      this.store.db.prepare(`UPDATE scheduled_tasks SET state = ?, updated_at = ? WHERE assigned_attempt_id = ?`).run(opportunity === 'absent' ? 'AWAITING_OPPORTUNITY' : 'COMPLETED', at, attemptId);
       return;
     }
+    // D-02 C: the chain only advances on independent evidence (A/B definitions). Synthetic flow tasks stay synthetic.
+    const record = this.evidenceRecords(compId).find((r) => r.attempt_id === attemptId && r.kind === 'original');
+    const result = afterVerification({
+      purpose: purpose as '7A' | '7B' | '9',
+      independent: record ? isIndependent(record) : false,
+      outcome: regressed && outcome === 'met' ? 'not_met' : outcome,
+      opportunity,
+      step9_index: task?.step9_index ?? 0,
+    }, this.policy.params);
 
-    if (purpose === '7B') {
-      this.store.db.prepare('UPDATE writing_loop_states SET step = 8, updated_at = ? WHERE attempt_id = ?').run(at, attemptId);
+    if (result.awaiting_opportunity) {
+      this.store.db.prepare("UPDATE scheduled_tasks SET state = 'AWAITING_OPPORTUNITY', absent_count = absent_count + ?, updated_at = ? WHERE assigned_attempt_id = ?")
+        .run(opportunity === 'absent' ? 1 : 0, at, attemptId);
+      if (task) this.maybeDirectCheck(task.task_id, at);
+    } else {
       this.store.db.prepare("UPDATE scheduled_tasks SET state = 'COMPLETED', updated_at = ? WHERE assigned_attempt_id = ?").run(at, attemptId);
-      return;
     }
-
-    if (purpose === '9') {
-      this.store.db.prepare('UPDATE writing_loop_states SET step = 9, updated_at = ? WHERE attempt_id = ?').run(at, attemptId);
-      // Bước 9 Opportunity-to-Use (01 Bước 9): nếu bài làm không có cơ hội bộc lộ cấu trúc mục tiêu (opportunity === 'absent'),
-      // KHÔNG kết luận là đã giữ hay đã quên, mà giữ trạng thái AWAITING_OPPORTUNITY.
-      if (opportunity === 'absent') {
-        this.store.db.prepare("UPDATE scheduled_tasks SET state = 'AWAITING_OPPORTUNITY', updated_at = ? WHERE assigned_attempt_id = ?").run(at, attemptId);
-      } else {
-        this.store.db.prepare("UPDATE scheduled_tasks SET state = 'COMPLETED', updated_at = ? WHERE assigned_attempt_id = ?").run(at, attemptId);
-      }
+    const synthetic = task ? task.synthetic === 1 : (record?.synthetic ?? true);
+    if (result.schedule) this.scheduleVerification(compId, loop?.origin_attempt_id ?? attemptId, result.schedule, synthetic, at);
+    if (result.back_to_step6 && loop?.origin_attempt_id) {
+      // C3: 7A chưa đạt → quay về củng cố Bước 6 của vòng gốc (không ép làm lại 7A ngay đầu buổi).
+      this.store.db.prepare('UPDATE writing_loop_states SET step = 6, step6_completed = 0, updated_at = ? WHERE attempt_id = ?').run(at, loop.origin_attempt_id);
     }
   }
 
@@ -1110,15 +1133,19 @@ export class LearningWorkflowService {
     const profiles = competencies.map((comp) => this.competencyDetail(comp.competency_id, comp.title, comp.skill, comp.description));
 
     return {
-      policy_status: 'POLICY_NOT_APPROVED',
+      policy_status: this.policy ? 'APPROVED' : 'POLICY_NOT_APPROVED',
+      policy: this.policy ? { ...this.policy.ref, approved_at: this.policy.params.approved_at, validation_status: this.policy.params.validation_status } : null,
       band_reporting_enabled: false,
-      disclaimer: 'Chưa đủ kết luận về mức năng lực hoặc Band (D-02 chưa có chính sách kiểm định được duyệt). Mọi nhận định từ FakeAdapter đều mang nhãn synthetic và không nâng hồ sơ năng lực thật.',
+      disclaimer: this.policy
+        ? `Mức năng lực theo chính sách D-02 ${this.policy.ref.version} (đã duyệt ${this.policy.params.approved_at}, chưa kiểm định thực nghiệm). Chỉ tính bằng chứng thật của bạn: nhận định synthetic (FakeAdapter) không được tính (G0). Báo điểm Band vẫn tắt cho tới khi có bộ đối chứng D-05.`
+        : 'Chưa đủ kết luận về mức năng lực hoặc Band (chưa có chính sách D-02 được duyệt). Mọi nhận định từ FakeAdapter đều mang nhãn synthetic và không nâng hồ sơ năng lực thật.',
       data_policy: DATA_POLICY,
       competencies: profiles,
     };
   }
 
-  competencyDetail(competencyId: string, title = competencyId, skill = 'writing', description = '') {
+  /** Effective, classified observations of one competency (revocations and supersedes applied, 02 §2.C). */
+  private classifiedFor(competencyId: string) {
     const rawObs = this.store.learning.observations(competencyId, 'learner');
     const revoked = this.store.knowledge.revocations();
     // A key/knowledge withdrawal suspends its dependent package too. Do not keep recognising its cached profile evidence.
@@ -1153,15 +1180,66 @@ export class LearningWorkflowService {
       });
       return { observation: o, use: attr.use };
     });
+    return { effective, excluded, classified };
+  }
 
+  private providerOf(runId: string): string {
+    return (this.store.db.prepare('SELECT provider FROM ai_runs WHERE run_id = ?').get(runId) as { provider: string } | undefined)?.provider ?? 'fake';
+  }
+
+  /**
+   * D-02 v1 evidence records (one per effective observation). Metadata only: never reads submission content.
+   * Synthetic = FakeAdapter run or synthetic fixture content; G0 keeps those out of real conclusions.
+   */
+  evidenceRecords(competencyId: string, classified = this.classifiedFor(competencyId).classified): EvidenceRecord[] {
+    const fallbackModality: Modality = /speaking/.test(competencyId) ? 'speaking' : /reading/.test(competencyId) ? 'reading' : /listening/.test(competencyId) ? 'listening' : 'writing';
+    return classified.map(({ observation: o, use }) => {
+      const sub = this.store.db.prepare('SELECT kind, created_at, attempt_id FROM submissions WHERE submission_id = ?').get(o.submission_id) as { kind: 'original' | 'repair'; created_at: string; attempt_id: string };
+      const att = this.store.db.prepare('SELECT mode, purpose FROM attempts WHERE attempt_id = ?').get(sub.attempt_id) as { mode: Mode; purpose: Purpose };
+      const meta = SYNTHETIC_ITEMS.find((m) => m.id === o.item.id);
+      const servable = this.store.knowledge.servableItem(o.item.id, o.item.version, 'learner');
+      const hint = (this.store.db.prepare('SELECT MAX(hint_level) AS h FROM assistance_events WHERE attempt_id = ? AND displayed_at < ?').get(sub.attempt_id, sub.created_at) as { h: number | null }).h ?? 0;
+      const synthetic = this.providerOf(o.ai_run_id) === 'fake' || Boolean(meta) || competencyId.startsWith('syn.');
+      const breadth: TaskBreadth = att.purpose === '7A' ? 'short' : att.purpose === '7B' || att.purpose === '9' ? 'composite'
+        : att.mode !== 'guided' && (att.purpose === 'practice' || att.mode === 'exam') ? (meta?.task_scope ?? 'unknown') : 'unknown';
+      const modality: Modality = meta ? (meta.skill === 'speaking_text' ? 'speaking' : 'writing') : fallbackModality;
+      // C2: a composite task done while a Bước 9 check was due counts for Bước 9 (the integrated check links the task to this attempt).
+      const step9Due = att.purpose === '9' || (breadth === 'composite' && Boolean(this.store.db.prepare(
+        "SELECT 1 FROM scheduled_tasks WHERE competency_id = ? AND purpose = '9' AND assigned_attempt_id = ? AND schedule_reason IS NOT NULL").get(competencyId, sub.attempt_id)));
+      return {
+        evidence_source_id: o.evidence_source_id, attempt_id: sub.attempt_id, item_id: o.item.id,
+        item_family_id: servable.ok ? servable.item_family_id : meta?.family ?? `unknown:${o.item.id}`,
+        at: sub.created_at, study_day: studyDayOf(new Date(sub.created_at)), outcome: o.outcome, use, scope: o.scope, synthetic, kind: sub.kind,
+        purpose: att.purpose, mode: att.mode, breadth,
+        condition: att.mode === 'guided' ? null : { modality, mode: att.mode, reduced_load: use === 'reduced_load', constraint: meta?.constraint ?? 'unknown' },
+        hint_level_before: hint, counts_for_step9: step9Due,
+      };
+    });
+  }
+
+  /** Append-only conclusion history: same evidence + same policy → same row; a new policy version writes a new row. */
+  private recordConclusion(decision: CompetencyDecision, records: readonly EvidenceRecord[]): void {
+    const { sources } = effectiveSources(records);
+    const fingerprint = createHash('sha256').update(canonicalJson(sources.map((s) => [s.evidence_source_id, s.outcome, s.use, s.kind, s.breadth, s.counts_for_step9, s.hint_level_before]))).digest('hex');
+    this.store.db.prepare(`INSERT INTO competency_conclusions (conclusion_id, competency_id, policy_id, policy_version, policy_hash, evidence_fingerprint, level, confidence, decision_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (competency_id, policy_hash, evidence_fingerprint) DO NOTHING`)
+      .run(randomUUID(), decision.competency_id, decision.policy.id, decision.policy.version, decision.policy.hash, fingerprint, decision.level, decision.confidence, canonicalJson(decision), this.store.now().toISOString());
+  }
+
+  competencyDetail(competencyId: string, title = competencyId, skill = 'writing', description = '') {
+    const { effective, excluded, classified } = this.classifiedFor(competencyId);
     const summary = summarizeEvidence(competencyId, classified);
-    // D-02: không có policy được duyệt -> luôn truyền null để trả về POLICY_NOT_APPROVED / NO_EFFECTIVE_EVIDENCE.
-    const conclusion = concludeCompetency(summary, null);
+    const records = this.evidenceRecords(competencyId, classified);
+    const decision = this.policy ? decideCompetency(competencyId, records, this.policy) : null;
+    if (decision) this.recordConclusion(decision, records);
+    const conclusion: Conclusion = decision
+      ? { status: 'decided', state: decision.state, policy: { id: decision.policy.id, version: decision.policy.version }, rationale: decision.rationale, summary }
+      : concludeCompetency(summary, null);
 
-    // Kiểm tra xem các observation có đến từ provider 'fake' (synthetic) không.
     const observationsWithMeta = effective.map((o: ObservationFacts) => {
-      const runRow = this.store.db.prepare('SELECT provider FROM ai_runs WHERE run_id = ?').get(o.ai_run_id) as { provider: string } | undefined;
+      const provider = this.providerOf(o.ai_run_id);
       const cls = classified.find((c) => c.observation.observation_id === o.observation_id);
+      const rec = records.find((r) => r.evidence_source_id === o.evidence_source_id);
       return {
         observation_id: o.observation_id,
         evidence_source_id: o.evidence_source_id,
@@ -1170,8 +1248,8 @@ export class LearningWorkflowService {
         opportunity: o.opportunity,
         support_impact: o.support_impact,
         use: cls?.use ?? 'inconclusive',
-        provider: runRow?.provider ?? 'fake',
-        synthetic: (runRow?.provider ?? 'fake') === 'fake',
+        provider,
+        synthetic: rec?.synthetic ?? provider === 'fake',
       };
     });
 
@@ -1179,14 +1257,25 @@ export class LearningWorkflowService {
       hypothesis_id: string; symptom: string; hypothesis: string; status: string; verification_note: string; synthetic: number; updated_at: string;
     }[];
 
-    const scheduled = this.store.db.prepare('SELECT task_id, purpose, mode, due_at, state, synthetic FROM scheduled_tasks WHERE competency_id = ? ORDER BY due_at ASC').all(competencyId) as {
-      task_id: string; purpose: Purpose; mode: Mode; due_at: string; state: string; synthetic: number;
+    const scheduled = this.store.db.prepare('SELECT task_id, purpose, mode, due_at, state, synthetic, interval_days, schedule_reason FROM scheduled_tasks WHERE competency_id = ? ORDER BY due_at ASC').all(competencyId) as {
+      task_id: string; purpose: Purpose; mode: Mode; due_at: string; state: string; synthetic: number; interval_days: number | null; schedule_reason: string | null;
     }[];
 
-    const nowIso = this.store.now().toISOString();
-    const awaitingOpp = scheduled.some((s) => s.state === 'AWAITING_OPPORTUNITY');
-    const dueNow = scheduled.some((s) => s.state === 'PENDING' && s.due_at <= nowIso);
-    const verificationStatus = excluded.some((o) => o.reason === 'REVOKED_DEPENDENCY') ? 'needs_recheck' : awaitingOpp ? 'awaiting_opportunity' : dueNow ? 'due' : 'not_due';
+    const now = this.store.now();
+    const nowIso = now.toISOString();
+    const open = scheduled.filter((s) => s.state === 'PENDING' || s.state === 'AWAITING_OPPORTUNITY');
+    const policy = this.policy;
+    // C5 applies to verification checks only (7A/7B/9); lessons and practice are never "cần kiểm tra lại".
+    const statuses: string[] = policy
+      ? open.map((s) => (!['7A', '7B', '9'].includes(s.purpose) ? (s.due_at <= nowIso ? 'due' : 'not_due') : verificationStatus({ due_at: s.due_at, interval_days: s.interval_days, awaiting: s.state === 'AWAITING_OPPORTUNITY', now }, policy.params)))
+      : open.map((s) => (s.state === 'AWAITING_OPPORTUNITY' ? 'awaiting_opportunity' : s.due_at <= nowIso ? 'due' : 'not_due'));
+    const verificationStatusNow = excluded.some((o) => o.reason === 'REVOKED_DEPENDENCY') || statuses.includes('recheck') || decision?.needs_recheck ? 'needs_recheck'
+      : statuses.includes('awaiting_opportunity') ? 'awaiting_opportunity' : statuses.includes('due') ? 'due' : 'not_due';
+
+    const allSynthetic = observationsWithMeta.every((o) => o.synthetic);
+    const label = decision
+      ? `${decision.label} · Độ tin cậy: ${decision.confidence_label}${allSynthetic && observationsWithMeta.length > 0 ? ' (dữ liệu hiện có là synthetic, G0 không tính)' : ''}`
+      : 'Chưa đủ kết luận (chưa có chính sách D-02 được duyệt)';
 
     return {
       competency_id: competencyId,
@@ -1194,17 +1283,128 @@ export class LearningWorkflowService {
       skill,
       description,
       // 4 thành phần hồ sơ năng lực theo 02 §2.A và 06 §2.4:
-      current_state_label: 'Chưa đủ kết luận (chờ chính sách kiểm định D-02; dữ liệu hiện tại là synthetic)',
+      current_state_label: label,
       conclusion,
+      decision,
       evidence_summary: summary,
       excluded_observations_count: excluded.length,
       observations: observationsWithMeta,
       error_hypotheses: hypotheses.map((h) => ({ ...h, synthetic: h.synthetic === 1 })),
       verification_schedule: {
-        status: verificationStatus,
+        status: verificationStatusNow,
         tasks: scheduled.map((s) => ({ ...s, is_due: s.due_at <= nowIso, synthetic: s.synthetic === 1 })),
       },
-      all_synthetic: observationsWithMeta.every((o) => o.synthetic),
+      all_synthetic: allSynthetic,
     };
+  }
+
+  // ---- D-02 v1: chuỗi kiểm chứng (C), sổ lỗi (E) ------------------------------------------------
+  private scheduleVerification(competencyId: string, originAttemptId: string | null, action: ScheduleAction, synthetic: boolean, at: string): void {
+    const itemId = action.purpose === '7B' ? SYNTHETIC_ITEM_7B_ID : SYNTHETIC_ITEM_9_ID;
+    const meta = SYNTHETIC_ITEMS.find((m) => m.id === itemId)!;
+    const due = new Date(this.store.now().getTime() + action.due_in_days * DAY_MS).toISOString();
+    this.store.db.prepare(`INSERT INTO scheduled_tasks (task_id, origin_attempt_id, assigned_attempt_id, competency_id, item_id, item_version, rubric_id, rubric_version,
+      purpose, mode, estimated_minutes, meets_min_scope, due_at, state, synthetic, created_at, updated_at, policy_version, schedule_reason, interval_days, step9_index, constraint_kind)
+      VALUES (?, ?, NULL, ?, ?, 'v1', ?, 'v1', ?, ?, ?, 1, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      `task-${action.purpose.toLowerCase()}-${randomUUID().slice(0, 8)}`, originAttemptId, competencyId, itemId, SYNTHETIC_WRITING_RUBRIC_ID, action.purpose, meta.mode,
+      meta.estimated_minutes, due, synthetic ? 1 : 0, at, at, this.policy?.ref.version ?? null, action.reason, action.interval_days, action.step9_index, action.constraint,
+    );
+  }
+
+  /** C4: after repeated absent opportunities (or a long wait) the waiting check becomes a short task with a situational constraint. */
+  private maybeDirectCheck(taskId: string, at: string): void {
+    if (!this.policy) return;
+    const t = this.store.db.prepare('SELECT * FROM scheduled_tasks WHERE task_id = ?').get(taskId) as {
+      task_id: string; origin_attempt_id: string | null; competency_id: string; purpose: Purpose; due_at: string; state: string; absent_count: number; step9_index: number | null; interval_days: number | null; synthetic: number; schedule_reason: string | null;
+    } | undefined;
+    if (!t || t.state !== 'AWAITING_OPPORTUNITY' || t.purpose !== '9' || t.schedule_reason === 'C4_DIRECT_CHECK') return;
+    if (!needsDirectCheck({ absent_count: t.absent_count, due_at: t.due_at, now: this.store.now() }, this.policy.params)) return;
+    this.store.db.prepare("UPDATE scheduled_tasks SET state = 'CANCELLED', updated_at = ? WHERE task_id = ?").run(at, t.task_id);
+    this.scheduleVerification(t.competency_id, t.origin_attempt_id, { purpose: '9', due_in_days: 0, step9_index: t.step9_index, interval_days: t.interval_days ?? 0, reason: 'C4_DIRECT_CHECK', constraint: 'semantic' }, t.synthetic === 1, at);
+  }
+
+  /** C2: a composite practice/exam task done while Bước 9 is due counts as the maintenance check. */
+  private integratedStep9(attemptId: string, competencyId: string, outcome: Outcome, opportunity: Opportunity, at: string): void {
+    if (!this.policy) return;
+    const attempt = this.store.learning.getAttempt(attemptId);
+    const meta = SYNTHETIC_ITEMS.find((m) => m.id === attempt?.item.id);
+    if (!attempt || attempt.mode === 'guided' || meta?.task_scope !== 'composite' || !(attempt.purpose === 'practice' || attempt.mode === 'exam')) return;
+    const task = this.store.db.prepare(`SELECT task_id, step9_index, absent_count, synthetic FROM scheduled_tasks WHERE competency_id = ? AND purpose = '9'
+      AND state IN ('PENDING', 'AWAITING_OPPORTUNITY') AND due_at <= ? ORDER BY due_at LIMIT 1`).get(competencyId, at) as { task_id: string; step9_index: number | null; absent_count: number; synthetic: number } | undefined;
+    if (!task) return;
+    if (opportunity !== 'observed' || outcome === 'inconclusive') {
+      this.store.db.prepare("UPDATE scheduled_tasks SET state = 'AWAITING_OPPORTUNITY', absent_count = absent_count + ?, updated_at = ? WHERE task_id = ?").run(opportunity === 'absent' ? 1 : 0, at, task.task_id);
+      this.maybeDirectCheck(task.task_id, at);
+      return;
+    }
+    const record = this.evidenceRecords(competencyId).find((r) => r.attempt_id === attemptId && r.kind === 'original');
+    if (!record || !isIndependent(record)) return; // not independent: the check stays due, nothing advances
+    this.store.db.prepare("UPDATE scheduled_tasks SET assigned_attempt_id = ?, state = 'COMPLETED', schedule_reason = COALESCE(schedule_reason, 'C2_STEP9_INTERVAL'), updated_at = ? WHERE task_id = ?").run(attemptId, at, task.task_id);
+    const result = afterVerification({ purpose: '9', independent: true, outcome, opportunity, step9_index: task.step9_index ?? 0 }, this.policy.params);
+    if (result.schedule) this.scheduleVerification(competencyId, attemptId, result.schedule, task.synthetic === 1, at);
+  }
+
+  /** Current status of the hypothesis tied to this attempt (or its origin), for the diagnosis view. */
+  private hypothesisStatusFor(attemptId: string): PriorityIssue['hypothesis_status'] {
+    const origin = (this.store.db.prepare('SELECT origin_attempt_id FROM writing_loop_states WHERE attempt_id = ?').get(attemptId) as { origin_attempt_id: string | null } | undefined)?.origin_attempt_id;
+    const row = this.store.db.prepare('SELECT status FROM error_hypotheses WHERE attempt_id IN (?, ?) ORDER BY updated_at DESC LIMIT 1').get(attemptId, origin ?? attemptId) as { status: PriorityIssue['hypothesis_status'] } | undefined;
+    return row?.status ?? 'initial';
+  }
+
+  /**
+   * E: recompute each hypothesis of the competency from its evidence. Real hypotheses use only real evidence (G0);
+   * synthetic hypotheses (flow tests) use their synthetic evidence. Self-repairs never confirm or reject.
+   * No stored evidence marks a condition as favouring one cause over competing ones yet, so confirmation needs a discriminating task.
+   */
+  private refreshHypotheses(competencyId: string, at: string): void {
+    if (!this.policy) return;
+    const records = this.evidenceRecords(competencyId);
+    const rows = this.store.db.prepare('SELECT hypothesis_id, attempt_id, status, synthetic, created_at FROM error_hypotheses WHERE competency_id = ?').all(competencyId) as
+      { hypothesis_id: string; attempt_id: string; status: string; synthetic: number; created_at: string }[];
+    for (const h of rows) {
+      const evidence = records
+        .filter((r) => (h.synthetic === 1 ? true : r.scope === 'learner' && !r.synthetic))
+        .filter((r) => r.attempt_id === h.attempt_id || r.at > h.created_at)
+        .flatMap((r) => (r.outcome === 'met' || r.outcome === 'not_met'
+          ? [{ attempt_id: r.attempt_id, outcome: r.outcome, independent: isIndependent(r), supports_specifically: false, contradicts: false }] : []));
+      const next = hypothesisStatus({ evidence, discriminating_task: null }, this.policy.params);
+      if (next.status !== h.status) {
+        this.store.db.prepare('UPDATE error_hypotheses SET status = ?, verification_note = ?, updated_at = ? WHERE hypothesis_id = ?')
+          .run(next.status, `D-02 ${this.policy.ref.version}: ${next.reason}`, at, h.hypothesis_id);
+      }
+    }
+  }
+
+  /** D1–D4 inputs of one scheduled task. AI dimensions are not produced by any adapter yet → null (D1 default 1). */
+  private priorityInput(row: { task_id: string; competency_id: string; item_id: string; purpose: Purpose; due_at: string; estimated_minutes: number }, policy: LoadedPolicy): PriorityInput {
+    const goal = this.getGoal();
+    const meta = SYNTHETIC_ITEMS.find((m) => m.id === row.item_id);
+    const skill: Skill = meta?.skill === 'speaking_text' ? 'speaking' : 'writing';
+    const hyp = this.store.db.prepare('SELECT status FROM error_hypotheses WHERE competency_id = ? ORDER BY updated_at DESC LIMIT 1').get(row.competency_id) as { status: PriorityIssue['hypothesis_status'] } | undefined;
+    // D4 "buổi bị bỏ qua": study days with recorded activity after the due day (today excluded) while the task stayed open.
+    const skipped = (this.store.db.prepare('SELECT COUNT(DISTINCT study_day) AS n FROM study_activity_events WHERE study_day > ? AND study_day < ?')
+      .get(studyDayOf(new Date(row.due_at)), studyDayOf(this.store.now())) as { n: number }).n;
+    return {
+      task_id: row.task_id, purpose: row.purpose, due_at: row.due_at, estimated_minutes: row.estimated_minutes, ai_impact: null, ai_certainty: null,
+      hypothesis_status: hyp?.status ?? null,
+      frequency: frequencyScore(this.recentNotMet(row.competency_id, policy.params.priority.frequency_window_days), policy.params),
+      relevance: goalRelevance(goal ? { exam_type: goal.exam_type, targets: { writing: goal.target_writing, speaking: goal.target_speaking, reading: goal.target_reading, listening: goal.target_listening } } : null, skill, null),
+      skipped_sessions: skipped,
+    };
+  }
+
+  /** Priority scores of every open scheduled task (used by the catch-up planner, F2). */
+  openTaskPriorities(): Map<string, number> {
+    const policy = this.policy;
+    if (!policy) return new Map();
+    const rows = this.store.db.prepare("SELECT task_id, competency_id, item_id, purpose, due_at, estimated_minutes FROM scheduled_tasks WHERE state IN ('PENDING', 'AWAITING_OPPORTUNITY')").all() as
+      { task_id: string; competency_id: string; item_id: string; purpose: Purpose; due_at: string; estimated_minutes: number }[];
+    return new Map(rankTasks(rows.map((r) => this.priorityInput(r, policy)), this.store.now(), policy.params).map((r) => [r.task_id, r.priority.score]));
+  }
+
+  /** D1 frequency: not_met sources of the competency (G0/G1) inside the window. */
+  private recentNotMet(competencyId: string, windowDays: number): number {
+    const since = this.store.now().getTime() - windowDays * DAY_MS;
+    return effectiveSources(this.evidenceRecords(competencyId)).sources.filter((s) => s.outcome === 'not_met' && Date.parse(s.at) >= since).length;
   }
 }

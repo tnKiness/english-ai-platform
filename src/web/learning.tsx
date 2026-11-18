@@ -36,7 +36,21 @@ interface RecommendedTask {
   due_at: string;
   state: string;
   reason: string;
+  priority: { score: number; parts: Record<string, number>; starving: boolean; reasons: string[] } | null;
   synthetic: boolean;
+}
+
+interface ReplanData {
+  policy_status: string;
+  evaluation: string[];
+  proposal: {
+    proposal_id: string; state: string; expires_at: string; estimated_minutes: number; reasons: string[];
+    changes: {
+      placements: { task_id: string; from_due_at: string; to_day: string; reason: string }[];
+      unplaced: string[];
+      advisory: { kind: string; actual_minutes: number; target_minutes: number; window_days: number } | null;
+    };
+  } | null;
 }
 
 interface TodayData {
@@ -124,6 +138,7 @@ interface WorkspaceData {
 
 interface ProgressData {
   policy_status: string;
+  policy: { id: string; version: string; hash: string; approved_at: string; validation_status: string } | null;
   band_reporting_enabled: boolean;
   disclaimer: string;
   competencies: {
@@ -133,6 +148,11 @@ interface ProgressData {
     description: string;
     current_state_label: string;
     conclusion: { status: string; reason?: string };
+    decision: {
+      level: string; label: string; confidence: string; confidence_label: string; needs_recheck: boolean; excluded_by_g0: number; rationale: string[];
+      by_condition: { key: string; level: string; independent_met: number; independent_not_met: number; last_outcome: string; needs_recheck: boolean }[];
+      demotions: { condition: string; from: string; to: string; at: string }[];
+    } | null;
     evidence_summary: {
       observation_count: number;
       independent_sources_met: number;
@@ -491,6 +511,38 @@ export function WorkspaceScreen({ attemptId, onSwitchAttempt, onBack }: { attemp
   </section>;
 }
 
+const PRIORITY_LABELS: Record<string, string> = {
+  impact: 'ảnh hưởng', certainty: 'độ chắc chắn', frequency: 'tần suất', relevance: 'liên quan mục tiêu', deadline: 'thời hạn', waited: 'đã chờ',
+};
+
+/** D-02 F: catch-up proposal. Nothing changes until the learner accepts; "Giữ nguyên lịch" is always available. */
+function ReplanPanel({ onChanged }: { onChanged: () => void }) {
+  const [data, setData] = useState<ReplanData | null>(null);
+  const [message, setMessage] = useState('');
+  const load = useCallback(() => { get<ReplanData>('/api/learning/replan').then(setData).catch((e: unknown) => setMessage(e instanceof Error ? e.message : String(e))); }, []);
+  useEffect(() => { load(); }, [load]);
+  const p = data?.proposal;
+  if (!p) return message ? <p role="alert" className="error">{message}</p> : null;
+  const decide = (action: 'accept' | 'reject') => {
+    post<{ state: string }>(`/api/learning/replan/${encodeURIComponent(p.proposal_id)}/${action}`, {})
+      .then((r) => { setMessage(r.state === 'ACCEPTED' ? 'Đã áp dụng lịch mới.' : r.state === 'REJECTED' ? 'Giữ nguyên lịch.' : r.state === 'STALE' ? 'Lịch đã thay đổi từ lúc đề xuất; đề xuất không còn áp dụng.' : `Đề xuất đã ${r.state}.`); load(); onChanged(); })
+      .catch((e: unknown) => setMessage(e instanceof Error ? e.message : String(e)));
+  };
+  return <article className="card">
+    <h3>Đề xuất sắp xếp lại lịch</h3>
+    <ul>{p.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+    {p.changes.placements.length > 0 && <ul>{p.changes.placements.map((x) => <li key={x.task_id}><span className="mono">{x.task_id}</span>: dời sang ngày <b>{x.to_day}</b> — {x.reason}</li>)}</ul>}
+    {p.changes.unplaced.length > 0 && <p>Chưa xếp được trong 2 tuần tới (giữ nguyên hạn): {p.changes.unplaced.join(', ')}</p>}
+    {p.changes.advisory && <p>Thời gian học {p.changes.advisory.window_days} ngày qua: {p.changes.advisory.actual_minutes}/{p.changes.advisory.target_minutes} phút. Bạn có thể thu hẹp phạm vi ưu tiên (bớt kỹ năng ưu tiên thấp) hoặc dời mốc thi trong Cài đặt; hệ thống không tự nhồi thêm bài.</p>}
+    <p className="mono">Hết hạn: {p.expires_at}. Không có nợ phút: ngày đã lỡ không cộng dồn.</p>
+    <div className="actions">
+      {p.changes.placements.length > 0 && <button onClick={() => decide('accept')}>Áp dụng lịch mới</button>}
+      <button onClick={() => decide('reject')}>Giữ nguyên lịch</button>
+    </div>
+    <p role="status">{message}</p>
+  </article>;
+}
+
 export function TodayScreen({ onOpenAttempt }: { onOpenAttempt: (attemptId: string) => void }) {
   const [data, setData] = useState<TodayData | null>(null);
   const [minutesInput, setMinutesInput] = useState<string>('');
@@ -537,6 +589,8 @@ export function TodayScreen({ onOpenAttempt }: { onOpenAttempt: (attemptId: stri
       </div>
     </article>
 
+    <ReplanPanel onChanged={() => load()} />
+
     {data.in_progress.length > 0 && (
       <article className="card">
         <h3>Bài đang làm dở (tiếp tục ngay đúng trạng thái đã lưu)</h3>
@@ -561,6 +615,7 @@ export function TodayScreen({ onOpenAttempt }: { onOpenAttempt: (attemptId: stri
             <h4>{t.title} {t.synthetic && <span className="tag">synthetic</span>}</h4>
             <p>{t.reason}</p>
             <p className="mono">Mục đích: {PURPOSE_LABELS[t.purpose]} · Chế độ: {MODE_LABELS[t.mode]} · Ước tính: {t.estimated_minutes} phút</p>
+            {t.priority && <p className="mono">Điểm ưu tiên (D-02): {t.priority.score} = {Object.entries(t.priority.parts).map(([k, v]) => `${PRIORITY_LABELS[k] ?? k} ${v}`).join(' + ')}{t.priority.starving ? ' · giữ chỗ chống trì hoãn' : ''}</p>}
             <button onClick={() => {
               const modeToUse = t.purpose === '7A' || t.purpose === '7B' || t.purpose === '9' ? t.mode : selectedMode;
               post<WorkspaceData>('/api/learning/attempts', {
@@ -622,7 +677,7 @@ export function ProgressScreen() {
     <TrackingPanel />
     <article className="card">
       <p><b>Giới hạn suy luận (D-02):</b> {data.disclaimer}</p>
-      <p className="mono">Trạng thái chính sách: {data.policy_status} · Báo điểm Band: {data.band_reporting_enabled ? 'Bật' : 'Tắt (chưa có bộ đối chứng & chính sách được duyệt)'}</p>
+      <p className="mono">Trạng thái chính sách: {data.policy_status}{data.policy ? ` · ${data.policy.id} ${data.policy.version} (duyệt ${data.policy.approved_at}, chưa kiểm định thực nghiệm)` : ''} · Báo điểm Band: {data.band_reporting_enabled ? 'Bật' : 'Tắt (chưa có bộ đối chứng D-05)'}</p>
     </article>
 
       <label>Lý do yêu cầu xem xét lại <input value={reason} maxLength={2000} onChange={(e) => setReason(e.target.value)} /></label>
@@ -636,7 +691,13 @@ export function ProgressScreen() {
           <tbody>
             <tr>
               <th>1. Nhận định hiện tại</th>
-              <td>{c.current_state_label} (<code>{c.conclusion.status}</code>{c.conclusion.reason ? ` — ${c.conclusion.reason}` : ''})</td>
+              <td>
+                {c.current_state_label} (<code>{c.decision ? c.decision.level : c.conclusion.status}</code>{c.conclusion.reason ? ` — ${c.conclusion.reason}` : ''})
+                {c.decision && c.decision.by_condition.length > 0 && (
+                  <ul>{c.decision.by_condition.map((k) => <li key={k.key}><span className="mono">{k.key}</span>: {k.level} · đạt {k.independent_met} / chưa đạt {k.independent_not_met}{k.needs_recheck ? ' · cần kiểm tra lại' : ''}</li>)}</ul>
+                )}
+                {c.decision && c.decision.rationale.length > 0 && <details><summary>Lý do</summary><ul>{c.decision.rationale.map((r) => <li key={r}>{r}</li>)}</ul></details>}
+              </td>
             </tr>
             <tr>
               <th>2. Bằng chứng tính đến nay</th>
@@ -720,7 +781,9 @@ export function SettingsScreen() {
   </section>;
 }
 
-interface Storage { root: string; total_bytes: number; areas: Record<string, number>; disk: { free_bytes: number; total_bytes: number }; retention: { note: string } }
+interface Storage { root: string; total_bytes: number; areas: Record<string, number>; disk: { free_bytes: number; total_bytes: number }; retention: { note: string };
+  backups: { enabled: boolean; backups_kept: number; last_backup_at: string | null; last_drill: { at: string; ok: boolean; error: string | null } | null; next_drill_due: string | null } }
+const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('vi-VN', { hour12: false }) : 'chưa có');
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
 /** P5-3 (E-28): export your data and see disk usage. Nothing here deletes data (retention policy D-07 is open). */
@@ -745,6 +808,8 @@ function DataPanel() {
       <p>Đang dùng {mb(usage.total_bytes)} trong <span className="mono">{usage.root}</span> · ổ đĩa còn trống {mb(usage.disk.free_bytes)}</p>
       <p className="mono">{Object.entries(usage.areas).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${mb(v)}`).join(' · ')}</p>
       <p className="mono">{usage.retention.note}</p>
+      <p>Sao lưu tự động: <b>{usage.backups.enabled ? 'bật' : 'tắt'}</b> (mỗi ngày học một bản khi ứng dụng đang chạy, giữ {usage.backups.backups_kept}/10 bản) · bản gần nhất: {when(usage.backups.last_backup_at)}</p>
+      <p>Diễn tập khôi phục (mỗi tuần): {usage.backups.last_drill ? <><b>{usage.backups.last_drill.ok ? 'ĐẠT' : 'THẤT BẠI'}</b> lúc {when(usage.backups.last_drill.at)}{usage.backups.last_drill.error ? ` — ${usage.backups.last_drill.error}` : ''}</> : 'chưa chạy'}{usage.backups.next_drill_due ? ` · lần tới từ ${when(usage.backups.next_drill_due)}` : ''}</p>
     </>}
     <div className="actions"><button onClick={() => void exportNow()}>Xuất dữ liệu học tập</button></div>
     {result && <p>{result}</p>}

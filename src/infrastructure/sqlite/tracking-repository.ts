@@ -100,6 +100,11 @@ export class TrackingRepository {
     }).immediate();
   }
 
+  /** Day a job last completed (E-32 auto backup: recorded only after success, so a failure is retried later the same day). */
+  lastRunDay(job: string): string | null {
+    return (this.db.prepare('SELECT last_run_day FROM scheduler_runs WHERE job_name = ?').get(job) as { last_run_day: string } | undefined)?.last_run_day ?? null;
+  }
+
   enqueueNotification(n: { dedupe_key: string; kind: 'daily_reminder'; study_day: string; payload: unknown }): boolean {
     const at = this.now().toISOString();
     return this.db.prepare(`INSERT INTO notification_outbox (notification_id, dedupe_key, channel, kind, study_day, payload_json, state, created_at, updated_at)

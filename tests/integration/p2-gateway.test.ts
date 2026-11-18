@@ -14,7 +14,7 @@ import { verifyEntrypoint } from '../../src/infrastructure/ai/gateway/entrypoint
 import { AiExecutionGateway, GatewayAdapter, type GatewayDeps } from '../../src/infrastructure/ai/gateway/gateway.js';
 import { createRunSandbox, profileIsolationIssues, sandboxIssues } from '../../src/infrastructure/ai/gateway/isolation.js';
 import { containsSecretLike, redact } from '../../src/infrastructure/ai/gateway/redaction.js';
-import { processNextJob } from '../../src/worker/worker.js';
+import { processNextJob, quotaWaitable } from '../../src/worker/worker.js';
 import { assessInput, fixture, tempDir, type Fixture } from './p1-helpers.js';
 
 let f: Fixture | undefined;
@@ -108,6 +108,12 @@ describe('subscriptionGuard (06A §8, D-01)', () => {
 
   it('maps login, capability and data-recipient gaps to their own stops', () => {
     expect(subscriptionGuard(guardInput({ account: { state: 'NEEDS_LOGIN' } }))).toEqual({ allowed: false, error: 'AUTH_EXPIRED', reasons: ['PROFILE_NEEDS_LOGIN'] });
+    // E-31: a quota pause alone yields exactly these reasons, which is what lets the worker wait instead of exiting.
+    for (const state of ['QUOTA_EXHAUSTED', 'COOLDOWN'] as const) {
+      const d = subscriptionGuard(guardInput({ account: { state } }));
+      expect(d).toMatchObject({ allowed: false, reasons: [`PROFILE_${state}`] });
+      expect(quotaWaitable([{ ready: false, reasons: (d as { reasons: string[] }).reasons }])).toBe(true);
+    }
     expect(subscriptionGuard(guardInput({ job: { ...guardInput().job, required_capabilities: ['direct_audio'] } }))).toEqual({ allowed: false, error: 'CAPABILITY_MISSING', reasons: ['CAPABILITY_direct_audio'] });
     expect(subscriptionGuard(guardInput({ job: { ...guardInput().job, data_classes: ['learner_submission'] } }))).toEqual({ allowed: false, error: 'DATA_RECIPIENT_NOT_ALLOWED', reasons: ['NO_CONSENT_learner_submission'] });
   });

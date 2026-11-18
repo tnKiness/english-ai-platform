@@ -554,3 +554,58 @@ P0–P3 đã hoàn tất phần code và nghiệm thu trên gói synthetic (D-01
 - Lệnh / kết quả: `npx.cmd vitest run tests/integration/p5-app.test.ts` 3/3; `tests/unit/study-day.test.ts tests/integration/p5-tracking.test.ts` 11/11 sau sửa; `npm.cmd run check`: lint, kiểm hướng dẫn (khớp), typecheck, **272/272 (37 file)**, build đạt. Chưa chạy `backup -- drill` trên `var/` thật (để người dùng chạy).
 - Giới hạn: tìm kiếm trên UI chỉ kiểm trường hợp rỗng (dữ liệu thử chưa có gói phát hành; trường hợp có kết quả đã có test). `npm run app` build lại mỗi lần chạy (vài giây); `npm start` để khởi động nhanh.
 
+### 18/11/2026 — E-30 tự dọn backup, E-31 worker chờ hạn mức (người dùng chốt) + bản đề xuất D-02 / DONE
+- Nguồn: người dùng trả lời câu hỏi 18/11/2026: D-07 "Chỉ dọn backup cũ"; worker "Chờ tới khi mở lại"; D-02 "Soạn bản đề xuất để duyệt". Câu hỏi sao lưu tự động: người dùng hỏi lại tác động (token, diễn tập tuần) — đã giải thích, chưa triển khai, chờ trả lời.
+- File: `src/infrastructure/backup/prune.ts` (mới), `src/cli/backup.ts` (`prune`, dọn sau `create` và sau `drill` đạt), `src/worker/worker.ts` (`quotaWaitable`, `waitForProvider`), `src/worker/main.ts` (chờ thay vì thoát khi chỉ hết hạn mức), `docs/engineering/D02_PROPOSAL.md` (mới, CHƯA CHỐT: A trạng thái 6 mức + hạ mức, B độ tin cậy, C lịch kiểm chứng/giãn cách, D điểm ưu tiên + chống trì hoãn, E sổ lỗi, F đề xuất lịch bù), hướng dẫn sử dụng (mục 7, 8, 11, 12), DECISIONS (E-30, E-31, dòng D-02/D-07).
+- Test: `tests/integration/e30-e31.test.ts` (3: giữ N bản + bản diễn tập đạt, không đụng bản sao tay/`.partial`, ghi log, idempotent; điều kiện chờ chỉ khi chặn thuần hạn mức; chờ rồi trả về khi mở lại, dừng khi lý do đổi hoặc Ctrl+C); thêm ca vào `p2-gateway.test.ts` xác nhận guard thật trả đúng `PROFILE_QUOTA_EXHAUSTED`/`PROFILE_COOLDOWN`.
+- Đo dữ liệu thật (chỉ đọc): `var/db` 1.1 MB, `var/media` 0, `var/backups` 1.3 MB (2 thư mục; `pre-m8-repair-…` không có manifest nên không bao giờ bị dọn).
+- Lệnh / kết quả: `npx.cmd vitest run tests/integration/e30-e31.test.ts` 3/3; ca guard 1/1; `npm.cmd run check`: lint, kiểm hướng dẫn (khớp), typecheck, **275/275 (38 file)**, build đạt. Chưa chạy `backup -- create/prune` trên `var/` thật.
+- Còn chờ người dùng: ~~duyệt D02_PROPOSAL (A–F)~~ đã chốt (E-33); xác nhận lại extra usage (Codex hết hạn 19/11, Claude/agy 20/11). Sao lưu tự động: người dùng chọn "Bật cả hai" → E-32 bên dưới.
+
+### 18/11/2026 — E-32 Sao lưu tự động mỗi ngày + diễn tập khôi phục mỗi tuần (người dùng chốt) / DONE
+- Nguồn: người dùng chọn "Bật cả hai" sau khi được giải thích (không tốn token/hạn mức, chỉ chép file cục bộ; diễn tập = khôi phục thử để chắc backup dùng được).
+- File: `src/infrastructure/backup/auto.ts` (mới), `src/server/main.ts` (lịch nền, `STUDY_ENGLISH_AUTO_BACKUP=0` để tắt), `src/server/app.ts` (`backups` trong `/api/learning/storage`), `src/infrastructure/sqlite/tracking-repository.ts` (`lastRunDay`), `src/infrastructure/backup/prune.ts` (xuất `standardBackups`), `src/web/learning.tsx` (trạng thái trong "Dữ liệu của bạn"); hướng dẫn sử dụng (mục 4.1, 8, 11, 12); DECISIONS (E-32, D-07).
+- Test `tests/integration/e32-auto-backup.test.ts` (2): một backup/ngày học, không làm gì khi đã đủ, diễn tập mỗi 7 ngày, trạng thái + hạn diễn tập kế tiếp; dọn còn 10 bản; diễn tập lỗi (backup mới nhất bị sửa) báo đúng lý do, không thử lại trong cùng ngày.
+- Lệnh / kết quả: `npx.cmd vitest run tests/integration/e32-auto-backup.test.ts` 2/2; `npm.cmd run check`: lint, kiểm hướng dẫn (khớp), typecheck, **277/277 (39 file)**, build đạt. Chưa chạy trên `var/` thật: lần chạy `app`/`dev:server` kế tiếp sẽ tự tạo backup đầu tiên và diễn tập (khoảng 15 giây sau khi mở).
+- Giới hạn: chỉ chạy khi ứng dụng mở; `dev:server` đang chạy của người dùng dùng code cũ cho tới khi tự nạp lại (tsx watch) hoặc khởi động lại.
+
+### 18/11/2026 — E-33 Chốt chính sách D-02 v1 (người dùng chốt) / DONE (tài liệu)
+- Nguồn: người dùng "đồng ý các đề xuất trong D02_PROPOSAL" và yêu cầu đánh giá bản góp ý 8 điểm. Đã đối chiếu với schema (`synthetic`, `item_family_id`, `unlocked_hint_level`, `reduced_load`, `meets_min_scope`, 4 trạng thái `error_hypotheses`) và đặc tả (01 Bước 4/9, 02 §3/§4/§5.A.1, 06A §9.2).
+- File: `docs/engineering/D02_PROPOSAL.md` (viết lại thành chính sách v1 đã chốt, có bảng lịch sử sửa đổi: nhận/sửa/bỏ từng góp ý), DECISIONS (E-33, dòng D-02).
+- Chưa làm: code chính sách (`policies/competency-policy.v1.json`, Rule Engine A–F, test từng dòng). Code vẫn trả `POLICY_NOT_APPROVED`.
+- Lệnh: `npm.cmd run docs:guide` rồi `npm.cmd run check` → lint, guide check, typecheck, 277/277 test (39 file), build đều đạt.
+
+### 18/11/2026 — E-34 Triển khai chính sách D-02 v1 / DONE
+- **Nguồn:** người dùng yêu cầu "Triển khai D-02". Chính sách theo [D02_PROPOSAL](docs/engineering/D02_PROPOSAL.md) (E-33).
+- **File mới:**
+  - `policies/competency-policy.v1.json`
+  - `src/domain/policy/{params,competency,verification,priority,hypothesis,replan}.ts`
+  - `src/infrastructure/policy/competency-policy.ts`
+  - `src/application/learning/replan-planner.ts`
+  - `migrations/0012_competency_policy.sql`: cột chuỗi kiểm chứng trên `scheduled_tasks` và bảng bất biến `competency_conclusions`
+  - `tests/unit/d02-policy.test.ts` (34 ca)
+  - `tests/integration/d02-app.test.ts` (5 ca)
+- **File sửa:**
+  - `src/application/learning/writing-workflow.ts`: kết luận A/B và lịch sử; chuỗi C thay E-18; xếp hạng D; sổ lỗi E; trọng tâm D5
+  - `src/infrastructure/sqlite/replan-repository.ts`: `apply` trong transaction CAS, `reject`
+  - `src/server/app.ts`: 3 route replan
+  - `src/web/learning.tsx`: thẻ đề xuất lịch, điểm ưu tiên, mức/độ tin cậy/mức theo điều kiện/lý do
+  - `src/infrastructure/export/learner-export.ts`: xuất `competency_conclusions`
+  - `scripts/user-guide.mjs`: mô tả route
+  - `tests/integration/p3-learning.test.ts`: luồng mới 7A → 7B → 9, chính sách APPROVED, G0 cho A1
+  - `p1-backup`, `p1-persistence`: thêm migration 12
+  - Tài liệu: hướng dẫn sử dụng (mục 1, 4.2, 4.3, 4.6, 12), D02_PROPOSAL (triển khai + làm rõ), DECISIONS (E-34, dòng D-02), PROJECT_STRUCTURE
+- **Lệnh và kết quả:**
+  - `npx.cmd vitest run tests/unit/d02-policy.test.ts`: 34/34
+  - `npx.cmd vitest run tests/integration/d02-app.test.ts`: 5/5
+  - `npm.cmd run docs:guide`, rồi `npm.cmd run check`: lint, guide check, typecheck, 316/316 test (41 file), build đều đạt
+- **Kiểm UI thật:** `node dist/server/main.js` với dữ liệu tạm (`STUDY_ENGLISH_DATA_DIR` trong scratchpad, cổng 4327, `STUDY_ENGLISH_AUTO_BACKUP=0`).
+  - Màn Tiến độ hiện chính sách APPROVED v1 và mức A1 / "Chưa xác lập".
+  - Màn Học hôm nay hiện điểm ưu tiên D-02.
+  - Console không có lỗi.
+  - Chưa chạy trên `var/` thật. Migration 0012 sẽ áp dụng ở lần mở app kế tiếp; nên sao lưu trước.
+- **Giới hạn:**
+  - D1: chưa adapter nào trả điểm AI, nên lấy mặc định 1.
+  - E1: chưa có dữ liệu "ủng hộ riêng giả thuyết" hay nhiệm vụ phân biệt nguyên nhân.
+  - Bài 7B/9 tự xếp là synthetic (D-05).
+  - Tham số chưa kiểm định thực nghiệm.

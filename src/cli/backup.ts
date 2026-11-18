@@ -4,15 +4,22 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createBackup, promoteRestored, restoreBackup, type RestoreReport } from '../infrastructure/backup/backup.js';
 import { restoreDrill } from '../infrastructure/backup/drill.js';
+import { DEFAULT_BACKUPS_KEPT, pruneBackups } from '../infrastructure/backup/prune.js';
 import { dataPaths } from '../infrastructure/files/paths.js';
 import { openStore } from '../infrastructure/sqlite/store.js';
 
 const USAGE = `Usage: npm run backup -- <command>
-  create                              online backup of var/ (DB + JSON + media) into var/backups
+  create                              online backup of var/ (DB + JSON + media) into var/backups, then prune old backups
+  prune [--keep <n>]                  delete old standard backups, keeping the newest n (default 10) and the last passed drill;
+                                      nothing else is ever deleted (E-30)
   restore <backup_dir> <target_dir>   restore into a NEW/empty directory and verify (does not touch var/)
   promote <target_dir> --confirm      replace var/ with a verified restore (stop server and worker first)
   drill [backup_dir]                  restore drill: new backup (or the given one) → restore into a temp folder → open with the
                                       app and read all learner data back → delete the temp copy; logged in var/backups/restore-drills.jsonl`;
+
+function report(r: { kept: string[]; removed: string[] }) {
+  console.log(r.removed.length ? `Đã xóa ${r.removed.length} backup cũ (giữ ${r.kept.length}): ${r.removed.join(', ')}` : `Không có backup cũ cần xóa (đang giữ ${r.kept.length}).`);
+}
 
 async function main(args: string[]): Promise<number> {
   const [command, a, b] = args;
@@ -21,8 +28,15 @@ async function main(args: string[]): Promise<number> {
     try {
       const { dir, manifest } = await createBackup(store.db, store.paths, store.now);
       console.log(`Backup OK: ${dir}\n  db sha256 ${manifest.db.sha256}, ${manifest.files.length} files, ${manifest.migrations.length} migrations`);
+      report(pruneBackups(store.paths, { now: store.now }));
       return 0;
     } finally { store.close(); }
+  }
+  if (command === 'prune') {
+    const i = args.indexOf('--keep');
+    const keep = i >= 0 ? Number(args[i + 1]) : DEFAULT_BACKUPS_KEPT;
+    report(pruneBackups(dataPaths(), { keep }));
+    return 0;
   }
   if (command === 'drill') {
     let backupDir = a ? resolve(a) : null;
@@ -34,6 +48,7 @@ async function main(args: string[]): Promise<number> {
     }
     const r = await restoreDrill(backupDir, paths);
     if (!r.ok) { console.error(`Diễn tập khôi phục THẤT BẠI: ${r.error}`); return 1; }
+    report(pruneBackups(paths));
     const rows = Object.values(r.tables ?? {}).reduce((s, n) => s + n, 0);
     console.log(`Diễn tập khôi phục ĐẠT (${r.duration_ms} ms): ${r.restored?.files} file, ${r.restored?.migrations} migration, ${rows} dòng dữ liệu học, ${r.media} bản thu âm đọc lại được. Bản thử đã xóa; nhật ký: var/backups/restore-drills.jsonl`);
     return 0;

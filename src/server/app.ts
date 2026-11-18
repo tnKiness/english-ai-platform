@@ -5,11 +5,13 @@ import { ReadingWorkflow } from '../application/learning/reading-workflow.js';
 import type { ReadingAnswer } from '../domain/learning/reading.js';
 import { AudioWorkflow, AUDIO_MAX_BYTES } from '../application/learning/audio-workflow.js';
 import { LearningWorkflowService } from '../application/learning/writing-workflow.js';
+import { ReplanPlanner } from '../application/learning/replan-planner.js';
 import { ConsoleService } from '../application/qc/console.js';
 import type { BuilderPipeline } from '../application/qc/pipeline.js';
 import type { ContextRole } from '../application/context/scoped-reader.js';
 import type { Mode, Opportunity, Purpose } from '../domain/evidence/types.js';
 import { gatewayFor } from '../infrastructure/ai/gateway/compose.js';
+import { autoBackupStatus } from '../infrastructure/backup/auto.js';
 import { exportLearnerData, storageUsage } from '../infrastructure/export/learner-export.js';
 import { ConsoleQueries } from '../infrastructure/sqlite/console-queries.js';
 import { builderPipeline, type Store } from '../infrastructure/sqlite/store.js';
@@ -272,9 +274,15 @@ export function createApp(deps: AppDeps = {}) {
     const { dir, manifest } = exportLearnerData(store.db, store.paths, { now: store.now });
     return { dir, created_at: manifest.created_at, tables: Object.fromEntries(Object.entries(manifest.tables).map(([k, v]) => [k, v.rows])), media: manifest.media.length, excluded: manifest.excluded };
   });
-  app.get('/api/learning/storage', async () => storageUsage(store.db, store.paths));
+  app.get('/api/learning/storage', async () => ({ ...storageUsage(store.db, store.paths), backups: autoBackupStatus(store) }));
 
   app.get('/api/learning/progress', async () => learningWorkflow.progressView());
+
+  // ---- D-02 v1 F: catch-up schedule proposals (E-33). Nothing changes until the learner accepts. ----------------
+  const replan = new ReplanPlanner(store, learningWorkflow.policy, () => learningWorkflow.openTaskPriorities());
+  app.get('/api/learning/replan', async () => replan.current());
+  app.post<{ Params: { id: string } }>('/api/learning/replan/:id/accept', { schema: body({}, []) }, async (r) => replan.accept(r.params.id));
+  app.post<{ Params: { id: string } }>('/api/learning/replan/:id/reject', { schema: body({}, []) }, async (r) => replan.reject(r.params.id));
   app.get('/api/learning/settings', async () => ({
     goal: learningWorkflow.getGoal(),
     gateway: await gatewayStatus(),

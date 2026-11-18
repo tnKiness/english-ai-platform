@@ -29,6 +29,7 @@ export const EXPORT_TABLES: { table: string; where?: string; omit?: string[]; wh
   { table: 'audio_transcripts', where: `recording_id IN (SELECT recording_id FROM audio_recordings WHERE ${LEARNER_ATTEMPTS})` },
   { table: 'exposure_events' },
   { table: 'scheduled_tasks' },
+  { table: 'competency_conclusions' },
   { table: 'plan_versions' },
   { table: 'replan_proposals' },
   { table: 'daily_study_logs' },

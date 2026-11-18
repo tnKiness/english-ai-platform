@@ -40,7 +40,7 @@ Tài liệu này là **sổ tay vận hành** cho người dùng: cài đặt, c
 Nguyên tắc chung bạn sẽ gặp khắp hệ thống:
 - **AI chỉ đề xuất**; ứng dụng kiểm tra rồi mới ghi nhận. Thiếu căn cứ thì chặn, không đoán.
 - **Không lộ đáp án**: đề giải mù, gợi ý mở theo nấc ở server; xem lời giải, tự sửa có hỗ trợ và làm độc lập được tính khác nhau.
-- **Chưa báo Band** và chưa kết luận năng lực chính thức (chờ chính sách D-02, bộ đối chứng D-05).
+- **Chưa báo Band** (chờ bộ đối chứng D-05). Mức năng lực được kết luận theo [chính sách D-02 v1](engineering/D02_PROPOSAL.md) đã duyệt (chưa kiểm định thực nghiệm), **chỉ từ bài làm thật** của bạn: kết quả synthetic không được tính.
 - Dữ liệu cá nhân (bài làm, audio, DB) **chỉ nằm trong `var/`**, không commit.
 
 ## 2. Cài đặt lần đầu
@@ -104,7 +104,7 @@ Lưu ý:
 Thanh điều hướng: **Học hôm nay** · **Tiến độ** · **Builder & QC**, và nút **Cài đặt & Mục tiêu** ở góc trên.
 
 ### 4.1. Cài đặt & Mục tiêu
-Nhập Band mục tiêu tổng và từng kỹ năng, loại thi (Academic/General), ngày thi dự kiến, **số phút học mỗi ngày** và **mỗi tuần**. Số phút/ngày là quỹ thời gian mặc định cho mỗi ngày học. Màn này cũng cho xem trạng thái gateway AI, và khung **Dữ liệu của bạn** (dung lượng, nút xuất dữ liệu; xem [mục 8](#8-sao-lưu-khôi-phục-và-xuất-dữ-liệu)).
+Nhập Band mục tiêu tổng và từng kỹ năng, loại thi (Academic/General), ngày thi dự kiến, **số phút học mỗi ngày** và **mỗi tuần**. Số phút/ngày là quỹ thời gian mặc định cho mỗi ngày học. Màn này cũng cho xem trạng thái gateway AI, và khung **Dữ liệu của bạn** (dung lượng, sao lưu tự động: bản gần nhất và kết quả diễn tập, nút xuất dữ liệu; xem [mục 8](#8-sao-lưu-khôi-phục-và-xuất-dữ-liệu)).
 
 ### 4.2. Học hôm nay
 - **Ngày học hôm nay** (theo giờ Việt Nam):
@@ -114,7 +114,8 @@ Nhập Band mục tiêu tổng và từng kỹ năng, loại thi (Academic/Gener
   - *Đã học ngoài ứng dụng*: ghi ngày học offline, kèm số phút tự khai (không bắt buộc). Phút tự khai hiển thị tách biệt với phút đo được.
 - **Tiếp tục bài đang làm**: bài Writing còn dở hiện ở đầu.
 - **Quỹ thời gian phiên này** và **chế độ làm bài**: *Có hướng dẫn*, *Tự luyện*, *Mô phỏng thi* (ẩn mọi hỗ trợ). Bấm *Cập nhật danh sách nhiệm vụ* để lọc nhiệm vụ vừa với số phút.
-- **Nhiệm vụ đề xuất** kèm lý do và nhãn mục đích: bài học/luyện, kiểm chứng 7A, tổng hợp 7B, ôn giãn cách Bước 9.
+- **Nhiệm vụ đề xuất** kèm lý do và nhãn mục đích: bài học/luyện, kiểm chứng 7A, tổng hợp 7B, ôn giãn cách Bước 9. Danh sách được xếp theo **điểm ưu tiên D-02** (hiện ngay dưới mỗi nhiệm vụ): ảnh hưởng + độ chắc chắn + tần suất lỗi + liên quan mục tiêu (mỗi phần 0–3) + thời hạn (+3 đến hạn hôm nay, +5 quá hạn) + đã chờ (+1 mỗi 3 ngày, tối đa +3). Nhiệm vụ kiểm chứng bị bỏ qua 3 buổi học hoặc quá hạn hơn 7 ngày được **giữ chỗ đầu danh sách** (mỗi buổi một nhiệm vụ).
+- **Đề xuất sắp xếp lại lịch** (chỉ hiện khi cần): khi có nhiệm vụ trễ quá 1 ngày và tổng phút (trễ + đến hạn 3 ngày tới) vượt quỹ 3 ngày tới, hệ thống đề xuất dời nhiệm vụ sang các ngày tới, không ngày nào vượt quỹ, tối đa 1 bài kiểm chứng/ngày, không cắt nhỏ bài kiểm chứng. Nếu 14 ngày qua bạn học dưới 60 % quỹ (không tính ngày nghỉ có kế hoạch), đề xuất kèm gợi ý thu hẹp phạm vi hoặc dời mốc thi. **Không có gì thay đổi cho tới khi bạn bấm** *Áp dụng lịch mới* hoặc *Giữ nguyên lịch*; đề xuất hết hạn sau 48 giờ và tối đa 1 đề xuất mỗi ngày.
 - Phía dưới cùng màn: **Reading** và **Luyện nói (audio mẫu)**.
 
 ### 4.3. Workspace Writing (vòng học)
@@ -123,9 +124,14 @@ Nhập Band mục tiêu tổng và từng kỹ năng, loại thi (Academic/Gener
 3. **Nộp bài** → nhận chẩn đoán tối đa 1–2 lỗi trọng tâm.
 4. **Tự sửa (Bước 5)**: mở gợi mở theo nấc 1 → 2 → 3 (mỗi nấc ghi lại mức hỗ trợ đã dùng), hoặc chọn *Để mình thử thêm* / *Giải thích trực tiếp*. Gửi **bản sửa** mới được chấm lại.
 5. **Bước 6**: bài học nhỏ + câu kiểm tra khái niệm.
-6. **Làm bài kiểm chứng 7A**: một bài mới, không gợi ý, để xem bạn tự áp dụng được chưa. Hệ thống tự xếp lịch 7B (+1 ngày) và Bước 9 (+3 ngày).
+6. **Làm bài kiểm chứng 7A**: một bài mới, không gợi ý, để xem bạn tự áp dụng được chưa. Lịch theo D-02 (mục C):
+   - Đạt 7A → xếp **7B** từ ngày hôm sau. Chưa đạt 7A → quay về củng cố Bước 6, không bắt làm lại 7A ngay.
+   - Đạt 7B → mở **Bước 9** sau 3 ngày; mỗi lần đạt, khoảng cách giãn ra 3 → 7 → 14 → 30 → 60 ngày. Chưa đạt 7B → luyện thêm rồi làm lại 7B sau 2 ngày. Chưa đạt Bước 9 → quay về khoảng 3 ngày.
+   - Bài tổng hợp (luyện tập/thi thử) làm khi Bước 9 đã đến hạn được **tính luôn cho Bước 9** nếu là bài độc lập và có cơ hội dùng cấu trúc.
+   - Bài không có cơ hội dùng cấu trúc → *chờ cơ hội*, không tính đạt/chưa đạt; sau 2 bài như vậy (hoặc chờ quá 7 ngày) hệ thống giao một bài ôn ngắn có ràng buộc tình huống.
+   - Chỉ kết quả **độc lập** (không gợi ý, bài mới) mới đẩy chuỗi kiểm chứng.
 
-Kết quả hiện tại là **synthetic** (FakeAdapter) trừ khi worker chạy với AI thật; mọi nhận định đều ghi "chưa đủ kết luận" về năng lực (D-02).
+Kết quả hiện tại là **synthetic** (FakeAdapter) trừ khi worker chạy với AI thật. Lịch kiểm chứng vẫn chạy với dữ liệu synthetic để bạn thử luồng, nhưng **mức năng lực không tính kết quả synthetic** (quy tắc G0), nên hồ sơ sẽ ở *Chưa đủ dữ liệu* cho tới khi có bài chấm thật.
 
 ### 4.4. Reading
 Chọn bài → làm trên đề **giải mù** (không có đáp án trong trang) → nộp. Gợi ý theo nấc; nấc 3 mới mở đáp án + giải thích và được ghi là đã xem lời giải. Chế độ thi không có gợi ý. Bài bị thu hồi ngừng cấp phát ngay.
@@ -137,7 +143,11 @@ Thu âm (WAV/WebM/OGG, tối đa 8 MiB), nghe lại, thu lại; mọi bản thu 
 - **Theo dõi 7 ngày**: trạng thái từng ngày (*Có ghi nhận học*, *Nghỉ có kế hoạch*, *Học ngoài ứng dụng / offline*, *Thiếu dữ liệu quan sát*, *Hôm nay: chưa có dữ liệu*), phút ghi nhận / quỹ (chia theo viết, đọc, nghe, nói), vòng học (bắt đầu / nộp / sửa / nhiệm vụ xong), nhận định (đạt / chưa đạt / chưa kết luận), độ lệch lộ trình (nhiệm vụ đã đến hạn), kèm thời điểm tính.
 - Thời gian học được ghi **tự động mỗi phút** khi màn Workspace/Reading/Luyện nói đang hiển thị hoặc audio đang phát; không cần gõ phím. Mất mạng thì trình duyệt giữ lại và gửi sau.
 - Ngày không có dữ liệu **không** bị coi là bỏ học; thiếu giờ **không** cộng dồn sang ngày sau và **không** làm giảm hồ sơ năng lực.
-- **Hồ sơ năng lực** theo 4 thành phần, chỉ từ dữ liệu thật trong DB; báo Band đang tắt.
+- **Hồ sơ năng lực** theo 4 thành phần, chỉ từ dữ liệu thật trong DB; báo Band đang tắt. Dòng *Nhận định hiện tại* cho:
+  - **Mức** A1–A6: *Chưa đủ dữ liệu* → *Cần hỗ trợ* → *Tự sửa được khi có gợi ý* (bản sửa đạt khi chỉ mở tới nấc 2; mở nấc 3 là đã xem lời giải, không tính) → *Vận dụng bước đầu trong nhiệm vụ ngắn* → *Vận dụng được trong bài tổng hợp* → *Duy trì ổn định* (2 lần đạt Bước 9 cách nhau ≥ 7 ngày).
+  - **Độ tin cậy**: *Chưa xác lập* / *Thấp* / *Trung bình* (≥ 2 nguồn, ≥ 2 ngày, ≥ 2 họ bài) / *Cao* (≥ 3 nguồn, ≥ 2 họ bài, ≥ 2 điều kiện, 3 lần gần nhất đều đạt).
+  - **Mức theo từng điều kiện làm bài** (phương thức × tự luyện/thi thử × giảm tải × loại ràng buộc): đạt ở tự luyện không suy ra đạt ở thi thử. Một lần chưa đạt độc lập chỉ đánh dấu *cần kiểm tra lại*; 2 lần liên tiếp ở 2 bài khác nhau cùng điều kiện mới hạ một mức. Không bao giờ hạ vì nghỉ học hay quá hạn.
+  - Bấm *Lý do* để xem căn cứ từng kết luận. Mỗi kết luận được lưu lịch sử kèm phiên bản chính sách (bảng `competency_conclusions`).
 - **Yêu cầu xem xét lại** một nhận định: nhập lý do, bấm nút cạnh nhận định. Hệ thống tạo job tái đánh giá (worker `--complaints` xử lý), giữ nguyên bản cũ và lịch sử.
 
 ## 5. Builder & QC
@@ -190,7 +200,8 @@ Tóm tắt; hướng dẫn chi tiết từng lệnh: [Codex](engineering/D01_COD
 ```powershell
 npm.cmd run worker
 ```
-- Không có provider nào `READY` lúc khởi động: worker in lý do và thoát (mã 3). Dùng `--fake` để thử với dữ liệu synthetic (chỉ job dry-run).
+- Mọi provider **chỉ đang hết hạn mức**: worker không thoát mà **chờ**, kiểm lại mỗi 5 phút (đổi bằng `--quota-recheck-ms`, không gọi model) và tự bắt đầu khi có provider mở lại. `Ctrl+C` để dừng.
+- Không có provider nào `READY` vì lý do khác (thiếu bằng chứng D-01, hết hạn xác nhận extra usage, cần đăng nhập…): worker in lý do và thoát (mã 3). Dùng `--fake` để thử với dữ liệu synthetic (chỉ job dry-run).
 - `--complaints`: xử lý job khiếu nại/tái đánh giá.
 - Danh sách đầy đủ các cờ: [bảng tự động](#cờ-worker).
 - Worker chỉ xử lý một job một lúc; khởi động lại an toàn (job đang chạy dở được thu hồi khi hết lease).
@@ -210,7 +221,14 @@ Chỉ khi kiểm tra đạt, **dừng server và worker**, rồi thay `var/` (b�
 ```powershell
 npm.cmd run backup -- promote <thư_mục_mới> --confirm
 ```
-Nên sao lưu trước khi cập nhật code có migration mới. Chưa có lịch sao lưu tự động.
+Nên sao lưu trước khi cập nhật code có migration mới.
+
+**Sao lưu tự động** (E-32, bạn chốt): khi ứng dụng (`app`, `start` hoặc `dev:server`) đang chạy, hệ thống tự tạo **một backup mỗi ngày học** (lần kiểm đầu tiên khoảng 15 giây sau khi mở, sau đó kiểm mỗi giờ) và **diễn tập khôi phục mỗi tuần** trên bản mới nhất, rồi dọn backup cũ theo quy tắc bên dưới. Chỉ là chép file trên máy: không gọi AI, không tốn hạn mức, không gửi gì ra ngoài; mỗi lần mất vài giây và chiếm dung lượng bằng khoảng kích thước dữ liệu. Máy tắt hoặc ứng dụng không chạy thì không chạy bù. Lỗi được thử lại ở lần kiểm sau (diễn tập lỗi chỉ thử lại vào ngày hôm sau) và hiện ở **Cài đặt & Mục tiêu → Dữ liệu của bạn**, cùng thời điểm backup gần nhất và kết quả diễn tập. Tắt bằng biến môi trường `STUDY_ENGLISH_AUTO_BACKUP=0`.
+
+**Tự dọn backup cũ** (theo quyết định của bạn, E-30): sau mỗi `backup -- create` và mỗi lần diễn tập đạt, hệ thống giữ **10 bản backup mới nhất** và bản đã diễn tập ĐẠT gần nhất, xóa các bản chuẩn cũ hơn. Chỉ xóa thư mục backup do `backup -- create` tạo (có `manifest.json` đúng định dạng); không bao giờ đụng bản sao tay (ví dụ `pre-m8-repair-…`), bản xuất, bài làm, audio hay lịch sử. Mỗi lần xóa ghi vào `var/backups/prune-log.jsonl`. Đổi số bản giữ khi dọn tay:
+```powershell
+npm.cmd run backup -- prune --keep 20
+```
 
 ### Diễn tập khôi phục
 Một bản sao lưu chỉ đáng tin khi đã khôi phục thử thành công:
@@ -286,11 +304,13 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 | Trang báo không kết nối | Backend chưa chạy hoặc chạy sai thư mục | Chạy `npm.cmd run app` từ root repo |
 | `EADDRINUSE` / cổng 4317 đang dùng | Một bản khác (`app`, `start` hoặc `dev:server`) đang chạy | Dùng bản đang chạy, dừng nó bằng `Ctrl+C`, hoặc chạy bản thứ hai với `STUDY_ENGLISH_PORT` khác |
 | `Built web UI not found` | Chưa build giao diện | `npm.cmd run app` (tự build) |
+| Cài đặt báo diễn tập THẤT BẠI | Backup mới nhất hỏng hoặc thiếu file | Chạy `npm.cmd run backup -- drill` (tạo bản mới rồi diễn tập); nếu vẫn lỗi, giữ nguyên `var/` và kiểm tra ổ đĩa |
 | `backup -- drill` báo THẤT BẠI | Backup hỏng hoặc thiếu file | Đọc lý do in ra/`restore-drills.jsonl`; tạo backup mới và diễn tập lại trước khi dựa vào bản cũ |
 | `403 HOST_NOT_ALLOWED` / `ORIGIN_NOT_ALLOWED` | Mở bằng địa chỉ khác `127.0.0.1`/`localhost` | Mở đúng http://127.0.0.1:5173 |
 | `401 SESSION_REQUIRED`, `403 CSRF_INVALID` | Phiên cũ sau khi khởi động lại backend | Tải lại trang |
 | `Applied migration N was modified` | File migration đã áp bị sửa | Không sửa migration cũ; khôi phục file gốc, đưa thay đổi vào migration mới |
-| Worker thoát mã 3 | Không provider nào `READY` | `npm.cmd run ai -- status` xem lý do; hoặc `--fake` để thử |
+| Worker thoát mã 3 | Không provider nào `READY` vì lý do khác hạn mức | `npm.cmd run ai -- status` xem lý do; hoặc `--fake` để thử |
+| Worker in "Mọi provider đang hết hạn mức… Worker chờ" | Hết hạn mức ở mọi hãng | Bình thường: worker tự chạy tiếp khi có hãng mở lại |
 | Provider `BILLING_UNVERIFIED` | Thiếu/hết hạn bằng chứng, xác nhận extra usage quá 30 ngày, biến API key trong môi trường, CLI trả lỗi lạ | Đọc `reasons` trong `ai -- status`; xác nhận lại hoặc chạy lại D-01 |
 | Provider `QUOTA_EXHAUSTED`/`COOLDOWN` | Hết hạn mức | Chờ tới giờ mở lại (tự về READY); job tự chạy tiếp nếu worker đang chạy |
 | `MODEL_NOT_VERIFIED` / `MODEL_CANARY_FAILED` | Model chưa được phép hoặc canary hỏng | `ai -- allow-models` hoặc chọn model khác bằng `ai -- model` |
@@ -302,10 +322,10 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 
 ## 12. Giới hạn hiện tại
 
-- **Chưa báo Band, chưa kết luận năng lực** (D-02: chưa có chính sách ngưỡng được duyệt).
+- **Chưa báo Band** (D-05). Mức năng lực theo D-02 v1 là tham số **đã duyệt nhưng chưa kiểm định thực nghiệm**; nên xem lại sau 4–6 tuần dùng thật. Chưa có adapter nào trả 2 chiều điểm AI (ảnh hưởng, độ chắc chắn) nên cả hai đang lấy mặc định 1; chưa có dữ liệu "điều kiện ủng hộ riêng một giả thuyết" nên sổ lỗi chỉ xác nhận được qua nhiệm vụ phân biệt nguyên nhân (chưa có). Bài kiểm chứng 7B/Bước 9 tự xếp đang dùng bài synthetic (chờ nội dung thật D-05).
 - **Nội dung thật và bộ đối chứng** chưa có (D-05); bài học hiện là synthetic. Provider dự phòng chỉ được tự động dùng khi có báo cáo đối chứng D-05.
 - **Chưa có ASR/chấm phát âm** (D-06).
-- Chưa có chính sách lưu giữ/tự dọn dữ liệu (D-07: chỉ có xuất dữ liệu và báo cáo dung lượng), đề xuất lịch bù tự động, lịch sao lưu tự động, kênh Telegram/email.
+- Chỉ backup cũ được tự dọn (E-30); dữ liệu học, audio, bản xuất không bao giờ tự xóa. Sao lưu tự động chỉ chạy khi ứng dụng đang mở (không có dịch vụ nền của Windows). Chưa có kênh nhắc qua Telegram/email.
 - Danh sách quyết định còn mở: [DECISIONS — Điểm mở](engineering/DECISIONS.md).
 
 ## 13. Cách tài liệu này được giữ đúng
@@ -377,7 +397,9 @@ Usage: npm run ai -- <command>
 <!-- AUTO:backup-cli:START — tự động, không sửa tay -->
 ```text
 Usage: npm run backup -- <command>
-  create                              online backup of var/ (DB + JSON + media) into var/backups
+  create                              online backup of var/ (DB + JSON + media) into var/backups, then prune old backups
+  prune [--keep <n>]                  delete old standard backups, keeping the newest n (default 10) and the last passed drill;
+                                      nothing else is ever deleted (E-30)
   restore <backup_dir> <target_dir>   restore into a NEW/empty directory and verify (does not touch var/)
   promote <target_dir> --confirm      replace var/ with a verified restore (stop server and worker first)
   drill [backup_dir]                  restore drill: new backup (or the given one) → restore into a temp folder → open with the
@@ -400,11 +422,11 @@ Usage: npm run export -- <command>
 | Cờ | Tác dụng |
 |---|---|
 | `--fake` | Khi không có provider READY: chạy job dry-run bằng FakeAdapter (kết quả synthetic, không thành bằng chứng học). |
+| `--once` | Xử lý đúng một job rồi thoát, in kết quả JSON. |
+| `--quota-recheck-ms` | Chu kỳ kiểm lại job `WAITING_QUOTA` (mặc định 300000 ms = 5 phút); không gọi model. |
 | `--fake-blind-answers` | Kèm `--fake`: đáp án giải mù giả lập, ví dụ `"q1=FALSE,q2=NOT GIVEN"`. |
 | `--complaints` | Chỉ xử lý job khiếu nại/tái đánh giá của người học qua gateway. |
-| `--once` | Xử lý đúng một job rồi thoát, in kết quả JSON. |
 | `--poll-ms` | Khoảng nghỉ khi hàng đợi trống (mặc định 2000 ms). |
-| `--quota-recheck-ms` | Chu kỳ kiểm lại job `WAITING_QUOTA` (mặc định 300000 ms = 5 phút); không gọi model. |
 <!-- AUTO:worker-flags:END -->
 
 ### Route API cục bộ
@@ -456,7 +478,10 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `POST /api/learning/notifications/:id/dismiss` | Đánh dấu đã xem một lời nhắc. |
 | `POST /api/learning/export` | Xuất dữ liệu học tập vào `var/exports/` (chỉ đọc, không xóa gì). |
 | `GET /api/learning/storage` | Dung lượng dữ liệu trong `var/`, dung lượng trống của ổ, các bảng lớn nhất. |
-| `GET /api/learning/progress` | Tiến độ & hồ sơ năng lực (chưa báo Band, chờ D-02). |
+| `GET /api/learning/progress` | Tiến độ & hồ sơ năng lực: mức A1–A6, độ tin cậy, mức theo từng điều kiện làm bài theo chính sách D-02 v1 (chưa báo Band). |
+| `GET /api/learning/replan` | Đề xuất sắp xếp lại lịch (D-02 F): tạo tối đa 1 đề xuất mỗi ngày khi bị trễ quá quỹ giờ; không thay đổi gì cho tới khi bạn chọn. |
+| `POST /api/learning/replan/:id/accept` | Áp dụng đề xuất lịch (chỉ khi lịch chưa đổi từ lúc đề xuất; quá 48 giờ thì hết hạn). |
+| `POST /api/learning/replan/:id/reject` | "Giữ nguyên lịch": đóng đề xuất, không dời nhiệm vụ nào. |
 | `GET /api/learning/settings` | Cài đặt: mục tiêu và trạng thái gateway AI. |
 
 **Builder & QC**
@@ -497,6 +522,7 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `0009_runtime_canary.sql` | 0009_runtime_canary — E-23: user-declared allowed models, per-CLI-version model canary records and |
 | `0010_daily_tracking.sql` | P5-1 Daily tracking (06A §9, §10.A; 02 §5.C.2; decision E-25). Append-only activity and declarations; the daily |
 | `0011_knowledge_search.sql` | P5-2 Knowledge search (06A §7.A.2 "lọc quyền trước khi tra cứu bằng SQLite FTS/BM25", 05 §C.5, 06 §5.B.1; E-27). |
+| `0012_competency_policy.sql` | D-02 v1 (E-33, user decision 18/11/2026): verification-chain metadata on scheduled tasks and an append-only |
 <!-- AUTO:migrations:END -->
 
 ### Quyết định kỹ thuật
@@ -532,6 +558,11 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | E-27 | P5-2 Tra cứu kho tri thức FTS5/BM25 lọc quyền trong cùng truy vấn (17/11/2026) |
 | E-28 | P5-3 Xuất dữ liệu học tập và báo cáo dung lượng (17/11/2026) |
 | E-29 | P5-4 Chạy một lệnh, dữ liệu/cổng tùy chọn, diễn tập khôi phục (18/11/2026) |
+| E-30 | Tự dọn backup cũ (18/11/2026, người dùng chốt) |
+| E-31 | Worker chờ khi mọi provider hết hạn mức (18/11/2026, người dùng chốt) |
+| E-32 | Sao lưu tự động mỗi ngày + diễn tập khôi phục mỗi tuần (18/11/2026, người dùng chốt "Bật cả hai") |
+| E-33 | Chốt chính sách D-02 v1 (18/11/2026, người dùng chốt) |
+| E-34 | Triển khai chính sách D-02 v1 (18/11/2026, người dùng yêu cầu "Triển khai D-02") |
 <!-- AUTO:decisions:END -->
 
 ### Trạng thái công việc

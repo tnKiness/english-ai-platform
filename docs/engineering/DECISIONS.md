@@ -84,12 +84,12 @@ Ngày lập: 19/10/2026. Các quy định engineering là bổ sung triển khai
 | ID | Nội dung | Chặn ở đâu | Bằng chứng cần để đóng |
 |---|---|---|---|
 | D-01 | ĐÃ ĐÓNG cho Codex (READY, xem mục D-01 / Codex bên trên và [D01_CODEX_READ_BOUNDARY](D01_CODEX_READ_BOUNDARY.md)). Với `claude-code` và `agy`: đã có adapter + guard + bộ thu `probe-boundary claude\|agy` và `verify claude\|agy` theo E-21 ([D01_CLAUDE_AGY](D01_CLAUDE_AGY.md), `tests/integration/e21-claude-agy.test.ts`); chờ người dùng đăng nhập profile riêng và chạy probe/verify thật | Bật adapter dự phòng thật (`claude-code`, `agy`) ở P4 | Phiên bản + argv/launch path + auth mode không chứa secret + quyền lợi + tình trạng extra usage + báo cáo probe ranh giới PASS (`cli_tools_disabled` cho claude-code, `cli_permission_deny` cho agy) + timeout/cancel + output contract |
-| D-02 | Ngưỡng tin cậy, nâng/hạ trạng thái, lịch ôn và trọng số chưa định lượng | Bật chính sách tự động tương ứng | Bảng policy có nguồn, phiên bản, ca đạt/chưa đạt/chưa kết luận; tham số đề xuất cần đánh giá trước khi gọi là chuẩn |
+| D-02 | Ngưỡng tin cậy, nâng/hạ trạng thái, lịch ôn và trọng số chưa định lượng. **Đã chốt v1 18/11/2026**: [D02_PROPOSAL](D02_PROPOSAL.md) (A–F người dùng đồng ý + góp ý được đánh giá, đưa vào theo yêu cầu). **Đã triển khai (E-34)**: `policies/competency-policy.v1.json` + Rule Engine A–F, test từng dòng. Còn mở: kiểm định thực nghiệm tham số (xem lại sau 4–6 tuần dùng thật); chiều điểm AI (D1) và dữ liệu "điều kiện ủng hộ riêng giả thuyết" (E1) chưa có adapter cung cấp | Bật chính sách tự động tương ứng | Bảng policy có nguồn, phiên bản, ca đạt/chưa đạt/chưa kết luận; tham số đề xuất cần đánh giá trước khi gọi là chuẩn |
 | D-03 | ĐÃ ĐÓNG phần kỹ thuật: schema/state P0, persistence P1, 6 đầu ra tri thức v1 (P2-1, KNOWLEDGE_OUTPUTS). Nội dung gói thật vẫn thuộc D-05 | — | — |
 | D-04 | ĐÃ ĐẠT spike Windows runner/SQLite, backup phối hợp (P1-4), kiểm entrypoint native + sha256 và từ chối shim (P2-3); chưa xác minh với CLI thật và quyền file thực | Tích hợp thật P2 | Xử lý shim .cmd/.ps1 bằng entrypoint đã xác minh, quyền file thực |
 | D-05 | Chưa có gói nội dung, quyền sử dụng và đối chứng | Phát hành gói học / báo Band | Nguồn được phép dùng, QC1–4 đúng hash, coverage manifest, bộ đối chứng riêng; thiếu phần nào chặn phần đó |
 | D-06 | Chưa chọn ASR/TTS và kiểm chứng audio | Phát âm sâu / sinh Listening thật | Năng lực đo được trên audio gốc, công cụ/phiên bản/tài nguyên; thiếu audio path giữ chưa đủ kết luận |
-| D-07 | Chính sách giữ log/context/media, hạn mức ổ đĩa. Đã có phần độc lập (E-28): xuất dữ liệu học tập và báo cáo dung lượng, không xóa gì; còn mở: thời hạn lưu giữ, tự dọn, ngưỡng đầy ổ | Dùng dữ liệu cá nhân dài hạn | Cấu hình retention minh bạch, xử lý đầy ổ, export/backup/restore; không xóa lịch sử tự động khi chưa có chính sách |
+| D-07 | Chính sách giữ log/context/media, hạn mức ổ đĩa. Đã có: xuất dữ liệu + báo cáo dung lượng (E-28); người dùng chốt chỉ tự dọn backup cũ (E-30) và sao lưu ngày + diễn tập tuần khi app chạy (E-32). Còn mở: ngưỡng/hành vi khi đầy ổ | Dùng dữ liệu cá nhân dài hạn | Cấu hình retention minh bạch, xử lý đầy ổ, export/backup/restore; không xóa lịch sử tự động khi chưa có chính sách |
 
 Người thực hiện hạng mục chịu trách nhiệm thu bằng chứng; AI không tự đóng điểm mở bằng lời khẳng định. Điểm cần quyết định nghiệp vụ đưa cho chủ dự án, phần kỹ thuật xử lý trong quyền đã được giao.
 
@@ -179,3 +179,48 @@ ID / ngày / trạng thái (đề xuất, áp dụng kỹ thuật, người dùn
 - Kiểm tra giao diện thật (18/11/2026) trên dữ liệu thử (`STUDY_ENGLISH_DATA_DIR` trong scratchpad, cổng 4327, không đụng dữ liệu thật hay `dev:server` đang chạy) phát hiện và sửa 3 lỗi P5-1: nhắc học tạo trước khi có mục tiêu thì sai quỹ cả ngày (nay chỉ tạo khi đã có mục tiêu); hôm nay hiện "Trước khi bắt đầu theo dõi" (nay luôn "chưa có dữ liệu"); khung ngày không tải lại sau khi lưu mục tiêu. Kèm: ngày trước khi theo dõi hiện "—" thay vì "0 / quỹ"; bỏ hai câu cố định sai với dữ liệu thật ("AI thật chưa được kích hoạt", "đang bị khóa… chờ D-01").
 - Kiểm chứng: `tests/integration/p5-app.test.ts`; `p5-tracking`, `study-day` bổ sung ca; hồi quy `npm.cmd run check`.
 
+## E-30 — Tự dọn backup cũ (18/11/2026, **người dùng chốt**)
+- Người dùng chọn "Chỉ dọn backup cũ" (phần chính sách lưu giữ của D-07): giữ **10 bản mới nhất** (đổi được bằng `backup -- prune --keep n`) và bản đã diễn tập ĐẠT gần nhất; không bao giờ tự xóa bài làm, audio, lịch sử hay bản xuất.
+- Triển khai: `src/infrastructure/backup/prune.ts` (chỉ xét thư mục có `manifest.json` định dạng `study-english-backup`; bỏ qua `.partial`, bản sao tay như `pre-m8-repair-*`, symlink); chạy sau `backup -- create` và sau `backup -- drill` đạt; lệnh `backup -- prune`; mỗi lần xóa ghi `var/backups/prune-log.jsonl`. Test: `tests/integration/e30-e31.test.ts`.
+
+## E-31 — Worker chờ khi mọi provider hết hạn mức (18/11/2026, **người dùng chốt**)
+- Người dùng chọn "Chờ tới khi mở lại" thay hành vi P2 (thoát mã 3). Chỉ áp dụng khi **mọi lý do chặn** của ít nhất một provider là hạn mức (`PROFILE_QUOTA_EXHAUSTED`, `PROFILE_COOLDOWN`) và không provider nào READY; lý do khác (D-01, extra usage, đăng nhập, consent) vẫn thoát mã 3. `--fake`/`--once` giữ hành vi cũ.
+- Triển khai: `quotaWaitable`, `waitForProvider` (`src/worker/worker.ts`), dùng ở `src/worker/main.ts`; kiểm lại theo `--quota-recheck-ms` (mặc định 5 phút), chỉ đọc trạng thái gateway, không gọi model; profile tự về READY ở giờ mở lại (E-24). Test: `tests/integration/e30-e31.test.ts`, ca guard thật trong `p2-gateway.test.ts`.
+
+## E-32 — Sao lưu tự động mỗi ngày + diễn tập khôi phục mỗi tuần (18/11/2026, **người dùng chốt** "Bật cả hai")
+- Trong tiến trình server (`app`/`start`/`dev:server`): kiểm lần đầu sau 15 giây, sau đó mỗi giờ; không chạy chồng. Mỗi **ngày học** (Asia/Bangkok) một backup (`createBackup` + dọn theo E-30); diễn tập (`restoreDrill` trên backup mới nhất) khi chưa có diễn tập ĐẠT trong **7 ngày**, tối đa một lần thử mỗi ngày. Việc chỉ được ghi đã làm (`scheduler_runs`: `auto_backup`, `auto_restore_drill`) sau khi chạy, nên backup lỗi được thử lại ở lần kiểm sau.
+- Chỉ chép file cục bộ, không gọi AI/mạng. Không chạy khi ứng dụng tắt (không tạo dịch vụ Windows). Tắt bằng `STUDY_ENGLISH_AUTO_BACKUP=0`.
+- Trạng thái hiện ở Cài đặt (`GET /api/learning/storage` → `backups`: bật/tắt, số bản đang giữ, backup gần nhất, diễn tập gần nhất ĐẠT/THẤT BẠI + lý do, hạn diễn tập kế tiếp).
+- Triển khai: `src/infrastructure/backup/auto.ts` (`runAutoBackup`, `autoBackupStatus`, `scheduleAutoBackup`), `src/server/main.ts`, `tracking-repository.ts` (`lastRunDay`), `src/web/learning.tsx`. Test: `tests/integration/e32-auto-backup.test.ts`.
+
+## E-33 — Chốt chính sách D-02 v1 (18/11/2026, **người dùng chốt**)
+- Người dùng đồng ý toàn bộ đề xuất A–F và yêu cầu đánh giá bản góp ý 8 điểm, đưa phần phù hợp vào. Đã nhận: G0 (loại synthetic), A3 (bản sửa sau nấc 3 không tính), A4/A5 theo độ rộng nhiệm vụ, điều kiện làm bài = phương thức × chế độ × giảm tải × loại ràng buộc (bỏ 7A/7B/9), B0 + họ bài ở B2 + B3 theo 3 nguồn gần nhất, chuỗi 7A→7B→9 + tích hợp Bước 9 + chống kẹt `absent`, D1 tách AI/Rule Engine + D2 +3/+5, E đủ 4 trạng thái + điều kiện ủng hộ riêng giả thuyết, F1/F2/F3 sửa công thức. Bỏ: ngưỡng "≤ 20 phút" ở D5 (không có căn cứ đặc tả). Sửa: 7B `not_met` chốt +2 ngày.
+- Chưa triển khai code; `concludeCompetency` vẫn trả `POLICY_NOT_APPROVED` cho tới khi có file chính sách có phiên bản và test từng dòng.
+
+## E-34 — Triển khai chính sách D-02 v1 (18/11/2026, người dùng yêu cầu "Triển khai D-02")
+- **Tham số.** Nằm trong `policies/competency-policy.v1.json`, được kiểm schema bằng Ajv khi nạp và băm SHA-256 trên JSON chuẩn hóa.
+  - Thiếu file → `POLICY_NOT_APPROVED`, không tự xếp lịch.
+  - File sai → ném lỗi, không âm thầm dùng mặc định.
+- **Luật thuần.** Nằm trong `src/domain/policy/`:
+  - `competency.ts`: G0–G2, A1–A8, B0–B4.
+  - `verification.ts`: C1–C5.
+  - `priority.ts`: D1–D5.
+  - `hypothesis.ts`: E0–E4.
+  - `replan.ts`: F1–F3.
+- **Nối vào ứng dụng.**
+  - **Kết luận năng lực:** `LearningWorkflowService` lập `EvidenceRecord` cho từng nhận định, chỉ từ metadata (không đọc nội dung bài). Kết luận ghi vào bảng bất biến `competency_conclusions` (migration 0012), mỗi dòng gắn phiên bản và hash chính sách.
+  - **Chuỗi kiểm chứng (C):** thay lịch E-18. Đạt 7A → xếp 7B; đạt 7B → mở Bước 9 với khoảng 3 → 7 → 14 → 30 → 60 ngày. Chưa đạt thì làm lại theo C3. Bài tổng hợp làm khi Bước 9 đến hạn được tính cho Bước 9 (C2). Thiếu cơ hội quan sát nhiều lần thì giao kiểm tra trực tiếp có ràng buộc tình huống (C4).
+  - **Xếp hạng (D):** áp dụng ở "Học hôm nay" và hiển thị điểm thành phần.
+  - **Sổ lỗi (E):** trạng thái giả thuyết được tính lại từ bằng chứng, thay cho cách đặt `confirmed` thủ công sau bản sửa.
+  - **Giới hạn trọng tâm (D5):** áp dụng cho chẩn đoán.
+  - **Đề xuất lịch (F):** do `ReplanPlanner` tạo, qua `GET /api/learning/replan` và `POST /api/learning/replan/:id/{accept,reject}`.
+    - Mỗi đề xuất là compare-and-set trên `plan_versions` và hết hạn sau 48 giờ.
+    - Tối đa một đề xuất mỗi ngày học.
+    - Khi chấp nhận, đề xuất chỉ dời các nhiệm vụ còn mở.
+- **Dữ liệu synthetic.** Lịch kiểm chứng vẫn chạy trên dữ liệu synthetic để kiểm thử luồng. Nhận định synthetic không vào kết luận thật (G0). Giả thuyết synthetic chỉ dùng bằng chứng synthetic của chính nó.
+- **Giới hạn đã biết.**
+  - Chưa adapter nào trả hai chiều điểm AI của D1, nên dùng mặc định 1.
+  - Chưa có cờ "ủng hộ riêng giả thuyết" và chưa có nhiệm vụ phân biệt nguyên nhân, nên E1 trên thực tế chưa xác nhận được giả thuyết nào.
+  - Bài 7B/9 tự xếp đang dùng bài synthetic (chờ D-05).
+  - Kết luận được tính lại mỗi lần đọc. Lịch sử chỉ thêm dòng khi bằng chứng hoặc chính sách thay đổi.
+- **Đảo ngược được** bằng cách bỏ file chính sách (ứng dụng quay về "chưa đủ kết luận"), hoặc ra phiên bản v2 với file mới.

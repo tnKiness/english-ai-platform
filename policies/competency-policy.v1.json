@@ -1,0 +1,61 @@
+{
+  "schema_version": "1",
+  "policy_id": "competency-policy",
+  "version": "v1",
+  "approved": true,
+  "approved_at": "2026-11-18",
+  "decision": "E-33",
+  "source": "docs/engineering/D02_PROPOSAL.md",
+  "validation_status": "approved_not_empirically_validated",
+  "competency": {
+    "repair_max_hint_level": 2,
+    "stable_min_step9_sources": 2,
+    "stable_min_gap_days": 7,
+    "demote_after_consecutive_not_met": 2
+  },
+  "confidence": {
+    "medium_min_sources": 2,
+    "medium_min_study_days": 2,
+    "medium_min_item_families": 2,
+    "high_min_sources": 3,
+    "high_min_item_families": 2,
+    "high_min_conditions": 2,
+    "high_recent_all_met": 3
+  },
+  "schedule": {
+    "after_7a_days": 1,
+    "retry_7b_days": 2,
+    "step9_intervals_days": [3, 7, 14, 30, 60],
+    "step9_reset_days": 3,
+    "absent_composites_before_direct_check": 2,
+    "absent_wait_days_before_direct_check": 7,
+    "recheck_overdue_factor": 2
+  },
+  "priority": {
+    "dimension_max": 3,
+    "missing_ai_dimension": 1,
+    "weak_certainty_cap": 1,
+    "frequency_window_days": 30,
+    "due_today_bonus": 3,
+    "overdue_bonus": 5,
+    "wait_days_per_point": 3,
+    "wait_max_points": 3,
+    "starvation_skipped_sessions": 3,
+    "starvation_overdue_days": 7,
+    "focus_default_max": 3,
+    "focus_complex_max": 1
+  },
+  "hypothesis": {
+    "confirm_min_sources": 2,
+    "reject_min_sources": 2
+  },
+  "replan": {
+    "lookahead_days": 3,
+    "min_overdue_days": 2,
+    "max_verification_per_day": 1,
+    "underfunded_window_days": 14,
+    "underfunded_ratio": 0.6,
+    "proposal_ttl_hours": 48,
+    "placement_horizon_days": 14
+  }
+}

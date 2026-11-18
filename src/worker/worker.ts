@@ -103,6 +103,35 @@ export async function resumeWaitingJobs(deps: Pick<WorkerDeps, 'queue' | 'adapte
   return resumed;
 }
 
+/** Guard reasons that only mean "out of quota for now": the profile returns to READY by itself at its reset time. */
+export const QUOTA_ONLY_REASONS: readonly string[] = ['PROFILE_QUOTA_EXHAUSTED', 'PROFILE_COOLDOWN'];
+
+/**
+ * E-31 (user decision 18/11/2026): no provider is usable, but at least one is blocked by quota alone. Any other reason
+ * (missing D-01 evidence, expired extra-usage confirmation, login, consent…) is not something waiting can fix.
+ */
+export function quotaWaitable(status: readonly { ready: boolean; reasons: readonly string[] }[]): boolean {
+  if (status.some((s) => s.ready)) return false;
+  return status.some((s) => s.reasons.length > 0 && s.reasons.every((r) => QUOTA_ONLY_REASONS.includes(r)));
+}
+
+/**
+ * Waits until a provider is ready again (returns its status) or until waiting can no longer help / the worker is
+ * stopped (returns null). Checks run every `intervalMs`; a check reads gateway status only and never calls a model.
+ */
+export async function waitForProvider<S extends { ready: boolean; reasons: readonly string[] }>(check: () => Promise<S[]>,
+  opts: { intervalMs: number; signal: AbortSignal; onWait?: (status: S[]) => void; sleep?: (ms: number, signal: AbortSignal) => Promise<void> }): Promise<S[] | null> {
+  const sleep = opts.sleep ?? ((ms, signal) => new Promise<void>((done) => { const t = setTimeout(done, ms); signal.addEventListener('abort', () => { clearTimeout(t); done(); }, { once: true }); }));
+  while (!opts.signal.aborted) {
+    const status = await check();
+    if (status.some((s) => s.ready)) return status;
+    if (!quotaWaitable(status)) return null;
+    opts.onWait?.(status);
+    await sleep(opts.intervalMs, opts.signal);
+  }
+  return null;
+}
+
 /** Single sequential worker loop. Restart-safe: expired leases are recovered on every claim. */
 export async function runWorkerLoop(deps: WorkerDeps & { pollMs: number; signal: AbortSignal; quotaRecheckMs?: number }): Promise<void> {
   deps.queue.recoverExpired();

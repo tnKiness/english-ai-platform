@@ -11,7 +11,7 @@ import { GatewayAdapter } from '../infrastructure/ai/gateway/gateway.js';
 import { dataPaths } from '../infrastructure/files/paths.js';
 import { ConsoleQueries } from '../infrastructure/sqlite/console-queries.js';
 import { openStore } from '../infrastructure/sqlite/store.js';
-import { runWorkerLoop, type WorkerDeps } from './worker.js';
+import { DEFAULT_QUOTA_RECHECK_MS, quotaWaitable, runWorkerLoop, waitForProvider, type WorkerDeps } from './worker.js';
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(name);
@@ -22,7 +22,19 @@ const controller = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => controller.abort());
 try {
   const gateway = gatewayFor(store);
-  const status = await gateway.status();
+  let status = await gateway.status();
+  // E-31: every provider out of quota (and nothing else wrong): wait for the earliest reopening instead of exiting.
+  if (!flag('--fake') && !flag('--once') && quotaWaitable(status)) {
+    const intervalMs = Number(option('--quota-recheck-ms') ?? DEFAULT_QUOTA_RECHECK_MS);
+    let announced = false;
+    status = await waitForProvider(() => gateway.status(), { intervalMs, signal: controller.signal, onWait: (s) => {
+      if (announced) return;
+      announced = true;
+      console.log(`Mọi provider đang hết hạn mức (${s.map((x) => `${x.provider}: ${x.reasons.join(', ') || x.error}`).join('; ')}). Worker chờ và kiểm lại mỗi ${Math.round(intervalMs / 60_000)} phút; Ctrl+C để dừng.`);
+    } }) ?? await gateway.status();
+    if (controller.signal.aborted) throw new Error('GATEWAY_BLOCKED');
+    if (status.some((s) => s.ready)) console.log('Đã có provider mở lại hạn mức; worker bắt đầu xử lý.');
+  }
   const ready = status.filter((s) => s.ready).map((s) => s.provider);
   const base = { queue: store.queue, loadContext: (id: string) => store.learning.loadManifestPayload(id), interpret: () => [], owner: `worker-${process.pid}`,
     leaseMs: 5 * 60_000, heartbeatMs: 30_000, claimOptions: { scopes: ['dry_run' as const] } };

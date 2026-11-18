@@ -309,7 +309,8 @@ describe('P3-2 Một vòng Writing khép kín với FakeAdapter: bài nộp gố
     // Trong bài 7A, thử mở gợi mở phải bị chặn 403
     expect((await post(a, `/api/learning/attempts/${view7A.attempt.attempt_id}/hints/unlock`, s, { level: 1, request_key: '7a-hint' })).statusCode).toBe(403);
 
-    // Nộp bài 7A đạt (không có hỗ trợ trong attempt 7A) -> Bước 8 cập nhật có điều kiện và xếp lịch 7B (+1 ngày) & Bước 9 (+3 ngày)
+    // Nộp bài 7A đạt (không có hỗ trợ trong attempt 7A) -> Bước 8 cập nhật có điều kiện và xếp lịch 7B (+1 ngày).
+    // D-02 C1: Bước 9 chỉ mở sau khi đạt 7B, không xếp cùng lúc với 7B.
     const submit7A = await post(a, `/api/learning/attempts/${view7A.attempt.attempt_id}/submit`, s, {
       request_key: 'sub-7a-1',
       content: 'While free public transport requires municipal funding, it significantly reduces congestion and emissions. [SYNTHETIC_MET]',
@@ -317,19 +318,31 @@ describe('P3-2 Một vòng Writing khép kín với FakeAdapter: bài nộp gố
     expect(submit7A.statusCode).toBe(200);
     expect(submit7A.json().loop.step).toBe(8);
 
-    // Kiểm tra bằng đồng hồ giả: ngay lúc này (t = 0), 7B và Bước 9 nằm trong upcoming_scheduled (chưa đến hạn)
+    // Đồng hồ giả t = 0: chỉ có 7B trong upcoming_scheduled (chưa đến hạn).
     const todayAtT0 = (await get(a, '/api/learning/today?available_minutes=60', s)).json();
-    expect(todayAtT0.upcoming_scheduled.map((u: { purpose: string }) => u.purpose)).toEqual(['7B', '9']);
+    expect(todayAtT0.upcoming_scheduled.map((u: { purpose: string }) => u.purpose)).toEqual(['7B']);
     expect(todayAtT0.recommended_tasks.some((t: { purpose: string }) => t.purpose === '7B' || t.purpose === '9')).toBe(false);
 
-    // Tua đồng hồ giả +1 ngày: 7B đến hạn và xuất hiện trong recommended_tasks, Bước 9 vẫn chưa đến hạn
+    // +1 ngày: 7B đến hạn, có điểm ưu tiên D-02 (đến hạn hôm nay +3).
     clk.advance(24 * 60 * 60 * 1000 + 1000);
     const todayAtDay1 = (await get(a, '/api/learning/today?available_minutes=60', s)).json();
-    expect(todayAtDay1.recommended_tasks.map((t: { purpose: string }) => t.purpose)).toContain('7B');
-    expect(todayAtDay1.upcoming_scheduled.map((u: { purpose: string }) => u.purpose)).toEqual(['9']);
+    const task7B = todayAtDay1.recommended_tasks.find((t: { purpose: string }) => t.purpose === '7B');
+    expect(task7B).toBeDefined();
+    expect(task7B.priority.parts.deadline).toBe(3);
+    expect(todayAtDay1.upcoming_scheduled).toEqual([]);
 
-    // Tua đồng hồ giả thêm +2 ngày (tổng +3 ngày): Bước 9 đến hạn
-    clk.advance(2 * 24 * 60 * 60 * 1000);
+    const attempt7B = (await post(a, '/api/learning/attempts', s, {
+      request_key: 'start-7b', item_id: task7B.item_id, item_version: task7B.item_version, rubric_id: task7B.rubric_id, rubric_version: task7B.rubric_version,
+      mode: 'self_practice', purpose: '7B', task_id: task7B.task_id,
+    })).json() as AttemptWorkspaceView;
+    expect((await post(a, `/api/learning/attempts/${attempt7B.attempt.attempt_id}/submit`, s, {
+      request_key: 'sub-7b-1', content: 'While housing is urgent, parks remain essential for civic health, so cities should plan both. [SYNTHETIC_MET]',
+    })).statusCode).toBe(200);
+
+    // Đạt 7B → mở chuỗi Bước 9 với khoảng đầu tiên 3 ngày (C2).
+    const afterB = (await get(a, '/api/learning/today?available_minutes=60', s)).json();
+    expect(afterB.upcoming_scheduled.map((u: { purpose: string }) => u.purpose)).toEqual(['9']);
+    clk.advance(3 * 24 * 60 * 60 * 1000 + 1000);
     const todayAtDay3 = (await get(a, '/api/learning/today?available_minutes=60', s)).json();
     const task9 = todayAtDay3.recommended_tasks.find((t: { purpose: string }) => t.purpose === '9');
     expect(task9).toBeDefined();
@@ -354,25 +367,29 @@ describe('P3-2 Một vòng Writing khép kín với FakeAdapter: bài nộp gố
     });
 
     // Kiểm tra màn Tiến độ & Hồ sơ năng lực:
-    // - Bài nộp gốc + 2 bản sửa dùng chung 1 evidence_source_id; bài 7A và bài 9 là nguồn riêng.
-    // - Mọi nhận định từ FakeAdapter đều mang nhãn synthetic: true.
-    // - Kết luận năng lực trả về POLICY_NOT_APPROVED ("chưa đủ kết luận") và band_reporting_enabled = false (D-02).
+    // - Bài nộp gốc + 2 bản sửa dùng chung 1 evidence_source_id; bài 7A, 7B và bài 9 là nguồn riêng.
+    // - Chính sách D-02 v1 đã duyệt nhưng G0 loại mọi nhận định synthetic → mức "Chưa đủ dữ liệu", Band vẫn tắt.
     const progress = (await get(a, '/api/learning/progress', s)).json();
-    expect(progress.policy_status).toBe('POLICY_NOT_APPROVED');
+    expect(progress.policy_status).toBe('APPROVED');
+    expect(progress.policy).toMatchObject({ id: 'competency-policy', version: 'v1' });
     expect(progress.band_reporting_enabled).toBe(false);
 
     const trProfile = progress.competencies.find((c: { competency_id: string }) => c.competency_id === SYNTHETIC_COMPETENCY_ID);
     expect(trProfile).toBeDefined();
     expect(trProfile.all_synthetic).toBe(true);
-    expect(trProfile.conclusion).toMatchObject({ status: 'inconclusive', reason: 'POLICY_NOT_APPROVED' });
-    // Chỉ có đúng 1 nguồn độc lập đạt (từ bài 7A); 2 bản tự sửa ở Bước 5 là scaffolded_repair trên nguồn gốc; bài 9 không có cơ hội là inconclusive
-    expect(trProfile.evidence_summary.independent_sources_met).toBe(1);
+    expect(trProfile.conclusion).toMatchObject({ status: 'decided', state: 'insufficient_data', policy: { id: 'competency-policy', version: 'v1' } });
+    expect(trProfile.decision.level).toBe('A1');
+    expect(trProfile.decision.excluded_by_g0).toBeGreaterThan(0);
+    // 2 nguồn độc lập đạt (7A, 7B); 2 bản tự sửa ở Bước 5 là scaffolded_repair trên nguồn gốc; bài 9 không có cơ hội là inconclusive
+    expect(trProfile.evidence_summary.independent_sources_met).toBe(2);
     expect(trProfile.evidence_summary.sources_by_use).toMatchObject({
       scaffolded_repair: 1,
-      independent_candidate: 1,
+      independent_candidate: 2,
       inconclusive: 1,
     });
     expect(trProfile.verification_schedule.status).toBe('awaiting_opportunity');
+    // Kết luận được ghi lịch sử bất biến kèm phiên bản chính sách.
+    expect((st.db.prepare("SELECT COUNT(*) AS n FROM competency_conclusions WHERE policy_version = 'v1'").get() as { n: number }).n).toBeGreaterThan(0);
     expect((st.db.prepare("SELECT COUNT(*) AS n FROM ai_runs WHERE provider != 'fake'").get() as { n: number }).n).toBe(0);
   });
 });
