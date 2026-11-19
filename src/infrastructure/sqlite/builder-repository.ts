@@ -5,6 +5,7 @@ import { validateKnowledge } from '../contracts/validate.js';
 import type { JsonKind } from '../files/json-store.js';
 import { canonicalJson, sha256 } from '../files/paths.js';
 import type { Db } from './database.js';
+import type { ContentOrigin } from '../../domain/knowledge/content-origin.js';
 
 const parse = <T>(json: string): T => JSON.parse(json) as T;
 
@@ -43,10 +44,10 @@ export class BuilderRepository implements BuilderStore {
   }
 
   // ---- Package request + staging (playbook steps 1–3) -----------------------------------------
-  createRequest(request: unknown): { request_id: string; package_id: string; content_origin: 'synthetic_fixture' | 'sourced' } {
+  createRequest(request: unknown): { request_id: string; package_id: string; content_origin: ContentOrigin } {
     const checked = validateKnowledge('package_request', request);
     if (!checked.ok) throw new Error(`package_request invalid: ${checked.errors.join('; ')}`);
-    const r = request as { request_id: string; package_id: string; content_origin: 'synthetic_fixture' | 'sourced' };
+    const r = request as { request_id: string; package_id: string; content_origin: ContentOrigin };
     const json = canonicalJson(request);
     const prior = this.db.prepare('SELECT request_hash FROM package_requests WHERE request_id = ?').get(r.request_id) as { request_hash: string } | undefined;
     if (prior) {
@@ -58,8 +59,8 @@ export class BuilderRepository implements BuilderStore {
     return { request_id: r.request_id, package_id: r.package_id, content_origin: r.content_origin };
   }
 
-  request(requestId: string): { package_id: string; content_origin: 'synthetic_fixture' | 'sourced'; value: Record<string, unknown> } | undefined {
-    const row = this.db.prepare('SELECT package_id, content_origin, request_json FROM package_requests WHERE request_id = ?').get(requestId) as { package_id: string; content_origin: 'synthetic_fixture' | 'sourced'; request_json: string } | undefined;
+  request(requestId: string): { package_id: string; content_origin: ContentOrigin; value: Record<string, unknown> } | undefined {
+    const row = this.db.prepare('SELECT package_id, content_origin, request_json FROM package_requests WHERE request_id = ?').get(requestId) as { package_id: string; content_origin: ContentOrigin; request_json: string } | undefined;
     return row && { package_id: row.package_id, content_origin: row.content_origin, value: parse(row.request_json) };
   }
 
@@ -111,7 +112,7 @@ export class BuilderRepository implements BuilderStore {
 
   bundle(packageId: string, version: string) {
     return this.db.prepare('SELECT package_id, version, request_id, bundle_hash, content_origin, qc_spec_version, playbook_version, created_at FROM package_bundles WHERE package_id = ? AND version = ?').get(packageId, version) as
-      { package_id: string; version: string; request_id: string; bundle_hash: string; content_origin: 'synthetic_fixture' | 'sourced'; qc_spec_version: string; playbook_version: string; created_at: string } | undefined;
+      { package_id: string; version: string; request_id: string; bundle_hash: string; content_origin: ContentOrigin; qc_spec_version: string; playbook_version: string; created_at: string } | undefined;
   }
 
   bundles() {

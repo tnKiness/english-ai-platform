@@ -1,5 +1,7 @@
+import type { FrameworkResult, FrameworkReviewResult } from '../../domain/knowledge/framework-checks.js';
+export type { FrameworkCompetency, FrameworkResult, FrameworkReviewResult } from '../../domain/knowledge/framework-checks.js';
 export type ProviderError = 'QUOTA_EXHAUSTED' | 'RATE_LIMIT' | 'AUTH_EXPIRED' | 'BILLING_UNVERIFIED' | 'NETWORK' | 'TIMEOUT' | 'INVALID_SCHEMA' | 'REFUSAL' | 'CAPABILITY_MISSING' | 'CANCELLED';
-export type TaskType = 'writing.assess' | 'reading.blind_solve' | 'reading.verify' | 'repair.assess';
+export type TaskType = 'writing.assess' | 'reading.blind_solve' | 'reading.verify' | 'repair.assess' | 'content.author' | 'content.review';
 export interface Job {
   job_id: string;
   context_manifest_id: string;
@@ -35,7 +37,7 @@ export interface WritingAssessment {
   limitations: string[];
 }
 export const isWritingAssessment = (r: unknown): r is WritingAssessment => typeof r === 'object' && r !== null && Array.isArray((r as { competencies?: unknown }).competencies);
-export type AiResult = Assessment | WritingAssessment | BlindSolveResult | VerificationResult;
+export type AiResult = Assessment | WritingAssessment | BlindSolveResult | VerificationResult | FrameworkResult | FrameworkReviewResult;
 /** reset_at (E-24): thời điểm hãng báo mở lại hạn mức/giới hạn tốc độ, nếu đọc được từ lỗi của CLI. */
 export type AdapterResult = { ok: true; result: AiResult } | { ok: false; error: ProviderError; reset_at?: string | null };
 export interface ProviderAdapter {

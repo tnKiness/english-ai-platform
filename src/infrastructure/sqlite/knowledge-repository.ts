@@ -4,6 +4,7 @@ import { transitionRelease, type ReleaseState } from '../../domain/knowledge/rel
 import { isRevoked } from '../../domain/knowledge/revocation.js';
 import type { JsonRef } from '../files/json-store.js';
 import type { Db } from './database.js';
+import type { ContentOrigin } from '../../domain/knowledge/content-origin.js';
 
 export interface ItemRegistration { ref: JsonRef; item_family_id: string; shared_stimulus_id: string | null; media_ids: string[] }
 
@@ -82,16 +83,16 @@ export class KnowledgeRepository {
    * Servable lookup for assignment: reads lifecycle and revocations in the same read as the item row, so a
    * revocation committed before this call is always seen — no cache sits in front of it.
    */
-  servableItem(itemId: string, version: string, scope: 'learner' | 'dry_run'): { ok: true; package_id: string; package_version: string; item_family_id: string; shared_stimulus_id: string | null; hash: string } | { ok: false; reason: string } {
+  servableItem(itemId: string, version: string, scope: 'learner' | 'dry_run'): { ok: true; package_id: string; package_version: string; item_family_id: string; shared_stimulus_id: string | null; hash: string; content_origin: ContentOrigin | null } | { ok: false; reason: string } {
     return this.db.transaction(() => {
-      const row = this.db.prepare('SELECT i.package_id, i.package_version, i.item_family_id, i.shared_stimulus_id, i.content_hash AS hash, r.state FROM item_versions i JOIN package_releases r ON r.package_id = i.package_id AND r.version = i.package_version WHERE i.item_id = ? AND i.version = ?')
-        .get(itemId, version) as { package_id: string; package_version: string; item_family_id: string; shared_stimulus_id: string | null; hash: string; state: ReleaseState } | undefined;
+      const row = this.db.prepare('SELECT i.package_id, i.package_version, i.item_family_id, i.shared_stimulus_id, i.content_hash AS hash, r.state, b.content_origin FROM item_versions i JOIN package_releases r ON r.package_id = i.package_id AND r.version = i.package_version LEFT JOIN package_bundles b ON b.package_id = i.package_id AND b.version = i.package_version WHERE i.item_id = ? AND i.version = ?')
+        .get(itemId, version) as { package_id: string; package_version: string; item_family_id: string; shared_stimulus_id: string | null; hash: string; state: ReleaseState; content_origin: ContentOrigin | null } | undefined;
       if (!row) return { ok: false as const, reason: 'UNKNOWN_ITEM' };
       const revs = this.revocations();
       if (isRevoked('item', itemId, version, revs) || isRevoked('package', row.package_id, row.package_version, revs)) return { ok: false as const, reason: 'REVOKED' };
       // Dry-run may exercise drafts; learners only get active releases.
       if (row.state !== 'active' && !(scope === 'dry_run' && row.state === 'draft')) return { ok: false as const, reason: `RELEASE_${row.state.toUpperCase()}` };
-      return { ok: true as const, package_id: row.package_id, package_version: row.package_version, item_family_id: row.item_family_id, shared_stimulus_id: row.shared_stimulus_id, hash: row.hash };
+      return { ok: true as const, package_id: row.package_id, package_version: row.package_version, item_family_id: row.item_family_id, shared_stimulus_id: row.shared_stimulus_id, hash: row.hash, content_origin: row.content_origin ?? null };
     })();
   }
 }

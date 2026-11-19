@@ -641,3 +641,223 @@ P0–P3 đã hoàn tất phần code và nghiệm thu trên gói synthetic (D-01
   - Chất lượng chấm chưa được đối chứng (D-05).
   - Đề vẫn là synthetic, nên G0 loại kết quả khỏi mức năng lực.
 - **Tiếp theo:** người dùng thử chấm thật một bài (tốn 1 lượt Codex), rồi rà lại chất lượng chẩn đoán và gợi ý.
+
+### 18/11/2026 — Đề xuất D-05 nguồn đề (AI biên soạn + đề người dùng sở hữu) / CHỜ DUYỆT
+- Nguồn: người dùng trả lời "Đề AI sẽ tự search, build theo đúng tiêu chí của IELTS và cũng có thể tự thêm đề mà tôi sở hữu… nêu rõ cho tôi".
+- File: `docs/engineering/D05_CONTENT_PROPOSAL.md` (mới, ĐỀ XUẤT — CHƯA CHỐT): kiến trúc 3 đường vào (nguồn chính thức → khung tiêu chí; AI sinh đề; đề người dùng) qua một cổng QC1–4, bộ theo dõi độ phủ tự bổ sung đề; 10 điểm cần chốt N1–N10 có khuyến nghị; kế hoạch C1–C6. DECISIONS dòng D-05 trỏ tới bản đề xuất.
+- Không đổi code. Không chạy lệnh kiểm tra (chỉ tài liệu).
+
+### 18/11/2026 — E-36 chốt nguồn đề D-05 + E-37 bộ quét nguồn và trang duyệt / DONE phần code + test; chưa quét thật
+- **Nguồn:** người dùng trả lời N1–N10 và báo Codex Plus đã hết hạn.
+  - Ghi lại ở D05_CONTENT_PROPOSAL (bảng quyết định), DECISIONS (E-36, dòng D-05).
+  - N1 đổi sang làm đều 4 kỹ năng và học lại từ nền tảng. N2: quét hết, có trang duyệt. N9: research tiêu chí, chấp nhận rủi ro.
+- **File mới:**
+  - `policies/source-seeds.v1.json`
+  - `migrations/0013_source_candidates.sql`
+  - `src/infrastructure/sources/{page,crawler,review}.ts`
+  - `src/cli/sources.ts` (npm script `sources`)
+  - `src/web/sources.tsx` (tab Builder & QC → Nguồn)
+  - `tests/integration/e37-sources.test.ts` (3 ca)
+- **File sửa:**
+  - `src/server/app.ts`: 3 route `/api/console/sources*`
+  - `src/web/console.tsx`
+  - `package.json`
+  - `scripts/user-guide.mjs`
+  - Hướng dẫn sử dụng mục 5; `README.md`, `docs/README.vi.md`
+  - Test `p1-backup`, `p1-persistence` (migration 13)
+  - DECISIONS E-37
+- **Lệnh và kết quả:**
+  - `npx.cmd vitest run tests/integration/e37-sources.test.ts`: 3/3. Lần chạy đầu bắt được redirect ra ngoài danh sách đã bị gọi trước khi kiểm; đã sửa bằng tự xử lý redirect.
+  - `npm.cmd run docs:guide`, rồi `npm.cmd run check`: lint, guide check, typecheck, 326/326 test (43 file), build đều đạt.
+- **Chưa làm:**
+  - Chưa quét Internet thật; người dùng chạy `npm.cmd run sources -- crawl`.
+  - Chưa trích văn bản PDF.
+  - Các bước cần AI (soạn khung năng lực, rubric, sinh đề, chấm thật) bị chặn vì không còn provider AI sẵn sàng: Codex hết hạn; `claude-code`/`agy` chưa xác minh D-01.
+  - D-06 (TTS/ASR) chặn Listening và phát âm.
+
+### 18/11/2026 — E-38 Claude Code làm provider chính (người dùng chốt) / DONE
+- **Nguồn:** Codex Plus hết hạn. Người dùng yêu cầu thứ tự Claude Code → agy → Codex.
+- **`npm.cmd run ai -- status` trước khi đổi** (không gọi model):
+  - codex: BLOCKED (BILLING_UNVERIFIED).
+  - claude-code: READY.
+  - agy: READY (CLI 1.5.11, đã khác bản lúc xác minh 1.4.3; chỉ là thông tin).
+  - Extra usage của claude-code và agy cần xác nhận lại trước 20/11.
+- **File:**
+  - `src/application/ai/subscription-guard.ts`: `CLI_PROVIDERS` theo thứ tự mới, thêm `byPreference`.
+  - `src/infrastructure/ai/gateway/gateway.ts`: `status()` sắp theo thứ tự ưu tiên.
+  - Test `p2-gateway`, `p2-e11`.
+  - Hướng dẫn sử dụng mục 6, 7, 12; DECISIONS E-38.
+- **Thử bỏ:** lượt đầu tôi cho gateway tự sắp lại cả thứ tự đã lưu trong job. Cách này làm 15 test failover hỏng, vì phá hợp đồng "chọn theo thứ tự của job". Đã bỏ cách đó; DB thật cũng không có job cũ nào đang chờ.
+- **Lệnh:** `npm.cmd run docs:guide`, rồi `npm.cmd run check` → 326/326 test (43 file), build đạt. Sau khi đổi, `ai -- status` liệt kê claude-code READY → agy READY → codex BLOCKED.
+- **Giới hạn:** agy và Codex chỉ được tự chuyển sang khi có báo cáo đối chứng D-05.
+
+### 18/11/2026 — E-39 Trích văn bản PDF nguồn / DONE phần code + test
+- **Nguồn:** bước kế tiếp đã đề xuất; người dùng "Cho phép bạn cài" dependency.
+- **File:**
+  - Mới: `src/infrastructure/sources/pdf-text.ts`, `tests/fixtures/make-pdf.ts`, `tests/unit/e39-pdf-text.test.ts`.
+  - Sửa: `crawler.ts` (`extractStoredPdf`, `extractPendingPdfs`), `review.ts` (trích đoạn PDF), `src/cli/sources.ts` (`extract`), `src/web/sources.tsx`, `tests/integration/e37-sources.test.ts`.
+  - Thư viện và tài liệu: `package.json`/`package-lock.json` (`pdfjs-dist` 6.4.299 exact), hướng dẫn sử dụng mục 5, DECISIONS (E-39), D05.
+- **Lệnh và kết quả:**
+  - `npm.cmd install pdfjs-dist@6.4.299 --save-exact --omit=optional` làm hỏng Vitest vì thiếu binding rolldown; đã khôi phục bằng `npm.cmd install`.
+  - `npx.cmd vitest run tests/unit/e39-pdf-text.test.ts tests/integration/e37-sources.test.ts`: 6/6.
+  - `npm.cmd run docs:guide`, rồi `npm.cmd run check`: lint, guide check, typecheck, 329/329 test (44 file), build đều đạt.
+- **Giới hạn:**
+  - PDF chỉ có ảnh quét thì không trích được chữ (chưa có OCR).
+  - Bố cục cột dùng ngưỡng khoảng cách cố định, cần đối chiếu với band descriptors thật sau khi quét.
+
+### 19/11/2026 — Quét tiếp hàng đợi nguồn + duyệt hết / DONE một phần (hàng đợi phình to)
+- **Nguồn:** người dùng "cứ chạy hết 1.669 trang vẫn trong hàng đợi rồi duyệt hết đi".
+- **Lệnh:** `npm.cmd run sources -- crawl --max-pages 5000`, chạy dữ liệu thật.
+  - Lần chạy tải được 2.284 trang, rồi dừng vì một lỗi.
+  - Lỗi: hết thời gian chờ khi đọc phần thân trả lời. Đoạn đọc thân nằm ngoài khối bắt lỗi nên làm hỏng cả lượt chạy.
+  - Đã sửa trong `crawler.ts`: thân trả lời bị treo thì chỉ trang đó ghi `FAILED`/`TIMEOUT`, lượt chạy vẫn tiếp tục.
+  - Đã thêm ca kiểm thử vào `e37-sources`.
+- **Duyệt:** dùng script tạm `SourceReview.review` theo lô 100 (đã xóa script). Kết quả `{"requested":2284,"approved":2284,"skipped":[]}`.
+- **Trạng thái sau đó:**
+  - Tải: QUEUED 10469 · FETCHED 2459 · SKIPPED 290 · FAILED 139.
+  - Duyệt: APPROVED 2459.
+- **Hàng đợi phình từ 1.669 lên 10.469**, do liên kết mới ở độ sâu 2–3:
+  - `ielts.idp.com` 6.458, phần lớn là bản sao theo quốc gia (`/canada/`, `/vietnam/`…).
+  - `bxsearch.ielts.idp.com` 1.759 (trang tìm kiếm).
+  - `learnenglish.britishcouncil.org` 1.898.
+- **Kiểm tra:** `npm.cmd run check` PASS, 330/330 test (44 file), build OK.
+
+### 19/11/2026 — E-40 Lọc hàng đợi quét nguồn / DONE (lượt quét vẫn đang chạy)
+- **Nguồn:** người dùng "Lọc rồi quét tiếp", sau đó "oke tiến hành thêm lọc và chạy lại".
+- **Code:**
+  - Mục `exclude` mới trong `policies/source-seeds.v1.json`.
+  - `page.ts`: `compileExcludes`, `isExcluded`.
+  - `crawler.ts`: luật được áp khi xếp hàng, ở từng bước chuyển hướng, và qua `applyExclusions` ở đầu mỗi lượt; báo cáo thêm `excluded_from_queue`.
+  - CLI in thêm số trang bị loại.
+- **Luật lọc:**
+  - Bản sao theo quốc gia của IDP, trang tìm kiếm/đặt lịch/tài khoản IDP.
+  - LearnEnglish `/user/` và `?page=`.
+  - ielts.org `/receiving-organisations/`; tài khoản và danh sách hội đồng của IPA.
+  - IDP `?filter`.
+- **Kết quả trên dữ liệu thật:**
+  - Lần áp luật đầu chuyển 8.176 dòng QUEUED sang SKIPPED.
+  - Lượt quét thứ hai bị dừng giữa chừng (TaskStop) để thêm luật `?page=` và `?filter`.
+  - Lượt quét thứ ba chạy nền với `--max-pages 5000`. Lúc khởi chạy: FETCHED 4973, QUEUED 11885.
+- **Kiểm tra:** thêm 2 ca vào `e37-sources`.
+
+### 19/11/2026 — E-41 Nguồn gốc nội dung `ai_authored`/`learner_owned` (D-05 N10, phần còn lại của C1) / DONE
+- **Nguồn:** người dùng "tiếp tục triển khai bước tiếp theo"; N10 đã chốt ở E-36.
+- **File:**
+  - Mới: `migrations/0014_content_origin.sql`, `src/domain/knowledge/content-origin.ts`, `tests/integration/e41-content-origin.test.ts`.
+  - Sửa:
+    - `database.ts` (14 là migration dựng lại bảng);
+    - kiểu `ContentOrigin` ở `builder-repository`, `qc/ports`, `qc/pipeline`, `release-gate`, `qc4`, `console-queries`, `subscription-guard`;
+    - `knowledge-repository.servableItem` (trả `content_origin`);
+    - `writing-workflow` (G0 theo nguồn gốc);
+    - `contracts/knowledge.v1.schema.json` (enum).
+  - Tài liệu: DECISIONS E-41, D05 (C1 xong), hướng dẫn sử dụng (mục Writing và bảng migration tự động).
+- **Lệnh:** `npx.cmd vitest run` các file e41, p1-persistence, p1-backup: 19/19. `npm.cmd run check` PASS: 335/335 test (45 file), build OK.
+- **Giới hạn:**
+  - Chưa có đường tạo nội dung dùng hai nguồn gốc mới (C2–C4).
+  - Migration 0014 sẽ áp vào DB thật ở lần mở kế tiếp (có sao lưu trước khi migrate).
+- **Bước kế tiếp:** C2, cho AI soạn khung năng lực và rubric Writing Task 2 từ các nguồn đã duyệt. Cần provider thật; hiện `claude-code` READY.
+
+### 19/11/2026 — E-42 AI soạn khung năng lực + rubric Writing Task 2 (D-05 C2) / IN_PROGRESS (v1 chưa có lượt rà soát)
+- **Nguồn:** người dùng "Làm C2".
+- **Code:**
+  - Migration `0015_competency_frameworks.sql`.
+  - `src/infrastructure/sources/band-table.ts`; `src/domain/knowledge/framework-checks.ts`.
+  - `src/infrastructure/authoring/{framework-sources,gateway-executor}.ts`; `src/application/authoring/framework-authoring.ts`; `src/cli/author.ts` (`npm run author`).
+  - API `/api/console/frameworks*`; `src/web/frameworks.tsx` (tab "Khung năng lực").
+  - Contract `knowledge.v1`: `competency_framework_result`, `framework_review_result`.
+  - Task type `content.author`/`content.review` (`provider-adapter`, `result-contracts`, `task-instructions`).
+  - `gatewayFor` nhận `limits`; policy `policies/authoring/wt2-framework.v1.json`.
+- **Kiểm tra:** `npm.cmd run check` PASS, 343/343 test (46 file), build OK. Test mới: `e42-framework-authoring` 8/8 (executor giả).
+- **Chạy thật** (`npm.cmd run author -- framework`, DB thật đã migrate tới 15, có sao lưu trước):
+  - `author -- sources`: đủ 7 nguồn đã duyệt; bảng band descriptors Task 2 có 38 ô.
+  - **Soạn: thành công.**
+    - Bản nháp `v1`, provider `claude-code` 2.1.304, model `claude-opus-5-5`.
+    - 20 năng lực: TR 6, CC 5, LR 5, GRA 4. Kiểm tra tự động 0 lỗi, 0 cảnh báo; mọi trích dẫn có nguyên văn trong nguồn.
+    - AI tự nêu giới hạn: một số ô band thấp (LR band 4, GRA band 3, band 0) bị cắt sai ranh giới hàng khi dựng bảng.
+  - **Rà soát: bị chặn** `BILLING_UNVERIFIED` trên cả 3 provider (lần chạy `fc33587d…` đã ghi).
+    - `claude-code`: kiểm tra ranh giới thấy mục `plugins` mới trong profile runner (`BOUNDARY_CONFIG_PROFILE_plugins`). Trong đó chỉ có `plugin-directory-cache-v2.json` (2,8 MB), do Claude CLI tạo lúc 14:13 trong lượt soạn; không có plugin nào được cài.
+    - `agy`: là provider dự phòng nên cần benchmark D-05; `codex`: hết hạn.
+  - Không vượt qua kiểm tra ranh giới; chờ người dùng quyết định.
+- **Còn thiếu:**
+  - Lượt rà soát v1 và quyết định duyệt của người dùng.
+  - Sửa ranh giới hàng band thấp ở trang 9 của bảng band descriptors.
+
+### 19/11/2026 — E-43 Phạm vi Speaking / DONE (quyết định)
+- Người dùng chốt: Speaking chỉ ở dạng văn bản (lên ý tưởng). Nói thật và phát âm người dùng tự kiểm tra ngoài ứng dụng.
+- Đã ghi DECISIONS E-43; D-06 thu hẹp còn nguồn audio Listening.
+
+### 19/11/2026 — E-44 Audio Listening: thu sẵn + TTS cục bộ / DONE phần code, chờ tải engine
+- **Nguồn:** người dùng chọn "Cả hai nguồn".
+- **Code:**
+  - `page.ts` (`htmlAudioLinks`, `audioFormat`, `normalizeUrl(..., {audio})`).
+  - `crawler.ts` (audio là lá, `media_hosts`, `max_audio_bytes`, `discoverAudio`).
+  - `review.ts` (lọc `media`, `audio()`); route `GET /api/console/sources/:id/audio`; `sources.tsx` (lọc dạng, nút Nghe).
+  - `sources -- discover-audio`; `policies/source-seeds.v1.json` (`media_hosts`, `max_audio_bytes`).
+  - `src/infrastructure/audio/tts.ts` + `src/cli/tts.ts` (`npm run tts`).
+- **Kiểm tra:**
+  - Test mới: `e44-audio-sources` 2/2, `e44-tts` 3/3 (engine giả).
+  - `npm.cmd run check` PASS: 348/348 test (48 file), build OK.
+- **Chưa chạy trên dữ liệu thật:** `discover-audio` phải đợi lượt quét nền (code cũ) xong, nếu không audio sẽ bị đánh `UNSUPPORTED_TYPE`.
+- **Chờ người dùng cho phép tải** (dung lượng đã đọc bằng HEAD):
+  - `piper_windows_amd64.zip` 22,5 MB (GitHub rhasspy/piper, release 2023.11.14-2);
+  - giọng `.onnx` 63,2 MB mỗi giọng (Hugging Face rhasspy/piper-voices v1.0.0).
+- **Cài TTS (cùng ngày, người dùng cho phép):**
+  - Đã tải Piper 2023.11.14-2 và 3 giọng Anh-Anh. SHA-256 các giọng khớp hash Hugging Face; hash zip/exe ghi ở DECISIONS E-44.
+  - Lần đầu tải giọng `alan` bị ngắt ở 676 KB; đã xóa và tải lại đủ.
+  - `npm.cmd run tts -- status`: "Sẵn sàng", 3 giọng.
+  - `tts -- say` thật với cả 3 giọng đều thành công: alan 401 KB (khoảng 3,3 giây cho cả lệnh), jenny_dioco 261 KB, northern_english_male 224 KB. WAV lưu vào kho media.
+
+### 19/11/2026 — E-45 Cho phép cache danh mục plugin trong profile Claude / DONE
+- **Nguồn:** người dùng "Cho phép cache".
+- **Code:** `probe-boundary.ts` (`isClaudePluginCacheOnly`); test `e45-claude-plugin-cache` 3/3, `e21-claude-agy` vẫn đạt.
+- **Kết quả thật:** `npm.cmd run ai -- status` báo `claude-code: READY`.
+- **Đính chính:** hạn xác nhận lại extra usage là 18/12/2026, không phải 20/11.
+- Đã chạy lại lượt AI rà soát khung v1 (`npm.cmd run author -- review v1`); kết quả ghi ở mục kế tiếp.
+- **Rà soát v1 bằng AI thật** (`author -- review v1`, `claude-code`/`claude-opus-5-5`, lần chạy `6eaee90a…`): verdict **revise**, 4 lỗi, 8 cảnh báo.
+  - **Lỗi:**
+    - Mọi cạnh có `basis` null; người rà soát coi `supports`/`component_of` như quan hệ tiên quyết, vì dữ liệu chưa định nghĩa các loại cạnh.
+    - `address_all_prompt_parts` thêm yêu cầu "cân bằng" mà nguồn không có.
+    - `address_all_prompt_parts` trùng một phần với `maintain_relevance_focus`.
+    - Một trích dẫn (luật trừ bài chép đề, Band 1) không hỗ trợ năng lực mà nó gắn vào.
+  - **Cảnh báo:**
+    - Ngưỡng đạt/chưa đạt dùng từ ngữ ở các mức Band khác nhau mà không nêu quy tắc.
+    - Ghi chú "bài ngắn thì chưa đủ kết luận" mâu thuẫn với nguồn: thiếu độ dài cũng là bằng chứng.
+    - Các năng lực chồng lấn hoặc gộp hai hành vi (mở bài/kết luận, văn phong/ngôn ngữ thuộc lòng, câu phức/độ chính xác).
+  - Người rà soát nêu lại: văn bản band 0–4 của bảng dựng lại bị cắt.
+- **Trạng thái v1:** DRAFT, đã có rà soát, chưa quyết định.
+
+### 19/11/2026 — E-46 Khung năng lực v2 / DONE phần code + chạy thật; chờ người dùng duyệt
+- **Nguồn:** người dùng "Làm v2".
+- **Code:**
+  - `pdf-text.ts` (đường kẻ ngang); `crawler.ts` (`.rules.json` và tạo bù); `band-table.ts` (ranh giới theo đường kẻ, ô gộp, dấu câu).
+  - `framework-sources.ts` đọc file đường kẻ; `task-instructions.ts` (định nghĩa cạnh, quy tắc met/not met, khối revision).
+  - `framework-authoring.ts` (`author(…, reviseFrom)`, `revised_from`); `author.ts` (`--revise`); `frameworks.tsx`.
+- **Kiểm tra:** `npm.cmd run check` PASS, 354/354 test (49 file), build OK.
+- **Chạy thật:**
+  - `npm.cmd run sources -- extract`: "Đã trích chữ 239 PDF, lỗi 0" (tạo bù `.rules.json`).
+  - `author -- sources`: bảng Task 2 có 37 ô.
+  - `author -- framework --revise v1`: bản **v2**, 20 năng lực (TR 6, CC 5, LR 5, GRA 4), `claude-code`/`claude-opus-5-5`. Kiểm tra tự động 0 lỗi, 0 cảnh báo.
+    - Theo góp ý, AI đã bỏ mọi cạnh `supports`, chỉ giữ `confusable_with` và một `component_of`; tổng 21 cạnh, không có cạnh tiên quyết.
+  - **Rà soát v2: đạt (pass), 0 lỗi, 7 cảnh báo:**
+    - một cạnh `component_of` mâu thuẫn với giới hạn suy luận;
+    - hai trích dẫn chưa thật sát;
+    - `sentence_accuracy` vẫn trộn từ ngữ của hai mức Band;
+    - lặp ý "repetition" ở nhiều năng lực;
+    - chồng lấn giữa `precise_word_choice` và `style_appropriacy`;
+    - quy tắc "chưa đủ kết luận" chưa nhất quán.
+  - AI tự nêu giới hạn: không trích được nguyên câu bị ngắt dòng. Thực tế phép đối chiếu đã bỏ qua khác biệt xuống dòng, nhưng chỉ dẫn chưa nói điều này.
+- **Trạng thái:** v1 DRAFT (đã rà soát, revise); v2 DRAFT (đã rà soát, pass). Chờ người dùng duyệt ở tab Khung năng lực.
+
+### 19/11/2026 — Khung năng lực v3 (soạn lại từ v2) / chờ người dùng duyệt
+- **Nguồn:** người dùng "Soạn v3".
+- **Thay đổi chỉ dẫn trước khi chạy:** báo cho AI biết phép đối chiếu trích dẫn bỏ qua xuống dòng, khoảng trắng, hoa/thường và kiểu dấu ngoặc. `e42` vẫn 10/10.
+- **Chạy thật** `npm.cmd run author -- framework --revise v2`:
+  - Bản **v3**: 20 năng lực (TR 6, CC 5, LR 5, GRA 4), 21 cạnh, `claude-code`/`claude-opus-5-5`. Kiểm tra tự động 0 lỗi, 0 cảnh báo.
+  - **Rà soát v3: đạt, 0 lỗi, 6 cảnh báo**. Cả 6 đều mới, không lặp lại cảnh báo của v2:
+    - hợp đồng bằng chứng của `sentence_accuracy` chưa nhất quán;
+    - cách "mở bài" chưa được thao tác hóa;
+    - thiếu năng lực cho "lạm dụng cụm từ thuộc lòng" (Band 4/3);
+    - một trích dẫn về độ dài chưa sát với "range";
+    - ghi chú tổng hợp chưa nêu các điều kiện chặn của Band 0/1;
+    - tiêu chí đạt/chưa đạt cho "phát triển ý" đặt ngưỡng thấp. Đây là giới hạn của cách ghi nhị phân met/not met, soạn lại không giải quyết được.
+- **Trạng thái:** v1, v2, v3 đều DRAFT và đã rà soát; v3 là bản tốt nhất. Chờ người dùng duyệt.

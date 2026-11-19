@@ -11,6 +11,7 @@ import { blindTaskView, DATA_POLICY, scopedReader, type ScopedReader } from '../
 import type { NewJob } from '../ports.js';
 import type { BuilderStore, CachePort, JsonPort, KnowledgePort, LearningPort, MediaPort, QueuePort, Ref, StagedUnit, UnitKind } from './ports.js';
 import { deterministicFindings, requiredParts, stageOutcome, type BundleUnit, type Finding, type SpecRules } from './qc-checks.js';
+import type { ContentOrigin } from '../../domain/knowledge/content-origin.js';
 
 export interface PipelineDeps {
   builder: BuilderStore; json: JsonPort; media: MediaPort; knowledge: KnowledgePort; learning: LearningPort; queue: QueuePort; cache: CachePort;
@@ -24,11 +25,11 @@ export interface PipelineDeps {
 
 interface TestCase { case_id: string; case_type: string; target: { kind: UnitKind; id: string; version: string }; run: 'blind_solve' | 'assessment'; input_text: string | null; expected_outcome: 'met' | 'not_met' | 'inconclusive' | null }
 interface PackageManifest {
-  package_id: string; version: string; request_id: string; content_origin: 'synthetic_fixture' | 'sourced';
+  package_id: string; version: string; request_id: string; content_origin: ContentOrigin;
   units: { kind: UnitKind; id: string; version: string; hash: string }[]; sources: { source_id: string; version: string; hash: string }[]; media: string[];
   coverage: Omit<CoverageInput, 'test_cases'> & { test_cases: TestCase[] }; knowledge_gaps: string[]; bundle_hash: string; qc_spec_version: string; playbook_version: string;
 }
-type LoadedBundle = { manifest: PackageManifest; units: BundleUnit[]; integrity_errors: string[]; recomputed: string | null; origin: 'synthetic_fixture' | 'sourced'; bundle_hash: string; usage: UsageRole[] };
+type LoadedBundle = { manifest: PackageManifest; units: BundleUnit[]; integrity_errors: string[]; recomputed: string | null; origin: ContentOrigin; bundle_hash: string; usage: UsageRole[] };
 
 const STAGES: QcStage[] = ['QC1', 'QC2', 'QC3', 'QC4'];
 const byKey = (a: { kind: string; id: string; version: string }, b: { kind: string; id: string; version: string }) => `${a.kind}/${a.id}@${a.version}`.localeCompare(`${b.kind}/${b.id}@${b.version}`);

@@ -1,4 +1,5 @@
 // QC4 decision (05 §5.C): the AI solves blind and audits separately; the application compares and decides.
+import type { ContentOrigin } from './content-origin.js';
 export interface Qc4Case { case_id: string; run: 'blind_solve' | 'assessment'; target_item: string | null; expected_outcome: 'met' | 'not_met' | 'inconclusive' | null }
 export interface Qc4Job { case_id: string; step: 'blind_solve' | 'verification' | 'assessment'; state: string; providers: string[]; result: unknown }
 export interface Qc4Key { item: string; answers: { question_id: string; accepted: string[] }[] }
@@ -6,7 +7,7 @@ export interface Qc4Finding { code: 'QC4_NOT_RUN' | 'QC4_BLIND_SOLVE_MISMATCH' |
 
 const norm = (s: string) => s.trim().replace(/\s+/g, ' ').toUpperCase();
 
-export function evaluateQc4(cases: Qc4Case[], jobs: Qc4Job[], keys: Qc4Key[], origin: 'synthetic_fixture' | 'sourced'):
+export function evaluateQc4(cases: Qc4Case[], jobs: Qc4Job[], keys: Qc4Key[], origin: ContentOrigin):
   { status: 'PASS' | 'FAIL' | 'NOT_RUN'; method: 'synthetic_fake' | 'ai_semantic'; findings: Qc4Finding[] } {
   const findings: Qc4Finding[] = [];
   const job = (c: string, step: Qc4Job['step']) => jobs.find((j) => j.case_id === c && j.step === step);

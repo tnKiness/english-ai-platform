@@ -193,13 +193,13 @@ describe('aiExecutionGateway with the real (unverified) adapters', () => {
     const gw = new AiExecutionGateway(gatewayDeps(f, { observe }));
     const status = await gw.status();
     expect(status.map((s) => [s.provider, s.adapter, s.ready, s.error])).toEqual([
-      ['codex', 'NEEDS_VERIFICATION', false, 'BILLING_UNVERIFIED'], ['claude-code', 'NEEDS_VERIFICATION', false, 'BILLING_UNVERIFIED'], ['agy', 'NEEDS_VERIFICATION', false, 'BILLING_UNVERIFIED']]);
-    expect(status[1]!.reasons).toEqual(expect.arrayContaining(['ADAPTER_NEEDS_VERIFICATION', 'NO_D01_EVIDENCE', 'NO_ACCOUNT_PROFILE', 'NO_CONSENT_synthetic_fixture']));
+      ['claude-code', 'NEEDS_VERIFICATION', false, 'BILLING_UNVERIFIED'], ['agy', 'NEEDS_VERIFICATION', false, 'BILLING_UNVERIFIED'], ['codex', 'NEEDS_VERIFICATION', false, 'BILLING_UNVERIFIED']]); // E-38 preference order
+    expect(status.find((s) => s.provider === 'claude-code')!.reasons).toEqual(expect.arrayContaining(['ADAPTER_NEEDS_VERIFICATION', 'NO_D01_EVIDENCE', 'NO_ACCOUNT_PROFILE', 'NO_CONSENT_synthetic_fixture']));
     // E-11 / E-21: each provider has a candidate mechanism (CODEX_HOME, CLAUDE_CONFIG_DIR, USERPROFILE+HOME), so missing evidence — not the mechanism — blocks it.
-    expect(status[0]!.reasons).not.toContain('ISOLATION_NO_RECORDED_MECHANISM');
-    expect(status[0]!.reasons).toEqual(expect.arrayContaining(['NO_D01_EVIDENCE', 'ADAPTER_NEEDS_VERIFICATION']));
-    expect(status[2]!.reasons).not.toContain('ISOLATION_NO_RECORDED_MECHANISM');
-    expect(status[2]!.reasons).toEqual(expect.arrayContaining(['NO_D01_EVIDENCE', 'ADAPTER_NEEDS_VERIFICATION']));
+    expect(status.find((s) => s.provider === 'codex')!.reasons).not.toContain('ISOLATION_NO_RECORDED_MECHANISM');
+    expect(status.find((s) => s.provider === 'codex')!.reasons).toEqual(expect.arrayContaining(['NO_D01_EVIDENCE', 'ADAPTER_NEEDS_VERIFICATION']));
+    expect(status.find((s) => s.provider === 'agy')!.reasons).not.toContain('ISOLATION_NO_RECORDED_MECHANISM');
+    expect(status.find((s) => s.provider === 'agy')!.reasons).toEqual(expect.arrayContaining(['NO_D01_EVIDENCE', 'ADAPTER_NEEDS_VERIFICATION']));
     expect(observe).not.toHaveBeenCalled();
     for (const c of Object.values(CLI_DESCRIPTORS)) expect(c.candidate_envelope.status).toBe('NEEDS_VERIFICATION');
   });
@@ -237,7 +237,7 @@ describe('gateway mechanism end-to-end with a synthetic CLI (node.exe + fixture;
     fx.store.aiAccounts.setConsent('claude-code', 'synthetic_fixture', true);
     const deps = gatewayDeps(fx, { observe: async () => okObserved });
     const gw = new AiExecutionGateway(deps);
-    expect((await gw.status())[1]).toMatchObject({ provider: 'claude-code', ready: true });
+    expect((await gw.status()).find((s) => s.provider === 'claude-code')).toMatchObject({ provider: 'claude-code', ready: true });
     // Without the learner-data consent the same provider is still blocked for a learner job.
     expect((await gw.decide('claude-code', { billing_policy: 'subscription_only', required_capabilities: ['text'], data_classes: ['learner_submission'] })).decision)
       .toEqual({ allowed: false, error: 'DATA_RECIPIENT_NOT_ALLOWED', reasons: ['NO_CONSENT_learner_submission'] });

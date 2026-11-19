@@ -1795,7 +1795,9 @@
           "type": "string",
           "enum": [
             "synthetic_fixture",
-            "sourced"
+            "sourced",
+            "ai_authored",
+            "learner_owned"
           ]
         }
       },
@@ -2222,7 +2224,9 @@
           "type": "string",
           "enum": [
             "synthetic_fixture",
-            "sourced"
+            "sourced",
+            "ai_authored",
+            "learner_owned"
           ]
         },
         "units": {
@@ -2465,7 +2469,9 @@
           "type": "string",
           "enum": [
             "synthetic_fixture",
-            "sourced"
+            "sourced",
+            "ai_authored",
+            "learner_owned"
           ]
         },
         "released_at": {
@@ -2615,6 +2621,335 @@
         "competing_answers",
         "findings",
         "synthetic"
+      ]
+    },
+    "competency_framework_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "job_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context_manifest_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "synthetic": {
+          "type": "boolean"
+        },
+        "competencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "competency_id": {
+                "type": "string",
+                "pattern": "^wt2\\.(tr|cc|lr|gra)\\.[a-z][a-z0-9_]{1,40}$"
+              },
+              "criterion": {
+                "type": "string",
+                "enum": [
+                  "task_response",
+                  "coherence_cohesion",
+                  "lexical_resource",
+                  "grammatical_range_accuracy"
+                ]
+              },
+              "title_vi": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "assessor_criterion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 800
+              },
+              "target_claim": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidence_required": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1
+              },
+              "evidence_conditions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1
+              },
+              "confounders": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "inference_limits": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1
+              },
+              "edges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "type",
+                    "target",
+                    "basis"
+                  ],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "component_of",
+                        "supports",
+                        "prerequisite",
+                        "transferable_to",
+                        "confusable_with"
+                      ]
+                    },
+                    "target": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "basis": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "if": {
+                    "properties": {
+                      "type": {
+                        "const": "prerequisite"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "basis": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              },
+              "source_quotes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "source_ref": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 3,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "source_ref",
+                    "quote"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 6
+              }
+            },
+            "required": [
+              "competency_id",
+              "criterion",
+              "title_vi",
+              "assessor_criterion",
+              "target_claim",
+              "evidence_required",
+              "evidence_conditions",
+              "confounders",
+              "inference_limits",
+              "edges",
+              "source_quotes"
+            ]
+          },
+          "minItems": 8,
+          "maxItems": 40
+        },
+        "observation_guide": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "competency_id": {
+                "type": "string",
+                "pattern": "^wt2\\.(tr|cc|lr|gra)\\.[a-z][a-z0-9_]{1,40}$"
+              },
+              "signal": {
+                "type": "string",
+                "minLength": 1
+              },
+              "counter_evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "valid_exceptions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "inconclusive_when": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1
+              }
+            },
+            "required": [
+              "competency_id",
+              "signal",
+              "counter_evidence",
+              "valid_exceptions",
+              "inconclusive_when"
+            ]
+          },
+          "minItems": 1
+        },
+        "aggregation_notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "job_id",
+        "context_manifest_id",
+        "synthetic",
+        "competencies",
+        "observation_guide",
+        "aggregation_notes",
+        "limitations"
+      ]
+    },
+    "framework_review_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "job_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context_manifest_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "synthetic": {
+          "type": "boolean"
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "revise"
+          ]
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "type": "string",
+                "minLength": 1
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "error",
+                  "warning"
+                ]
+              },
+              "issue": {
+                "type": "string",
+                "minLength": 1
+              },
+              "suggestion": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "target",
+              "severity",
+              "issue",
+              "suggestion"
+            ]
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "job_id",
+        "context_manifest_id",
+        "synthetic",
+        "verdict",
+        "findings",
+        "limitations"
       ]
     }
   }

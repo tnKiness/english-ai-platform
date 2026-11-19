@@ -2,7 +2,7 @@
 // collectors for Claude Code (`cli_tools_disabled`) and Antigravity agy (`cli_permission_deny`).
 // Codex remains unchanged and uses OS-level `enforced_boundary`.
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join, parse, resolve } from 'node:path';
@@ -368,12 +368,25 @@ export interface ClaudeConfigInspection {
 
 export const CLAUDE_ALLOWED_BUILTIN_PLUGINS = ['cc-plugin-agents-md', 'cc-plugin-telemetry', 'cc-plugin-plugin-authoring'] as const;
 
+/** E-45: true only for a real directory whose entries are all regular files named plugin-directory-cache[-vN].json. */
+export function isClaudePluginCacheOnly(dir: string): boolean {
+  try {
+    if (!lstatSync(dir).isDirectory()) return false;
+    return readdirSync(dir).every((name) => /^plugin-directory-cache(-v\d+)?\.json$/.test(name) && lstatSync(join(dir, name)).isFile());
+  } catch { return false; }
+}
+
 export function inspectClaudeConfig(profileDir: string, cwd: string, stopAt?: string): ClaudeConfigInspection {
   const findings: string[] = [];
   const notes: string[] = [];
   const entries = existsSync(profileDir) ? readdirSync(profileDir).sort() : [];
   for (const f of ['CLAUDE.md', 'AGENTS.md', 'AGENTS.override.md', '.mcp.json', 'mcp.json', 'hooks.json', 'plugins', 'hooks', 'commands', 'agents']) {
-    if (entries.includes(f)) findings.push(`PROFILE_${f}`);
+    if (!entries.includes(f)) continue;
+    // E-45: Claude Code writes the plugin catalogue cache into plugins/ by itself. A directory holding nothing but that
+    // cache file installs or enables nothing; anything else in it (installed plugins, marketplaces, manifests, code,
+    // sub-directories, links) still blocks.
+    if (f === 'plugins' && isClaudePluginCacheOnly(join(profileDir, f))) { notes.push('plugins/ chỉ chứa cache danh mục plugin (E-45)'); continue; }
+    findings.push(`PROFILE_${f}`);
   }
   if (entries.includes('settings.json')) {
     try {

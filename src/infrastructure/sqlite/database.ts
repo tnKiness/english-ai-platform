@@ -63,10 +63,10 @@ export async function migrate(db: Db, options: OpenOptions = {}): Promise<number
   if (applied.length > 0 && options.beforeMigrate) await options.beforeMigrate(db, pending);
   const now = options.now ?? (() => new Date());
   for (const m of pending) {
-    // 0003 rebuilds referenced tables using legacy ALTER TABLE. Foreign keys must be
+    // 0003 and 0014 rebuild referenced tables using legacy ALTER TABLE. Foreign keys must be
     // disabled OUTSIDE the transaction, otherwise SQLite rewrites child references
     // to the temporary names even with legacy_alter_table enabled.
-    const rebuild = m.version === 3;
+    const rebuild = m.version === 3 || m.version === 14;
     if (rebuild) db.pragma('foreign_keys = OFF');
     try { db.transaction(() => {
       db.exec(m.sql);

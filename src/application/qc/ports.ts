@@ -4,6 +4,7 @@ import type { ReleaseState } from '../../domain/knowledge/release-state.js';
 import type { SourceFacts } from '../../domain/knowledge/source-rights.js';
 import type { QcMethod, QcPart, QcStage } from '../../domain/knowledge/release-gate.js';
 import type { AttemptRecord, JobRecord, NewAttempt, NewJob, NewManifest, NewSubmission, SubmissionRecord } from '../ports.js';
+import type { ContentOrigin } from '../../domain/knowledge/content-origin.js';
 
 export type UnitKind = 'item' | 'rubric' | 'knowledge' | 'policy';
 export interface Ref { kind: UnitKind | 'package'; id: string; version: string; hash: string; rel_path: string }
@@ -16,7 +17,7 @@ export interface ReviewInput {
   target_kind: string; target_id: string; target_version: string | null; severity: 'high' | 'normal' | 'low'; summary: string; detail: unknown;
 }
 export interface ReviewRow extends Omit<ReviewInput, 'detail'> { review_id: string; detail: unknown; status: 'open' | 'resolved'; resolution: 'ai_fix_and_requalify' | 'suspended_or_retired' | 'manual_review_done' | 'deferred' | null; created_at: string; updated_at: string }
-export interface BundleRow { package_id: string; version: string; request_id: string; bundle_hash: string; content_origin: 'synthetic_fixture' | 'sourced'; qc_spec_version: string; playbook_version: string; created_at: string }
+export interface BundleRow { package_id: string; version: string; request_id: string; bundle_hash: string; content_origin: ContentOrigin; qc_spec_version: string; playbook_version: string; created_at: string }
 export interface QcJobRow { case_id: string; step: 'blind_solve' | 'verification' | 'assessment'; attempt_id: string; job_id: string; state: string; submission_id: string; snapshot_version: number; providers: string | null }
 export interface Impact { items: { id: string; version: string }[]; attempts: { attempt_id: string; scope: string }[]; observations: { observation_id: string; scope: string; outcome: string; competency_id: string }[]; jobs: string[] }
 
@@ -25,8 +26,8 @@ export interface BuilderStore {
   registerSource(record: unknown): { source_id: string; version: string; hash: string };
   source(sourceId: string, version: string): SourceRow | undefined;
   latestSource(sourceId: string): SourceRow | undefined;
-  createRequest(request: unknown): { request_id: string; package_id: string; content_origin: 'synthetic_fixture' | 'sourced' };
-  request(requestId: string): { package_id: string; content_origin: 'synthetic_fixture' | 'sourced'; value: Record<string, unknown> } | undefined;
+  createRequest(request: unknown): { request_id: string; package_id: string; content_origin: ContentOrigin };
+  request(requestId: string): { package_id: string; content_origin: ContentOrigin; value: Record<string, unknown> } | undefined;
   stageUnit(requestId: string, kind: UnitKind, value: unknown): StagedUnit;
   stagedUnits(requestId: string): StagedUnit[];
   setCoverage(requestId: string, coverage: unknown): void;

@@ -1,8 +1,15 @@
 // subscriptionGuard (06A §8) + D-01 evidence gate. Pure: every input is an observation made before the call.
 // Missing or unclear evidence never means "probably fine": it blocks, and no trial paid call is made to find out.
+import type { ContentOrigin } from '../../domain/knowledge/content-origin.js';
 /** E-11 (4): Antigravity `agy` replaces gemini-cli on the Google side; old 'gemini-cli' rows stay readable in SQLite. */
 export type CliProvider = 'codex' | 'claude-code' | 'agy';
-export const CLI_PROVIDERS: readonly CliProvider[] = ['codex', 'claude-code', 'agy'];
+/**
+ * E-38 (user decision 18/11/2026, Codex Plus expired): system-wide provider preference. The first READY provider is the
+ * primary; the others are fallbacks, which still need the D-05 benchmark report before automatic failover (E-20).
+ */
+export const CLI_PROVIDERS: readonly CliProvider[] = ['claude-code', 'agy', 'codex'];
+/** Orders any provider list by the system preference (jobs store eligibility as a set; order is decided here). */
+export const byPreference = (list: readonly CliProvider[]): CliProvider[] => [...new Set(list)].filter((p) => CLI_PROVIDERS.includes(p)).sort((a, b) => CLI_PROVIDERS.indexOf(a) - CLI_PROVIDERS.indexOf(b));
 export type Capability = 'text' | 'structured_result' | 'direct_audio';
 export type DataClass = 'synthetic_fixture' | 'knowledge_content' | 'answer_key' | 'learner_submission' | 'learner_audio' | 'learner_profile';
 export const DATA_CLASSES: readonly DataClass[] = ['synthetic_fixture', 'knowledge_content', 'answer_key', 'learner_submission', 'learner_audio', 'learner_profile'];
@@ -172,9 +179,12 @@ export function latestExtraUsageConfirmation(e: Pick<ProviderEvidence, 'extra_us
 }
 
 /** Data classes a context sends, derived from role, scope and content origin — never from what the AI says. */
-export function dataClassesFor(m: { role: string; scope: 'learner' | 'dry_run'; content_origin: 'synthetic_fixture' | 'sourced' | null }): DataClass[] {
+export function dataClassesFor(m: { role: string; scope: 'learner' | 'dry_run'; content_origin: ContentOrigin | null }): DataClass[] {
   const content: DataClass = m.content_origin === 'synthetic_fixture' ? 'synthetic_fixture' : 'knowledge_content';
   const classes = new Set<DataClass>([content]);
+  // E-41: imported learner material is personal data. Until C4 adds a dedicated consent class it needs the
+  // learner_submission consent too, never only knowledge_content.
+  if (m.content_origin === 'learner_owned') classes.add('learner_submission');
   if (m.role === 'verifier') classes.add(m.content_origin === 'synthetic_fixture' ? 'synthetic_fixture' : 'answer_key');
   if (m.scope === 'learner') classes.add('learner_submission');
   return [...classes];

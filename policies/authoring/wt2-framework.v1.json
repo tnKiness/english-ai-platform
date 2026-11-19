@@ -1,0 +1,17 @@
+{
+  "schema_version": "1",
+  "framework_id": "ielts-writing-task2",
+  "decision": "E-42 (D-05 C2, N4): AI soạn khung năng lực + rubric Writing Task 2 từ nguồn đã duyệt; người dùng duyệt bản v1",
+  "task": "IELTS Writing Task 2 (Academic and General Training)",
+  "requirements": { "min_per_criterion": 3, "max_per_criterion": 8, "recommended_min": 4, "recommended_max": 6 },
+  "max_chars_per_source": 16000,
+  "band_table": { "url": "https://ielts.org/cdn/ielts-guides/ielts-writing-band-descriptors.pdf", "first_criterion": "Task Response" },
+  "sources": [
+    { "url": "https://ielts.org/cdn/ielts-guides/ielts-writing-key-assessment-criteria.pdf", "role": "official_criteria" },
+    { "url": "https://ielts.org/cdn/computer-delivered-sample-tests-academic-writing/ielts-academic-writing-example-responses-to-parts-1-and-2-with-band-scores-and-examiner-comments.pdf", "role": "examiner_comments" },
+    { "url": "https://ielts.org/cdn/computer-delivered-sample-tests-general-training-writing/ielts-general-training-writing-example-responses-to-parts-1-and-2-with-band-scores-and-examiner-comments.pdf", "role": "examiner_comments" },
+    { "url": "https://ielts.org/take-a-test/test-types/ielts-academic-test/ielts-academic-format-writing", "role": "test_format" },
+    { "url": "https://ielts.org/take-a-test/test-types/ielts-general-training-test/ielts-general-training-format-writing", "role": "test_format" },
+    { "url": "https://ielts.idp.com/prepare/article-writing-task-2-why-cant-i-get-a-band-8", "role": "guidance" }
+  ]
+}

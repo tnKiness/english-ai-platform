@@ -1,5 +1,6 @@
 import { redact } from '../ai/gateway/redaction.js';
 import type { Db } from './database.js';
+import type { ContentOrigin } from '../../domain/knowledge/content-origin.js';
 
 /** Read models for the console. Metadata only: no submission text, context payload or AI output body. */
 export class ConsoleQueries {
@@ -29,10 +30,10 @@ export class ConsoleQueries {
   }
 
   /** Facts the gateway needs to decide what data a job sends: role, scope and content origin (never AI output). */
-  jobFacts(jobId: string): { role: string; scope: 'learner' | 'dry_run'; content_origin: 'synthetic_fixture' | 'sourced' | null } | undefined {
+  jobFacts(jobId: string): { role: string; scope: 'learner' | 'dry_run'; content_origin: ContentOrigin | null } | undefined {
     return this.db.prepare(`SELECT m.role, j.scope, b.content_origin FROM ai_jobs j JOIN context_manifests m ON m.manifest_id = j.context_manifest_id
       JOIN attempts a ON a.attempt_id = j.attempt_id LEFT JOIN item_versions i ON i.item_id = a.item_id AND i.version = a.item_version
       LEFT JOIN package_bundles b ON b.package_id = i.package_id AND b.version = i.package_version WHERE j.job_id = ?`).get(jobId) as
-      { role: string; scope: 'learner' | 'dry_run'; content_origin: 'synthetic_fixture' | 'sourced' | null } | undefined;
+      { role: string; scope: 'learner' | 'dry_run'; content_origin: ContentOrigin | null } | undefined;
   }
 }

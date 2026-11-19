@@ -27,6 +27,9 @@
     "worker": "tsx src/worker/main.ts",
     "backup": "tsx src/cli/backup.ts",
     "export": "tsx src/cli/export.ts",
+    "sources": "tsx src/cli/sources.ts",
+    "author": "tsx src/cli/author.ts",
+    "tts": "tsx src/cli/tts.ts",
     "qc:real": "tsx scripts/qc-real-synthetic.ts",
     "seed:reading": "tsx scripts/seed-reading.ts"
   },
@@ -35,6 +38,7 @@
     "ajv-formats": "3.0.1",
     "better-sqlite3": "13.0.3",
     "fastify": "5.12.7",
+    "pdfjs-dist": "6.4.299",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },

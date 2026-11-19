@@ -25,6 +25,9 @@ npm.cmd run worker -- --fake       # chỉ job dry-run bằng FakeAdapter (synth
 npm.cmd run worker -- --learning   # chấm Writing của bạn bằng AI thật (app chạy với STUDY_ENGLISH_LEARNING_AI=real)
 npm.cmd run ai -- status           # lý do từng provider bị chặn; không gọi model
 npm.cmd run backup -- create       # restore <backup> <thư mục mới> ; promote <thư mục> --confirm
+npm.cmd run sources -- crawl       # quét trang nguồn IELTS (miền cho phép) vào var/sources; duyệt ở Builder & QC → Nguồn
+npm.cmd run tts -- status          # TTS cục bộ (Piper, offline) cho audio Listening; `say "văn bản"` ghi WAV vào kho media
+npm.cmd run author -- framework    # AI soạn khung năng lực Writing Task 2 từ nguồn đã duyệt; duyệt ở Builder & QC → Khung năng lực
 ```
 
 ## Kiểm tra

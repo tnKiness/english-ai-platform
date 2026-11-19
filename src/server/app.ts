@@ -1,3 +1,4 @@
+import { createReadStream } from 'node:fs';
 import Fastify from 'fastify';
 import { ComplaintService } from '../application/learning/complaints.js';
 import { DailyTracker, type ActivityInput } from '../application/learning/daily-tracker.js';
@@ -6,6 +7,9 @@ import type { ReadingAnswer } from '../domain/learning/reading.js';
 import { AudioWorkflow, AUDIO_MAX_BYTES } from '../application/learning/audio-workflow.js';
 import { LearningWorkflowService } from '../application/learning/writing-workflow.js';
 import { ReplanPlanner } from '../application/learning/replan-planner.js';
+import { SourceReview } from '../infrastructure/sources/review.js';
+import { FrameworkAuthoringService } from '../application/authoring/framework-authoring.js';
+import { loadFrameworkPolicy, loadFrameworkSources } from '../infrastructure/authoring/framework-sources.js';
 import { ConsoleService } from '../application/qc/console.js';
 import type { BuilderPipeline } from '../application/qc/pipeline.js';
 import type { ContextRole } from '../application/context/scoped-reader.js';
@@ -187,7 +191,29 @@ export function createApp(deps: AppDeps = {}) {
 
   // Tab 3 "Lần chạy": technical log; gateway shows why real providers are blocked.
   app.get('/api/console/runs', async () => queries.runs());
+  // E-37: crawled source pages awaiting review (D-05 N2). Excerpts are plain text; raw pages are never served.
+  const sourceReview = new SourceReview(store.db, store.paths, store.builder, store.now);
+  app.get<{ Querystring: { review?: string; kind?: string; skill?: string; host?: string; fetch?: string; q?: string; media?: string; limit?: string; offset?: string } }>('/api/console/sources', async (r) =>
+    sourceReview.list({ ...r.query, limit: r.query.limit ? Number(r.query.limit) : undefined, offset: r.query.offset ? Number(r.query.offset) : undefined }));
+  app.get<{ Params: { id: string } }>('/api/console/sources/:id/excerpt', async (r) => sourceReview.excerpt(r.params.id));
+  // E-44: recorded Listening audio for the reviewer. The type is the magic-byte result stored at fetch time.
+  app.get<{ Params: { id: string } }>('/api/console/sources/:id/audio', async (r, reply) => {
+    const a = sourceReview.audio(r.params.id);
+    return reply.header('content-type', a.type).header('x-content-type-options', 'nosniff').header('cache-control', 'private, max-age=3600').send(createReadStream(a.file));
+  });
+  app.post<{ Body: { ids: string[]; decision: 'approve' | 'reject' } }>('/api/console/sources/review', {
+    schema: body({ ids: { type: 'array', minItems: 1, maxItems: 500, items: { type: 'string', minLength: 1, maxLength: 64 } }, decision: { enum: ['approve', 'reject'] } }),
+  }, async (r) => sourceReview.review(r.body.ids, r.body.decision));
   app.get('/api/console/gateway', async () => gatewayStatus());
+  // E-42 (D-05 C2): AI-authored competency framework drafts. The AI runs only from `npm run author`; here the learner
+  // reads a draft (checks, independent review, quotes with their sources) and approves or rejects it.
+  const frameworkPolicy = loadFrameworkPolicy();
+  const frameworks = new FrameworkAuthoringService(store, frameworkPolicy, () => loadFrameworkSources(store.db, store.paths, frameworkPolicy));
+  app.get('/api/console/frameworks', async () => ({ framework_id: frameworkPolicy.framework_id, rows: frameworks.list(), runs: frameworks.runs() }));
+  app.get<{ Params: { version: string } }>('/api/console/frameworks/:version', async (r) => frameworks.detail(r.params.version));
+  app.post<{ Params: { version: string }; Body: { decision: 'approve' | 'reject'; note: string } }>('/api/console/frameworks/:version/decision', {
+    schema: body({ decision: { enum: ['approve', 'reject'] }, note: { type: 'string', maxLength: 2000 } }),
+  }, async (r) => frameworks.decide(r.params.version, r.body.decision, r.body.note));
 
   // ---- P3 Khung học, Vòng Writing & Gợi mở theo nấc (01, 02, 03, 06) -------------------------
   const bandNum = { type: 'number', minimum: 0, maximum: 9 } as const;

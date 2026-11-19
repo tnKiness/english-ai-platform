@@ -145,8 +145,8 @@ describe('E-11 (1) CODEX_HOME candidate', () => {
     f.store.aiAccounts.setConsent('codex', 'synthetic_fixture', true);
     const gw = new AiExecutionGateway(deps(f));
     const status = await gw.status();
-    expect(status[0]).toMatchObject({ provider: 'codex', ready: false });
-    expect(status[0]!.reasons).toContain('ISOLATION_EVIDENCE_MECHANISM_MISMATCH');
+    expect(status.find((s) => s.provider === 'codex')).toMatchObject({ provider: 'codex', ready: false });
+    expect(status.find((s) => s.provider === 'codex')!.reasons).toContain('ISOLATION_EVIDENCE_MECHANISM_MISMATCH');
     f.store.aiAccounts.recordEvidence(evidence(), VERIFIED);
     const { decision, permit } = await gw.decide('codex', { billing_policy: 'subscription_only', required_capabilities: ['text'], data_classes: ['synthetic_fixture'] });
     expect(decision).toEqual({ allowed: true });
@@ -273,7 +273,7 @@ describe('npm run ai -- verify codex (fake codex via node.exe; no inference)', (
     f.store.aiAccounts.upsertAccount({ profile_id: 'codex-main', provider: 'codex', label: 'Codex', runner_ref: join(f.root, '..', `runner-v-${process.pid}`), state: 'READY' });
     f.store.aiAccounts.recordEvidence(e, report.envelope!);
     f.store.aiAccounts.setConsent('codex', 'synthetic_fixture', true);
-    const codex = (await new AiExecutionGateway(deps(f)).status())[0]!;
+    const codex = (await new AiExecutionGateway(deps(f)).status()).find((s) => s.provider === 'codex')!;
     expect(codex.ready).toBe(false);
     expect(codex.reasons).toEqual(expect.arrayContaining(['ADAPTER_NEEDS_VERIFICATION', 'EXTRA_USAGE_NOT_CONFIRMED_OFF', 'PLUGINS_NOT_DISABLED', 'ENTITLEMENT_UNVERIFIED', 'OUTPUT_CONTRACT_UNVERIFIED', 'READ_BOUNDARY_UNVERIFIED']));
   }, 90_000);

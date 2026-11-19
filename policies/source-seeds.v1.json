@@ -1,0 +1,132 @@
+{
+  "schema_version": "1",
+  "version": "v1",
+  "decision": "E-36 (N2): quét hết các miền nguồn đã liệt kê trong 05 §2.C; người dùng duyệt từng trang trước khi dùng; E-40: loại bản sao theo quốc gia, tìm kiếm, đăng nhập, danh bạ (người dùng \"Lọc rồi quét tiếp\"); E-44: tải audio Listening thu sẵn (chỉ audio, nhận diện bằng magic bytes, tối đa 60 MB)",
+  "user_agent": "study-english-local-source-crawler/1 (personal study use)",
+  "limits": {
+    "max_depth": 4,
+    "max_bytes": 15728640,
+    "min_interval_ms": 1500,
+    "timeout_ms": 20000,
+    "max_audio_bytes": 62914560
+  },
+  "domains": [
+    {
+      "host": "ielts.org",
+      "origin": "official",
+      "note": "Chủ sở hữu bài thi: band descriptors, định dạng, cách chấm, tài liệu ôn"
+    },
+    {
+      "host": "takeielts.britishcouncil.org",
+      "origin": "official",
+      "note": "British Council (đồng sở hữu IELTS): định dạng, bài luyện"
+    },
+    {
+      "host": "ielts.idp.com",
+      "origin": "official",
+      "note": "IDP (đồng sở hữu IELTS): định dạng, bài luyện"
+    },
+    {
+      "host": "www.cambridgeenglish.org",
+      "origin": "official",
+      "note": "Cambridge (đồng sở hữu IELTS): mẫu bài, tài liệu giáo viên"
+    },
+    {
+      "host": "learnenglish.britishcouncil.org",
+      "origin": "teaching",
+      "note": "Ngữ pháp, từ vựng, kỹ năng"
+    },
+    {
+      "host": "www.coe.int",
+      "origin": "linguistic_research",
+      "note": "CEFR Companion Volume"
+    },
+    {
+      "host": "englishprofile.org",
+      "origin": "linguistic_research",
+      "note": "English Vocabulary Profile"
+    },
+    {
+      "host": "www.internationalphoneticassociation.org",
+      "origin": "linguistic_research",
+      "note": "Bảng IPA"
+    }
+  ],
+  "media_hosts": [
+    {
+      "host": "assets.ctfassets.net",
+      "path_prefix": "/unrdeg6se4ke/",
+      "note": "CDN Contentful của IDP (chỉ audio được trang IDP liên kết)"
+    },
+    {
+      "host": "downloads.ctfassets.net",
+      "path_prefix": "/unrdeg6se4ke/",
+      "note": "CDN Contentful của IDP (chỉ audio được trang IDP liên kết)"
+    }
+  ],
+  "exclude": [
+    {
+      "host": "ielts.idp.com",
+      "path": "^/(?!(prepare|ielts-prep-hub|results|article|about)(/|$))[^/]+/",
+      "note": "Bản sao theo quốc gia (/vietnam/, /canada/…), đặt lịch, cộng đồng; giữ /prepare gốc"
+    },
+    {
+      "host": "bxsearch.ielts.idp.com",
+      "path": "^/",
+      "note": "Trang tìm kiếm/đặt lịch thi"
+    },
+    {
+      "host": "book.ielts.idp.com",
+      "path": "^/",
+      "note": "Đặt lịch thi"
+    },
+    {
+      "host": "account.ielts.idp.com",
+      "path": "^/",
+      "note": "Tài khoản"
+    },
+    {
+      "host": "learnenglish.britishcouncil.org",
+      "path": "^/user/",
+      "note": "Đăng nhập/đăng ký"
+    },
+    {
+      "host": "ielts.org",
+      "path": "^/receiving-organisations/",
+      "note": "Danh bạ tổ chức công nhận điểm"
+    },
+    {
+      "host": "www.internationalphoneticassociation.org",
+      "path": "^/(user/|content/council-members|icphs-proceedings/PCminutes)",
+      "note": "Tài khoản, danh sách hội đồng, biên bản"
+    },
+    {
+      "host": "learnenglish.britishcouncil.org",
+      "path": "[?&]page=",
+      "note": "Phân trang bình luận/danh sách: cùng bài, khác trang bình luận"
+    },
+    {
+      "host": "ielts.idp.com",
+      "path": "[?&]filter",
+      "note": "Trang danh sách lọc, không có nội dung mới"
+    }
+  ],
+  "seeds": [
+    "https://ielts.org/cdn/ielts-guides/ielts-writing-band-descriptors.pdf",
+    "https://ielts.org/take-a-test/preparation-resources/writing-test-resources",
+    "https://ielts.org/cdn/ielts-guides/ielts-speaking-band-descriptors.pdf",
+    "https://ielts.org/take-a-test/test-types/ielts-academic-test",
+    "https://ielts.org/take-a-test/test-types/ielts-general-training-test",
+    "https://ielts.org/take-a-test/your-results/ielts-scoring-in-detail",
+    "https://ielts.org/cdn/ielts-guides/ielts-guide-for-teachers.pdf",
+    "https://ielts.org/organisations/ielts-for-organisations/understanding-ielts-scoring/resources-for-setting-your-ielts-scores",
+    "https://ielts.org/take-a-test/preparation-resources",
+    "https://takeielts.britishcouncil.org/take-ielts/prepare",
+    "https://ielts.idp.com/prepare",
+    "https://www.cambridgeenglish.org/exams-and-tests/ielts/",
+    "https://learnenglish.britishcouncil.org/free-resources/grammar/english-grammar-reference",
+    "https://www.coe.int/en/web/common-european-framework-reference-languages/cefr-companion-volume-and-its-language-versions",
+    "https://englishprofile.org/?menu=evp-online",
+    "https://www.internationalphoneticassociation.org/content/ipa-chart"
+  ]
+}

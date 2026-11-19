@@ -152,9 +152,59 @@ Thu âm (WAV/WebM/OGG, tối đa 8 MiB), nghe lại, thu lại; mọi bản thu 
 
 ## 5. Builder & QC
 
-Dành cho việc tạo/kiểm định gói nội dung. Ba tab:
+Dành cho việc tạo/kiểm định gói nội dung. Các tab:
 - **Tìm trong kho tri thức** (đầu tab Gói tri thức): gõ từ khóa (gõ không dấu cũng được), chọn **vai trò** để xem đúng những gì vai trò đó được phép thấy (ví dụ `blind_solver` không bao giờ thấy đáp án), bấm *Tìm*. Kết quả xếp theo BM25, chỉ hiện tham chiếu + tiêu đề, không hiện nội dung; muốn xem nội dung thì mở gói bên dưới (được ghi vào nhật ký tiếp xúc). Nội dung bị thu hồi hoặc gói đã loại bỏ biến mất khỏi kết quả ngay. *Dựng lại chỉ mục* tạo lại chỉ mục từ các file JSON (an toàn, không mất dữ liệu).
 - **Gói tri thức**: chạy QC1–3 (kiểm tra xác định), xác nhận QC2/QC3 ngữ nghĩa trên đúng hash, chạy QC4 (giải mù + đối chiếu bằng AI qua worker), **Phát hành** khi đủ QC1–4, **Ngừng**/**Loại bỏ**, xem nội dung (được ghi vào nhật ký tiếp xúc để không dùng bài đã lộ làm bài kiểm chứng).
+- **Nguồn** (E-37): duyệt các trang tham chiếu mà bộ quét đã tải về. Đây là căn cứ để AI soạn tiêu chí chấm, định dạng đề và bài mẫu (D-05).
+  1. Quét, hoặc quét tiếp từ chỗ dừng lần trước:
+     ```powershell
+     npm.cmd run sources -- crawl --max-pages 200
+     ```
+     - Bộ quét chỉ đi trong các miền liệt kê ở `policies/source-seeds.v1.json`: ielts.org, British Council, IDP, Cambridge, LearnEnglish, CEFR, English Profile, IPA.
+     - Bộ quét **tôn trọng robots.txt** và chờ 1,5 giây giữa hai lần gọi cùng một máy chủ.
+     - Mỗi trang tối đa 15 MB; chỉ tải HTML và PDF.
+     - Redirect ra ngoài danh sách bị chặn trước khi gọi.
+     - Bản sao lưu ở `var/sources`.
+     - Lệnh `npm.cmd run sources -- status` xem số trang theo từng trạng thái.
+     - Mục `exclude` trong `policies/source-seeds.v1.json` liệt kê các URL không quét dù thuộc miền cho phép: bản sao theo quốc gia của IDP, trang tìm kiếm/đặt lịch, đăng nhập, danh bạ tổ chức. Mỗi lần chạy `crawl`, trang trong hàng đợi khớp luật chuyển sang "Bỏ qua" với lỗi `EXCLUDED_BY_POLICY`. Trang đã tải hoặc đã duyệt từ trước không bị đổi.
+     - Trang có phần nội dung bị treo quá thời gian chờ thì ghi lỗi `TIMEOUT`, lượt quét vẫn chạy tiếp.
+     - **Audio Listening** (E-44):
+       - Bộ quét tải file mp3/m4a/wav/ogg được các trang trong danh sách liên kết tới (thẻ `<a>`, `<audio>`, `<source>`), tối đa 60 MB mỗi file.
+       - Định dạng được nhận diện bằng nội dung file, không tin đuôi file hay `Content-Type`; file giả bị bỏ qua với lỗi `AUDIO_UNRECOGNISED`.
+       - Mục `media_hosts` cho phép tải **chỉ audio** từ CDN của nhà xuất bản, trong đúng thư mục khai báo (hiện là CDN của IDP).
+       - Trang tải trước bản này: chạy `npm.cmd run sources -- discover-audio` để xếp audio vào hàng đợi, rồi `crawl`.
+     - PDF (ví dụ band descriptors) được trích chữ ngay khi tải, giữ dòng/cột của bảng (cột cách nhau bằng tab), kèm các **đường kẻ ngang của bảng** (dùng để dựng lại đúng từng ô Band × tiêu chí). PDF tải trước bản này: chạy `npm.cmd run sources -- extract`.
+  2. Trong tab **Nguồn**: lọc theo *chờ duyệt / đã tải*, loại trang (band descriptors, bài mẫu có nhận xét giám khảo, định dạng đề…), kỹ năng, miền, dạng (trang web / PDF / audio) hoặc từ khóa. Với audio, bấm *Nghe* để phát ngay trong trang. Bấm *Xem trích đoạn* để đọc văn bản thuần, hoặc mở link gốc.
+  3. Tick các trang rồi bấm *Duyệt các trang đã chọn* hoặc *Loại*.
+     - Trang đã duyệt thành bản ghi trong danh mục nguồn, với quyền "dùng cá nhân, lưu bản sao, cho phép xử lý bằng AI" (bạn đã chốt ở E-36).
+     - Trang đã loại không bị quét lại.
+  - Nội dung trang chỉ là dữ liệu tham khảo, không bao giờ được coi là chỉ dẫn cho AI. PDF không đọc được (hỏng, chỉ có ảnh quét) vẫn giữ bản sao và ghi lỗi `PDF_TEXT_FAILED`.
+- **Khung năng lực** (E-42): AI soạn danh mục năng lực + rubric **Writing Task 2** từ các nguồn bạn đã duyệt, bạn đọc rồi duyệt.
+  1. Xem trước nguồn sẽ gửi cho AI (không gọi AI): `npm.cmd run author -- sources`.
+     - Danh sách nguồn nằm ở `policies/authoring/wt2-framework.v1.json`.
+     - Nguồn nào chưa duyệt sẽ hiện `THIẾU`; duyệt nó ở tab **Nguồn** trước.
+  2. Chạy AI (mất vài phút; mỗi lần là một lượt dùng gói thuê bao của bạn):
+     ```powershell
+     npm.cmd run author -- framework
+     ```
+     - Provider đầu tiên sẵn sàng (Claude → agy → Codex) soạn bản nháp. Sau đó một lượt AI riêng rà soát bản nháp với cùng nguồn.
+     - Chạy lại lượt rà soát: `npm.cmd run author -- review v1`. Xem các phiên bản: `npm.cmd run author -- list`.
+     - **Soạn lại theo góp ý** (E-46): `npm.cmd run author -- framework --revise v1`.
+       - AI nhận bản v1, góp ý của lượt rà soát và lỗi kiểm tra tự động, rồi trả một khung hoàn chỉnh mới; sau đó tự chạy lượt rà soát mới.
+       - Bản cũ vẫn là bản nháp để bạn tự loại.
+  3. Trong tab **Khung năng lực**, bấm *Xem*. Màn hiện:
+     - lỗi/cảnh báo của **kiểm tra tự động**, gồm: mọi trích dẫn phải có nguyên văn trong nguồn, mã năng lực khớp tiêu chí, không nhắc ngưỡng Band, liên kết hợp lệ;
+     - kết quả **AI rà soát**;
+     - từng năng lực theo 4 tiêu chí (TR, CC, LR, GRA): tiêu chí cho người chấm, hợp đồng bằng chứng 5 thành phần, trích dẫn có link nguồn, hướng dẫn quan sát;
+     - bảng **band descriptors chính thức**. Bảng này được ứng dụng chép từ PDF đã dựng lại theo cột, không do AI viết.
+  4. Bấm *Duyệt bản này* hoặc *Loại bản này*. Chỉ duyệt được khi:
+     - không còn lỗi kiểm tra tự động;
+     - đã có lượt AI rà soát;
+     - bản nháp không do FakeAdapter tạo;
+     - nếu AI rà soát báo lỗi, cần ghi chú lý do vẫn duyệt.
+
+     Duyệt bản mới thì bản đã duyệt trước chuyển sang *Đã thay thế*. Lịch sử và nội dung mỗi bản không bao giờ bị sửa.
+  - Khung không đặt ngưỡng Band; báo Band vẫn tắt. Bản đã duyệt là căn cứ cho bước C3 (AI sinh đề), chưa thay gói synthetic đang dùng.
 - **Cần xử lý**: review mở (sau thu hồi, khiếu nại…) và job bị dừng; chọn cách xử lý.
 - **Lần chạy**: các lần chạy AI và trạng thái gateway.
 
@@ -163,6 +213,12 @@ Thu hồi một item/rubric/gói lan truyền tới cache và các nhận địn
 ## 6. AI thật: gateway thuê bao
 
 Ứng dụng chỉ gọi AI qua **CLI của gói thuê bao** đã đăng nhập (Codex/ChatGPT, Claude Code/claude.ai, Antigravity/Google), mỗi provider dùng **profile riêng** của app (thư mục runner trong `%LOCALAPPDATA%\study-english\runners\…`). Không có đường API tính phí; thiếu bất kỳ căn cứ nào thì gateway chặn và không chạy gì.
+
+**Thứ tự ưu tiên (E-38, bạn chốt 18/11/2026): Claude Code → Antigravity (agy) → Codex.**
+- Provider đầu tiên đang sẵn sàng là **provider chính**; các provider sau là **dự phòng**.
+- Khi provider chính **tạm thời** hết hạn mức, bị giới hạn tốc độ hoặc hết phiên đăng nhập, job tự chuyển sang dự phòng. Chỉ chuyển nếu dự phòng có **báo cáo đối chứng D-05**, để tránh âm thầm đổi sang một AI chấm khác hẳn. Chưa có báo cáo thì job chờ provider chính mở lại.
+- Provider bị chặn hẳn (ví dụ Codex hết gói) chỉ đơn giản là bị bỏ qua.
+- Lệnh `npm.cmd run ai -- status` liệt kê các provider theo đúng thứ tự này.
 
 ### 6.1. Xem trạng thái
 ```powershell
@@ -211,10 +267,11 @@ npm.cmd run worker
   npm.cmd run worker -- --learning
   ```
   - Bài nộp vào hàng đợi; Workspace hiện *Đang chờ worker chấm* / *AI đang chấm…* và tự tải lại mỗi 3 giây.
-  - Mỗi lần nộp (bài gốc hoặc bản sửa) tốn **một lượt gọi model** trên gói thuê bao của provider đã xác minh (Codex). Không có provider sẵn sàng thì worker không chạy; hết hạn mức thì bài chờ tới khi mở lại.
+  - Mỗi lần nộp (bài gốc hoặc bản sửa) tốn **một lượt gọi model** trên gói thuê bao của provider chính (Claude Code, theo E-38). Không có provider sẵn sàng thì worker không chạy; hết hạn mức thì bài chờ tới khi mở lại.
   - AI chỉ nhận đề bài, tiêu chí của từng kỹ năng, chế độ làm bài và bài viết của bạn; không nhận lịch sử học, gợi ý cũ hay kho đáp án. AI chỉ **đề xuất**: kết quả từng tiêu chí, tối đa 3 lỗi trọng tâm (kèm điểm ảnh hưởng/độ chắc chắn 0–3) và 3 nấc gợi ý. Ứng dụng tự quyết mức hỗ trợ, giới hạn trọng tâm, trạng thái giả thuyết; gợi ý nấc 1–2 nào lộ câu mẫu nấc 3 bị **loại bỏ toàn bộ** (lượt đó không có gợi ý).
   - Không đặt biến (mặc định): vẫn chấm synthetic ngay trong app như trước, không tốn hạn mức.
   - Đề bài hiện vẫn là gói synthetic, nên theo quy tắc G0 kết quả **không** vào mức năng lực cho tới khi có nội dung thật (D-05); bạn vẫn nhận chẩn đoán và gợi ý thật.
+  - Từ E-41, mỗi gói nội dung có **nguồn gốc**: `synthetic_fixture` (gói thử), `sourced` (từ nguồn), `ai_authored` (AI soạn, đã qua QC1–QC4), `learner_owned` (đề bạn tự nhập). Chỉ bài làm trên ba loại sau, được AI thật chấm, mới được tính vào mức năng lực.
 - Danh sách đầy đủ các cờ: [bảng tự động](#cờ-worker).
 - Worker chỉ xử lý một job một lúc; khởi động lại an toàn (job đang chạy dở được thu hồi khi hết lease).
 
@@ -335,7 +392,7 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 ## 12. Giới hạn hiện tại
 
 - **Chưa báo Band** (D-05). Mức năng lực theo D-02 v1 là tham số **đã duyệt nhưng chưa kiểm định thực nghiệm**; nên xem lại sau 4–6 tuần dùng thật. Hai chiều điểm AI (ảnh hưởng, độ chắc chắn) chỉ có khi chấm bằng AI thật (`--learning`); chế độ synthetic lấy mặc định 1; chưa có dữ liệu "điều kiện ủng hộ riêng một giả thuyết" nên sổ lỗi chỉ xác nhận được qua nhiệm vụ phân biệt nguyên nhân (chưa có). Bài kiểm chứng 7B/Bước 9 tự xếp đang dùng bài synthetic (chờ nội dung thật D-05).
-- **Nội dung thật và bộ đối chứng** chưa có (D-05); bài học hiện là synthetic. Chấm bằng AI thật (P5-5) mới là lựa chọn bật tay, chưa được đối chứng chất lượng (D-05) và chỉ chạy qua Codex. Provider dự phòng chỉ được tự động dùng khi có báo cáo đối chứng D-05.
+- **Nội dung thật và bộ đối chứng** chưa có (D-05); bài học hiện là synthetic. Chấm bằng AI thật (P5-5) mới là lựa chọn bật tay, chưa được đối chứng chất lượng (D-05) và chỉ chạy qua provider chính (Claude Code). Provider dự phòng chỉ được tự động dùng khi có báo cáo đối chứng D-05.
 - **Chưa có ASR/chấm phát âm** (D-06).
 - Chỉ backup cũ được tự dọn (E-30); dữ liệu học, audio, bản xuất không bao giờ tự xóa. Sao lưu tự động chỉ chạy khi ứng dụng đang mở (không có dịch vụ nền của Windows). Chưa có kênh nhắc qua Telegram/email.
 - Danh sách quyết định còn mở: [DECISIONS — Điểm mở](engineering/DECISIONS.md).
@@ -378,6 +435,9 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 | `npm.cmd run worker` | Worker xử lý job AI trong hàng đợi (xem mục cờ worker). |
 | `npm.cmd run backup` | Sao lưu / khôi phục DB + JSON + media (xem mục lệnh `backup`). |
 | `npm.cmd run export` | Xuất dữ liệu học tập cá nhân ra thư mục riêng, hoặc xem dung lượng đang dùng (xem mục lệnh `export`). |
+| `npm.cmd run sources` | Quét trang nguồn IELTS chính thức/tham chiếu trong danh sách miền cho phép (`crawl`, `status`); duyệt ở Builder & QC → Nguồn. |
+| `npm.cmd run author` | AI soạn khung năng lực + rubric Writing Task 2 từ nguồn đã duyệt rồi một AI khác rà soát (`framework`, `review <version>`, `sources`, `list`); duyệt ở Builder & QC → Khung năng lực. |
+| `npm.cmd run tts` | TTS cục bộ (Piper, offline) để đọc kịch bản Listening: `status` xem engine/giọng đã cài, `say "<văn bản>" [--voice id]` đọc thử và lưu WAV vào kho media. |
 | `npm.cmd run qc:real` | Chạy QC1–4 thật bằng provider READY trên gói synthetic trong kho tạm `var/qc-real/` (tốn vài prompt thuê bao). |
 | `npm.cmd run seed:reading` | Nạp gói Reading synthetic đã qua QC vào kho để thử luồng Reading. |
 <!-- AUTO:scripts:END -->
@@ -517,7 +577,14 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `GET /api/console/issues` | Mục "Cần xử lý": review mở và job bị dừng. |
 | `POST /api/console/issues/:reviewId/resolve` | Đóng một review với cách xử lý đã chọn. |
 | `GET /api/console/runs` | Các lần chạy AI gần đây. |
+| `GET /api/console/sources` | Danh sách trang nguồn đã quét (lọc theo trạng thái duyệt/tải, loại, kỹ năng, miền, từ khóa) và số đếm. |
+| `GET /api/console/sources/:id/excerpt` | Trích đoạn văn bản thuần của một trang đã tải (không trả HTML gốc). |
+| `GET /api/console/sources/:id/audio` | Phát file audio Listening đã tải (chỉ nguồn audio đã nhận diện bằng magic bytes; nosniff). |
+| `POST /api/console/sources/review` | Duyệt hoặc loại nhiều trang nguồn; trang được duyệt thành bản ghi Source Registry (quyền dùng cá nhân, E-36). |
 | `GET /api/console/gateway` | Trạng thái gateway AI từng provider. |
+| `GET /api/console/frameworks` | Các phiên bản khung năng lực Writing Task 2 do AI soạn (trạng thái, số lỗi/cảnh báo kiểm tra tự động) và các lần gọi AI soạn/rà soát. |
+| `GET /api/console/frameworks/:version` | Một bản khung: năng lực, hợp đồng bằng chứng, trích dẫn nguồn, rubric chính thức, kết quả kiểm tra tự động và lượt AI rà soát. |
+| `POST /api/console/frameworks/:version/decision` | Duyệt hoặc loại một bản nháp khung năng lực (cần không còn lỗi kiểm tra, đã có AI rà soát, không phải synthetic). |
 <!-- AUTO:routes:END -->
 
 ### Migration cơ sở dữ liệu
@@ -536,6 +603,9 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `0010_daily_tracking.sql` | P5-1 Daily tracking (06A §9, §10.A; 02 §5.C.2; decision E-25). Append-only activity and declarations; the daily |
 | `0011_knowledge_search.sql` | P5-2 Knowledge search (06A §7.A.2 "lọc quyền trước khi tra cứu bằng SQLite FTS/BM25", 05 §C.5, 06 §5.B.1; E-27). |
 | `0012_competency_policy.sql` | D-02 v1 (E-33, user decision 18/11/2026): verification-chain metadata on scheduled tasks and an append-only |
+| `0013_source_candidates.sql` | E-37 (D-05 N2, user decision 18/11/2026): pages found by the source crawler, waiting for the learner's review. |
+| `0014_content_origin.sql` | E-41 (D-05 N10, 19/11/2026): content origins 'ai_authored' and 'learner_owned' join 'synthetic_fixture' and 'sourced'. |
+| `0015_competency_frameworks.sql` | E-42 (D-05 C2, 19/11/2026): AI-authored competency framework drafts and the record of every authoring run. |
 <!-- AUTO:migrations:END -->
 
 ### Quyết định kỹ thuật
@@ -577,6 +647,17 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | E-33 | Chốt chính sách D-02 v1 (18/11/2026, người dùng chốt) |
 | E-34 | Triển khai chính sách D-02 v1 (18/11/2026, người dùng yêu cầu "Triển khai D-02") |
 | E-35 | P5-5: chấm Writing bằng AI thật qua worker (18/11/2026, áp dụng kỹ thuật, đảo ngược được) |
+| E-36 | Chốt nguồn đề D-05 (18/11/2026, người dùng chốt) |
+| E-37 | Bộ quét nguồn và trang duyệt (18/11/2026, áp dụng kỹ thuật cho D-05 N2; đảo ngược được) |
+| E-38 | Thứ tự provider: Claude Code → agy → Codex (18/11/2026, người dùng chốt) |
+| E-39 | Trích văn bản PDF nguồn (18/11/2026; người dùng cho phép thêm thư viện) |
+| E-40 | Lọc hàng đợi quét nguồn (19/11/2026; người dùng "Lọc rồi quét tiếp") |
+| E-41 | Nguồn gốc nội dung `ai_authored` / `learner_owned` (D-05 N10, 19/11/2026) |
+| E-42 | AI soạn khung năng lực + rubric Writing Task 2 (D-05 C2, 19/11/2026) |
+| E-43 | Speaking chỉ ở dạng văn bản; phát âm và nói thật nằm ngoài ứng dụng (19/11/2026, người dùng chốt) |
+| E-44 | Audio Listening: thu sẵn từ nguồn + TTS cục bộ (19/11/2026, người dùng chọn "Cả hai nguồn") |
+| E-45 | Profile Claude được chứa cache danh mục plugin (19/11/2026, người dùng "Cho phép cache") |
+| E-46 | Khung năng lực v2: bảng theo đường kẻ, định nghĩa cạnh, soạn lại theo góp ý (19/11/2026, người dùng "Làm v2") |
 <!-- AUTO:decisions:END -->
 
 ### Trạng thái công việc

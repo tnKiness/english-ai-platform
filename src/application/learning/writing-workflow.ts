@@ -27,6 +27,7 @@ import { processNextJob } from '../../worker/worker.js';
 import type { ObservationDraft } from '../ports.js';
 import { submitForAssessment } from './submit-for-assessment.js';
 import { assessorContext, diagnosisFromResult, observationsFromLegacy, observationsFromResult, type CompetencyDef } from './writing-assessment.js';
+import { isSyntheticEvidence } from '../../domain/knowledge/content-origin.js';
 
 export const SYNTHETIC_COMPETENCY_ID = 'syn.writing.tr.clear_position';
 export const SYNTHETIC_SECONDARY_COMPETENCY_ID = 'syn.writing.cc.paragraph_cohesion';
@@ -1281,7 +1282,8 @@ export class LearningWorkflowService {
       const meta = SYNTHETIC_ITEMS.find((m) => m.id === o.item.id);
       const servable = this.store.knowledge.servableItem(o.item.id, o.item.version, 'learner');
       const hint = (this.store.db.prepare('SELECT MAX(hint_level) AS h FROM assistance_events WHERE attempt_id = ? AND displayed_at < ?').get(sub.attempt_id, sub.created_at) as { h: number | null }).h ?? 0;
-      const synthetic = this.providerOf(o.ai_run_id) === 'fake' || Boolean(meta) || competencyId.startsWith('syn.');
+      // G0 after N10 (E-41): synthetic when the content origin is a fixture or unknown, or FakeAdapter assessed it.
+      const synthetic = isSyntheticEvidence(servable.ok ? servable.content_origin : null, this.providerOf(o.ai_run_id)) || Boolean(meta) || competencyId.startsWith('syn.');
       const breadth: TaskBreadth = att.purpose === '7A' ? 'short' : att.purpose === '7B' || att.purpose === '9' ? 'composite'
         : att.mode !== 'guided' && (att.purpose === 'practice' || att.mode === 'exam') ? (meta?.task_scope ?? 'unknown') : 'unknown';
       const modality: Modality = meta ? (meta.skill === 'speaking_text' ? 'speaking' : 'writing') : fallbackModality;

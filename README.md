@@ -81,6 +81,9 @@ npm run worker -- --fake   # process queued jobs with the synthetic adapter
 npm run worker -- --learning   # assess learner Writing with a verified provider (app started with STUDY_ENGLISH_LEARNING_AI=real)
 npm run ai -- status       # why each AI provider is currently blocked (no model call)
 npm run backup -- create   # coordinated DB + JSON + media backup
+npm run sources -- crawl   # crawl allowlisted IELTS reference sites into var/sources; review in Builder & QC → Sources
+npm run tts -- status        # local Piper TTS for Listening audio (offline); `say "text"` writes a WAV to the media store
+npm run author -- framework   # AI drafts the Writing Task 2 competency framework from approved sources; review in Builder & QC → Competency framework
 ```
 
 ## Project layout

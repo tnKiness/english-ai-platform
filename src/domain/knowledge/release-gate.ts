@@ -1,6 +1,7 @@
 // Release gate (05 §5.B step 6, 06 §3 "Quy tắc nút Phát hành"). Pure: inputs are facts re-read at release time.
 import type { Grant } from './coverage.js';
 import type { ReleaseState } from './release-state.js';
+import type { ContentOrigin } from './content-origin.js';
 
 export type QcStage = 'QC1' | 'QC2' | 'QC3' | 'QC4';
 export type QcPart = 'deterministic' | 'semantic';
@@ -17,7 +18,7 @@ export interface GateInput {
   qc_spec_version: string;
   required: { stage: QcStage; part: QcPart }[];
   qc: QcFact[];
-  content_origin: 'synthetic_fixture' | 'sourced';
+  content_origin: ContentOrigin;
   source_blocks: string[];
   revoked: boolean;
   grants: Grant[];

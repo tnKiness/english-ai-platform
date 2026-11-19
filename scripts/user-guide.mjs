@@ -33,6 +33,9 @@ const SCRIPTS = {
   worker: 'Worker xử lý job AI trong hàng đợi (xem mục cờ worker).',
   backup: 'Sao lưu / khôi phục DB + JSON + media (xem mục lệnh `backup`).',
   export: 'Xuất dữ liệu học tập cá nhân ra thư mục riêng, hoặc xem dung lượng đang dùng (xem mục lệnh `export`).',
+  sources: 'Quét trang nguồn IELTS chính thức/tham chiếu trong danh sách miền cho phép (`crawl`, `status`); duyệt ở Builder & QC → Nguồn.',
+  tts: 'TTS cục bộ (Piper, offline) để đọc kịch bản Listening: `status` xem engine/giọng đã cài, `say "<văn bản>" [--voice id]` đọc thử và lưu WAV vào kho media.',
+  author: 'AI soạn khung năng lực + rubric Writing Task 2 từ nguồn đã duyệt rồi một AI khác rà soát (`framework`, `review <version>`, `sources`, `list`); duyệt ở Builder & QC → Khung năng lực.',
   'qc:real': 'Chạy QC1–4 thật bằng provider READY trên gói synthetic trong kho tạm `var/qc-real/` (tốn vài prompt thuê bao).',
   'seed:reading': 'Nạp gói Reading synthetic đã qua QC vào kho để thử luồng Reading.',
 };
@@ -105,6 +108,13 @@ const ROUTES = {
   'GET /api/console/issues': 'Mục "Cần xử lý": review mở và job bị dừng.',
   'POST /api/console/issues/:reviewId/resolve': 'Đóng một review với cách xử lý đã chọn.',
   'GET /api/console/runs': 'Các lần chạy AI gần đây.',
+  'GET /api/console/sources': 'Danh sách trang nguồn đã quét (lọc theo trạng thái duyệt/tải, loại, kỹ năng, miền, từ khóa) và số đếm.',
+  'GET /api/console/sources/:id/excerpt': 'Trích đoạn văn bản thuần của một trang đã tải (không trả HTML gốc).',
+  'GET /api/console/sources/:id/audio': 'Phát file audio Listening đã tải (chỉ nguồn audio đã nhận diện bằng magic bytes; nosniff).',
+  'POST /api/console/sources/review': 'Duyệt hoặc loại nhiều trang nguồn; trang được duyệt thành bản ghi Source Registry (quyền dùng cá nhân, E-36).',
+  'GET /api/console/frameworks': 'Các phiên bản khung năng lực Writing Task 2 do AI soạn (trạng thái, số lỗi/cảnh báo kiểm tra tự động) và các lần gọi AI soạn/rà soát.',
+  'GET /api/console/frameworks/:version': 'Một bản khung: năng lực, hợp đồng bằng chứng, trích dẫn nguồn, rubric chính thức, kết quả kiểm tra tự động và lượt AI rà soát.',
+  'POST /api/console/frameworks/:version/decision': 'Duyệt hoặc loại một bản nháp khung năng lực (cần không còn lỗi kiểm tra, đã có AI rà soát, không phải synthetic).',
   'GET /api/console/gateway': 'Trạng thái gateway AI từng provider.',
 };
 

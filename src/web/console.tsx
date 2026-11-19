@@ -1,7 +1,9 @@
-// Builder & QC Console (06 §3): three tabs, metadata by default. Content opens only on an explicit, confirmed click,
+// Builder & QC Console (06 §3): tabs (packages, sources E-37, issues, runs), metadata by default. Content opens only on an explicit, confirmed click,
 // and the server records the exposure before returning it. React escapes all text; nothing is injected as HTML.
 import { useCallback, useEffect, useState } from 'react';
 import { get, post, requestId } from './api.js';
+import { FrameworksPanel } from './frameworks.js';
+import { SourcesPanel } from './sources.js';
 
 interface Stage { stage: string; status: 'PASS' | 'FAIL' | 'NOT_RUN'; parts: { part: string; status: string; method: string; stale: boolean }[] }
 interface Pkg {
@@ -113,14 +115,16 @@ function Runs({ onError }: { onError: (e: unknown) => void }) {
 }
 
 export function BuilderConsole() {
-  const [tab, setTab] = useState<'packages' | 'issues' | 'runs'>('packages');
+  const [tab, setTab] = useState<'packages' | 'sources' | 'frameworks' | 'issues' | 'runs'>('packages');
   const [error, setError] = useState<string | null>(null);
   const onError = useCallback((e: unknown) => setError(e instanceof Error ? e.message : String(e)), []);
   return <section className="console">
-    <nav className="tabs">{([['packages', 'Gói tri thức'], ['issues', 'Cần xử lý'], ['runs', 'Lần chạy']] as const).map(([k, label]) =>
+    <nav className="tabs">{([['packages', 'Gói tri thức'], ['sources', 'Nguồn'], ['frameworks', 'Khung năng lực'], ['issues', 'Cần xử lý'], ['runs', 'Lần chạy']] as const).map(([k, label]) =>
       <button key={k} className={tab === k ? 'active' : ''} onClick={() => { setError(null); setTab(k); }}>{label}</button>)}</nav>
     {error && <p role="alert" className="error">{error}</p>}
     {tab === 'packages' && <><Search onError={onError} /><Packages onError={onError} /></>}
+    {tab === 'sources' && <SourcesPanel onError={onError} />}
+    {tab === 'frameworks' && <FrameworksPanel onError={onError} />}
     {tab === 'issues' && <Issues onError={onError} />}
     {tab === 'runs' && <Runs onError={onError} />}
   </section>;

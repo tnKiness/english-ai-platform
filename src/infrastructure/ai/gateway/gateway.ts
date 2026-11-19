@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { AdapterResult, Context, Job, ProviderAdapter, ProviderError, TaskType } from '../../../application/ai/provider-adapter.js';
-import { PROVIDER_BOUNDARY_METHODS, subscriptionGuard, type AccountState, type Capability, type CliProvider, type DataClass, type GuardDecision, type GuardInput, type ProviderEvidence } from '../../../application/ai/subscription-guard.js';
+import { byPreference, PROVIDER_BOUNDARY_METHODS, subscriptionGuard, type AccountState, type Capability, type CliProvider, type DataClass, type GuardDecision, type GuardInput, type ProviderEvidence } from '../../../application/ai/subscription-guard.js';
 import { runBoundedProcess } from '../bounded-process.js';
 import { agyArgvIssues, argvMatchesTemplate, buildModelArgv, claudeArgvIssues, CLI_DESCRIPTORS, CliProviderAdapter, codexToolDisableIssues, isVerifiedModelConfiguration, stripModelAndEffortFromArgv, type ExecutionPermit } from './cli-adapters.js';
 import { buildChildEnv } from './env-allowlist.js';
@@ -212,7 +212,7 @@ export class AiExecutionGateway {
     return { ok: false, error: 'BILLING_UNVERIFIED', reason: 'MODEL_CANARY_FAILED' };
   }
 
-  /** First eligible provider whose guard passes, in the job's order. Failover never reaches a paid route. */
+  /** First eligible provider whose guard passes, in the job's order (new jobs use the E-38 preference). Failover never reaches a paid route. */
   async select(eligible: CliProvider[], job: GatewayJob): Promise<{ provider: CliProvider; permit: ExecutionPermit } | { blocked: { provider: CliProvider; error: string; reasons: string[] }[] }> {
     const blocked: { provider: CliProvider; error: string; reasons: string[] }[] = [];
     for (const provider of eligible) {
@@ -241,7 +241,7 @@ export class AiExecutionGateway {
   /** Console/worker banner: why each provider is (not) usable for a minimal synthetic text job. */
   async status() {
     const probe: GatewayJob = { billing_policy: 'subscription_only', required_capabilities: ['text', 'structured_result'], data_classes: ['synthetic_fixture'] };
-    return Promise.all((Object.keys(this.adapters) as CliProvider[]).map(async (provider) => {
+    return Promise.all(byPreference(Object.keys(this.adapters) as CliProvider[]).map(async (provider) => {
       const recorded = this.d.evidence(provider);
       const pref = this.d.modelPreference?.(provider);
       const modelsAllowed = this.d.allowedModels ? this.d.allowedModels(provider) : (recorded?.evidence.models_allowed ?? []);
