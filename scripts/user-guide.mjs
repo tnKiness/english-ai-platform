@@ -35,7 +35,7 @@ const SCRIPTS = {
   export: 'Xuất dữ liệu học tập cá nhân ra thư mục riêng, hoặc xem dung lượng đang dùng (xem mục lệnh `export`).',
   sources: 'Quét trang nguồn IELTS chính thức/tham chiếu trong danh sách miền cho phép (`crawl`, `status`); duyệt ở Builder & QC → Nguồn.',
   tts: 'TTS cục bộ (Piper, offline) để đọc kịch bản Listening: `status` xem engine/giọng đã cài, `say "<văn bản>" [--voice id]` đọc thử và lưu WAV vào kho media.',
-  author: 'AI soạn khung năng lực + rubric Writing Task 2 từ nguồn đã duyệt rồi một AI khác rà soát (`framework`, `review <version>`, `sources`, `list`); duyệt ở Builder & QC → Khung năng lực.',
+  author: 'AI soạn khung năng lực + rubric Writing Task 2 từ nguồn đã duyệt rồi một AI khác rà soát (`framework`, `review <version>`, `sources`, `list`); duyệt ở Builder & QC → Khung năng lực. C3: `items [--count n]` AI soạn đề Writing Task 2 theo khung đã duyệt, đề đạt QC1–QC4 tự phát hành; `items-review <batch_id>`, `items-list`.',
   'qc:real': 'Chạy QC1–4 thật bằng provider READY trên gói synthetic trong kho tạm `var/qc-real/` (tốn vài prompt thuê bao).',
   'seed:reading': 'Nạp gói Reading synthetic đã qua QC vào kho để thử luồng Reading.',
 };
@@ -114,6 +114,8 @@ const ROUTES = {
   'POST /api/console/sources/review': 'Duyệt hoặc loại nhiều trang nguồn; trang được duyệt thành bản ghi Source Registry (quyền dùng cá nhân, E-36).',
   'GET /api/console/frameworks': 'Các phiên bản khung năng lực Writing Task 2 do AI soạn (trạng thái, số lỗi/cảnh báo kiểm tra tự động) và các lần gọi AI soạn/rà soát.',
   'GET /api/console/frameworks/:version': 'Một bản khung: năng lực, hợp đồng bằng chứng, trích dẫn nguồn, rubric chính thức, kết quả kiểm tra tự động và lượt AI rà soát.',
+  'GET /api/console/item-batches': 'Các lô đề Writing Task 2 do AI soạn (C3): số đề phát hành/nháp/bị loại, số lượt gọi AI sinh đề hôm nay. Không chứa nguyên văn đề.',
+  'GET /api/console/item-batches/:batchId': 'Một lô đề: thể loại, chủ đề, trạng thái QC/phát hành từng đề, lỗi kiểm tra tự động và kết quả AI rà soát; không chứa nguyên văn đề (xem đề qua Gói tri thức để ghi tiếp xúc).',
   'POST /api/console/frameworks/:version/decision': 'Duyệt hoặc loại một bản nháp khung năng lực (cần không còn lỗi kiểm tra, đã có AI rà soát, không phải synthetic).',
   'GET /api/console/gateway': 'Trạng thái gateway AI từng provider.',
 };

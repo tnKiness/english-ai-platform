@@ -3,6 +3,7 @@
 // table is given cell by cell from the column-aware reconstruction (band-table.ts); other sources as plain text.
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import type { ItemPolicy } from '../../application/authoring/item-authoring.js';
 import type { FrameworkRequirements, FrameworkSourceText } from '../../domain/knowledge/framework-checks.js';
 import { resolveContained, type DataPaths } from '../files/paths.js';
 import { reconstructBandTables } from '../sources/band-table.js';
@@ -20,6 +21,18 @@ export const WT2_POLICY_FILE = 'policies/authoring/wt2-framework.v1.json';
 export function loadFrameworkPolicy(file = resolve(WT2_POLICY_FILE)): FrameworkPolicy {
   const p = JSON.parse(readFileSync(file, 'utf8')) as FrameworkPolicy;
   if (p.schema_version !== '1' || !p.framework_id || !p.band_table || !Array.isArray(p.sources) || !p.requirements) throw new Error(`${file}: invalid authoring policy`);
+  return p;
+}
+
+/** E-47 (D-05 C3): limits for AI-authored Writing Task 2 prompts (N5, N8). */
+export const WT2_ITEMS_POLICY_FILE = 'policies/authoring/wt2-items.v1.json';
+export function loadItemPolicy(file = resolve(WT2_ITEMS_POLICY_FILE)): ItemPolicy {
+  const p = JSON.parse(readFileSync(file, 'utf8')) as ItemPolicy;
+  const positive = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n > 0;
+  if (p.schema_version !== '1' || !p.item_set_id || !positive(p.batch_size) || !positive(p.daily_ai_call_cap) || !(p.similarity_threshold > 0 && p.similarity_threshold <= 1)
+    || !positive(p.min_prompt_words) || !positive(p.essay_min_words) || !Array.isArray(p.genres) || p.genres.length === 0 || !Array.isArray(p.usage_purposes) || p.usage_purposes.length === 0) {
+    throw new Error(`${file}: invalid item authoring policy`);
+  }
   return p;
 }
 

@@ -167,6 +167,31 @@ export class BuilderPipeline {
     return this.d.builder.insertQc({ package_id: packageId, version, stage, part: 'semantic', status, method: 'manual_attestation', bundle_hash: bundleHash, qc_spec_version: this.d.spec.qc_spec_version, findings: [{ note }] });
   }
 
+  /**
+   * E-47 (D-05 C3, N6): an independent AI review of the frozen bundle records the semantic QC2/QC3 parts and the QC4
+   * decision of an AI-authored prompt package. The caller names the bundle hash the reviewer saw; a FakeAdapter or
+   * synthetic review is recorded as `synthetic_fake`, which the release gate refuses for anything not synthetic.
+   */
+  recordAiReview(packageId: string, version: string, bundleHash: string, provider: string, synthetic: boolean,
+    results: { stage: QcStage; part: 'deterministic' | 'semantic'; status: 'PASS' | 'FAIL'; findings: unknown[] }[]) {
+    const bundle = this.d.builder.bundle(packageId, version);
+    if (!bundle) throw new Error('Unknown frozen package');
+    if (bundleHash !== bundle.bundle_hash) throw new Error('AI review must name the frozen bundle hash');
+    const required = requiredParts(this.d.spec);
+    const method = synthetic || provider === 'fake' || !(CLI_PROVIDERS as readonly string[]).includes(provider) ? 'synthetic_fake' as const : 'ai_semantic' as const;
+    return this.d.builder.transaction(() => results.map((r) => {
+      if (!required.some((x) => x.stage === r.stage && x.part === r.part)) throw new Error(`${r.stage}/${r.part} is not a required QC part`);
+      if (r.stage !== 'QC4' && r.part === 'deterministic') throw new Error('Deterministic QC1–QC3 parts come from runChecks only');
+      const row = this.d.builder.insertQc({ package_id: packageId, version, stage: r.stage, part: r.part, status: r.status, method, bundle_hash: bundleHash,
+        qc_spec_version: this.d.spec.qc_spec_version, findings: [{ provider }, ...r.findings] });
+      if (r.status === 'FAIL') {
+        this.d.builder.openReview({ dedupe_key: `qc:${packageId}@${version}:${bundleHash}:${r.stage}:${r.part}`, kind: 'qc_failed', target_kind: 'package', target_id: packageId, target_version: version,
+          severity: 'normal', summary: `${r.stage} chưa đạt (AI rà soát đề)`, detail: { bundle_hash: bundleHash, findings: r.findings } });
+      }
+      return row;
+    }));
+  }
+
   private reader(role: 'blind_solver' | 'verifier' | 'assessor'): ScopedReader {
     return scopedReader(role, this.d.builder, { get: (k, id, v, h) => this.d.json.get(k, id, v, h) });
   }

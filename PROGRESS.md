@@ -861,3 +861,96 @@ P0–P3 đã hoàn tất phần code và nghiệm thu trên gói synthetic (D-01
     - ghi chú tổng hợp chưa nêu các điều kiện chặn của Band 0/1;
     - tiêu chí đạt/chưa đạt cho "phát triển ý" đặt ngưỡng thấp. Đây là giới hạn của cách ghi nhị phân met/not met, soạn lại không giải quyết được.
 - **Trạng thái:** v1, v2, v3 đều DRAFT và đã rà soát; v3 là bản tốt nhất. Chờ người dùng duyệt.
+
+### 20/11/2026 — Quét hết hàng đợi, duyệt nguồn và audio mới
+- **Nguồn:** người dùng "đồng ý, tiến hành", "tiếp tục chạy".
+- **Thêm luật loại** `^/comment/` của LearnEnglish (E-40). Test `e37-sources` có ca tương ứng. Hai file này chưa commit.
+- **`sources -- discover-audio`:** xếp hàng 120 file audio từ các trang đã duyệt (E-44).
+- **Lượt quét bị ngắt:** lượt trước dừng sau 232 trang, mã thoát 4, không có thông báo lỗi; nghi do máy ngủ.
+- **Quét lại** `npm.cmd run sources -- crawl --max-pages 5000`, mã thoát 0:
+  - 1.074 mục đã tải, 3 bỏ qua, 50 lỗi (chủ yếu TIMEOUT ở podcast `.mp3` lớn), 271 liên kết mới;
+  - **còn 0 trang trong hàng đợi**.
+- **Duyệt:** dùng script tạm trong `var/` gọi `SourceReview.review` theo lô 200, đã xóa script sau khi chạy.
+  - 3.065 mục FETCHED+PENDING được duyệt, gồm cả audio; 0 trang `/comment/` còn sót; 0 bị bỏ qua.
+- **Số liệu thật sau cùng** (`sources -- status`):
+  - Tải: SKIPPED 22.230 · FETCHED 9.426 · FAILED 809.
+  - Duyệt: APPROVED 5.524 · REJECTED 4.272 · PENDING 22.669. Mọi mục PENDING còn lại đều chưa tải (SKIPPED/FAILED).
+  - Kiểu: html 8.432 · pdf 758 · audio 274.
+- **Chưa làm:** không chạy lại `npm.cmd run check` vì lượt này không sửa mã. Khung v3 vẫn chờ người dùng duyệt trước C3.
+
+
+### 20/11/2026 — C3a: AI soạn đề Writing Task 2 + QC1–QC4 + tự phát hành (E-47) / code xong, chưa chạy thật
+- **Nguồn:** người dùng "oke tiến hành triển khai phần tiếp theo". Khung v3 chưa được duyệt, nên làm phần code độc lập; lần chạy AI thật chờ duyệt.
+- **Đã làm:**
+  - Task type `content.item_author` và `content.item_review`, với hợp đồng knowledge.v1 `wt2_item_set_result` và `item_review_result`.
+  - Kiểm tra xác định `src/domain/knowledge/item-checks.ts`.
+  - Service `src/application/authoring/item-authoring.ts`.
+  - `BuilderPipeline.recordAiReview`.
+  - Migration `0016_item_authoring_runs`.
+  - Chính sách `policies/authoring/wt2-items.v1.json`.
+  - Lệnh `author -- items | items-review <lô> | items-list`.
+  - API `GET /api/console/item-batches[/:batchId]` và mục "Đề Writing Task 2 do AI soạn" trong tab Khung năng lực.
+  - Màn và API không gửi nguyên văn đề; xem đề qua Gói tri thức để ghi tiếp xúc.
+- **Kiểm tra:**
+  - `npx vitest run tests/integration/e47-item-authoring.test.ts`: 9/9.
+  - `npm.cmd run check`: lint, hướng dẫn, typecheck, 363/363 test (50 file), build đều OK.
+  - DB thật: `author -- items-list` áp migration 0016 (bản 16), giữ 7 dòng `authoring_runs` cũ (3 author, 4 review); báo 0/10 lượt hôm nay.
+- **Chưa chạy AI thật:** cần duyệt khung trước (v1–v3 đều DRAFT). Test dùng executor giả, nên chưa chứng minh chỉ dẫn mới cho ra đề tốt với provider thật.
+- **Còn thiếu (C3b):**
+  - màn học Writing cấp đề `ai_authored` thay gói synthetic;
+  - chấm theo năng lực của khung đã duyệt;
+  - màn duyệt mẫu ngẫu nhiên (N6);
+  - nhiệm vụ đoạn 7A.
+- **Bước kế tiếp:** người dùng duyệt v3, chạy `npm.cmd run author -- items --count 3`, đọc kết quả, rồi làm C3b.
+
+### 20/11/2026 — Duyệt khung v3; lần chạy C3a thật đầu tiên bị chặn vì hết phiên đăng nhập Claude
+- **Duyệt:** dev:server không chạy (cổng 4317/5173 trống), nên lượt duyệt trong Console trước đó không được ghi; v1–v3 vẫn DRAFT. Theo yêu cầu người dùng ("Ghi duyệt v3 giúp"), v3 được ghi qua `FrameworkAuthoringService.decide` bằng script tạm trong `var/`, đã xóa sau khi chạy.
+  - Ghi chú lưu kèm nêu rõ đây là xác nhận qua chat.
+  - Kết quả: `v3 APPROVED 2026-11-20T04:21:44Z`.
+- **Chạy thật** `npm.cmd run author -- items --count 3`: gateway chọn `claude-code` (2.1.304, claude-opus-5-5) → `AUTH_EXPIRED` sau khoảng 3 giây.
+  - Lượt chạy `c7b913e9…` đã ghi vào `authoring_runs` (ok = 0) và tính 1/10 lượt N8 hôm nay.
+  - Không có lô đề nào được tạo và không có gói nào.
+- **`ai -- status`:** claude-code `BLOCKED` (`PROFILE_NEEDS_LOGIN`, `AUTH_NOT_SUBSCRIPTION_NOW`, `ENTITLEMENT_UNVERIFIED`).
+  - Gateway không chuyển sang agy vì agy chưa có báo cáo đối chứng D-05 (đúng thiết kế).
+  - Lần gọi `ai -- status` đầu gặp `EBUSY` khi xóa thư mục probe agy trong `C:\se-runner\work`; chạy lại thì bình thường.
+- **Việc của người dùng:**
+  - đăng nhập lại Claude trong profile `claude-main` (D01_CLAUDE_AGY Bước 2);
+  - `npm.cmd run ai -- recover claude-code`;
+  - nạp lại bằng chứng nếu status còn yêu cầu (hướng dẫn §6.3).
+  - Sau đó chạy lại `npm.cmd run author -- items --count 3`.
+
+### 20/11/2026 — Khôi phục claude-code (E-48) và chạy C3a thật lần đầu: 3/3 đề phát hành
+- **Đăng nhập lại:** người dùng đăng nhập lại Claude trong `claude-main`. CLI tự cập nhật lên 2.1.329 và tự tải catalog plugin; người dùng chọn xóa catalog.
+- **Ranh giới:** probe đầu FAIL vì có plugin dựng sẵn mới `cc-plugin-privacy`, sau đó vì có `plugins/store/`.
+  - Người dùng cho phép plugin này. Ứng dụng nhận thêm file trạng thái của plugin được phép trong `plugins/store/` (E-48).
+  - probe-boundary: PASS.
+- **verify claude 2.1.329:** `claude.ai (pro)`, claude-opus-5-5 đạt.
+  - Người dùng đồng ý nạp ("Nạp và chạy"), bằng chứng `var/ai/evidence-claude-3.json` → claude-code READY.
+- **Chạy thật** `npm.cmd run author -- items --count 3`, lô `62ee0e46…`: soạn 19 giây, rà soát 15 giây, cả hai `claude-code`/`claude-opus-5-5`.
+  - 3/3 đề qua kiểm tra tự động, QC1–3 xác định, QC2/QC3 ngữ nghĩa và QC4 (`ai_semantic`), và được **tự phát hành**:
+    - opinion "Local repair cafés and consumer habits";
+    - discussion "Four-day working week";
+    - two_part "Short news videos replacing traditional news".
+  - Rà soát chỉ nêu cảnh báo: 2 × `originality` (chủ đề phổ biến), 1 × `competency_mapping`; không có lỗi.
+  - Dùng 3/10 lượt N8 hôm nay, tính cả lượt `AUTH_EXPIRED` trước đó.
+- **Kiểm tra:** `npm.cmd run check`: 365/365 test (50 file), build OK.
+- **Giới hạn:**
+  - Chưa ai đọc nguyên văn 3 đề. Xem ở Gói tri thức → Xem nội dung; việc xem được ghi tiếp xúc và đề đó không dùng làm kiểm chứng độc lập.
+  - Màn học Writing chưa cấp các đề này (C3b).
+
+### 20/11/2026 — C3b đang làm dở (dừng vì hết hạn mức sử dụng)
+- **Đã có:** `src/application/learning/writing-catalog.ts`. Typecheck sạch; chưa có test; chưa nối vào luồng học.
+  - `aiWritingItem` đọc metadata của đề `ai_authored` từ gói đã đóng băng: tiêu đề, dạng, đề, năng lực đo (đọc qua reader assessor, không gửi cho người học), rubric, phiên bản khung.
+  - `servableAiWritingItems` liệt kê đề đang cấp được.
+- **Thiết kế đã chốt cho phần còn lại** (lát cắt đầu tiên: luyện tập một đề AI, chấm thật theo khung, chẩn đoán, gợi ý, tự sửa; Bước 6/7A với đề AI để sau):
+  - `LearningWorkflowService`:
+    - `itemMeta(id)` gộp đề synthetic và đề AI, có cờ `synthetic` để G0 dùng `meta.synthetic` thay `Boolean(meta)`;
+    - `competencyDefs()` gồm năng lực synthetic và năng lực của khung đã duyệt;
+    - thay mọi `SYNTHETIC_ITEMS.find(...)` bằng `itemMeta`.
+  - `startAttempt` nhận đề AI: chỉ ở chế độ chấm thật, purpose `practice`, mode `self_practice`/`exam`; rubric lấy từ gói.
+  - `assessorContextFor` lấy năng lực theo khung của đề; workspace dựng `task_prompt` từ metadata.
+  - Dùng năng lực của vòng lặp (`writing_loop_states.competency_id`) thay `SYNTHETIC_COMPETENCY_ID` ở các chỗ: outcome, tác động gợi ý, `integratedStep9`. Sau chẩn đoán thật thì chuyển năng lực vòng lặp sang vấn đề ưu tiên `not_met` đầu tiên.
+  - Chặn `completeStep6`/`startStep7A` cho đề AI (409); `scheduleVerification` chỉ cho năng lực `syn.`.
+  - `progressView` dùng `competencyDefs()`.
+  - API `GET /api/learning/writing-bank` (chỉ metadata, có cờ đã xem) và thẻ kho đề trong TodayScreen.
+  - Test e49, rồi cập nhật hướng dẫn, DECISIONS E-49 và D05.

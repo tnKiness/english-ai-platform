@@ -11,7 +11,7 @@ import { canonicalJson, sha256 } from '../../infrastructure/files/paths.js';
 import type { FrameworkPolicy, FrameworkSources } from '../../infrastructure/authoring/framework-sources.js';
 import type { Store } from '../../infrastructure/sqlite/store.js';
 
-export type AuthoringTask = 'content.author' | 'content.review';
+export type AuthoringTask = 'content.author' | 'content.review' | 'content.item_author' | 'content.item_review';
 export interface ExecutorOutput { result: AdapterResult; provider: string; cli_version: string | null; model: string | null; detail?: string }
 /** One AI call; the real implementation goes through the gateway (subscription guard, verified providers only). */
 export type AuthoringExecutor = (task: AuthoringTask, payload: Record<string, unknown>) => Promise<ExecutorOutput>;
@@ -42,6 +42,21 @@ export class AuthoringError extends Error {
   constructor(message: string, readonly code: string, readonly statusCode = 409) { super(message); }
 }
 
+/** One AI authoring call, recorded in authoring_runs (provider actually used, input/output hashes) whether it succeeds or not. */
+export async function runAuthoringCall(store: Store, executor: AuthoringExecutor, task: AuthoringTask, payload: Record<string, unknown>, target: { id: string; version: string | null }) {
+  const runId = randomUUID();
+  const started = store.now().toISOString();
+  let out: ExecutorOutput;
+  try { out = await executor(task, payload); } catch (e) {
+    out = { result: { ok: false, error: 'NETWORK' }, provider: 'none', cli_version: null, model: null, detail: e instanceof Error ? e.message.slice(0, 300) : String(e) };
+  }
+  const ok = out.result.ok;
+  store.db.prepare(`INSERT INTO authoring_runs (run_id, task_type, target_id, target_version, provider, cli_version, model, input_hash, output_hash, ok, error, started_at, finished_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(runId, task, target.id, target.version, out.provider, out.cli_version, out.model, sha256(canonicalJson(payload)),
+    ok ? sha256(canonicalJson(out.result.ok ? out.result.result : null)) : null, ok ? 1 : 0, ok ? null : `${out.result.ok ? '' : out.result.error}${out.detail ? `: ${out.detail}` : ''}`, started, store.now().toISOString());
+  return { runId, out };
+}
+
 export class FrameworkAuthoringService {
   constructor(private store: Store, private policy: FrameworkPolicy, private loadSources: () => FrameworkSources) {}
 
@@ -51,18 +66,8 @@ export class FrameworkAuthoringService {
     return s;
   }
 
-  private async call(executor: AuthoringExecutor, task: AuthoringTask, payload: Record<string, unknown>, target: { id: string; version: string | null }) {
-    const runId = randomUUID();
-    const started = this.store.now().toISOString();
-    let out: ExecutorOutput;
-    try { out = await executor(task, payload); } catch (e) {
-      out = { result: { ok: false, error: 'NETWORK' }, provider: 'none', cli_version: null, model: null, detail: e instanceof Error ? e.message.slice(0, 300) : String(e) };
-    }
-    const ok = out.result.ok;
-    this.store.db.prepare(`INSERT INTO authoring_runs (run_id, task_type, target_id, target_version, provider, cli_version, model, input_hash, output_hash, ok, error, started_at, finished_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(runId, task, target.id, target.version, out.provider, out.cli_version, out.model, sha256(canonicalJson(payload)),
-      ok ? sha256(canonicalJson(out.result.ok ? out.result.result : null)) : null, ok ? 1 : 0, ok ? null : `${out.result.ok ? '' : out.result.error}${out.detail ? `: ${out.detail}` : ''}`, started, this.store.now().toISOString());
-    return { runId, out };
+  private call(executor: AuthoringExecutor, task: AuthoringTask, payload: Record<string, unknown>, target: { id: string; version: string | null }) {
+    return runAuthoringCall(this.store, executor, task, payload, target);
   }
 
   /**

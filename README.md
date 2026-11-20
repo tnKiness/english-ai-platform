@@ -84,6 +84,7 @@ npm run backup -- create   # coordinated DB + JSON + media backup
 npm run sources -- crawl   # crawl allowlisted IELTS reference sites into var/sources; review in Builder & QC → Sources
 npm run tts -- status        # local Piper TTS for Listening audio (offline); `say "text"` writes a WAV to the media store
 npm run author -- framework   # AI drafts the Writing Task 2 competency framework from approved sources; review in Builder & QC → Competency framework
+npm run author -- items       # AI writes Writing Task 2 prompts from the approved framework; prompts passing QC1–QC4 are released automatically
 ```
 
 ## Project layout

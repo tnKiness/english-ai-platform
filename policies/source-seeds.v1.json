@@ -109,6 +109,11 @@
       "host": "ielts.idp.com",
       "path": "[?&]filter",
       "note": "Trang danh sách lọc, không có nội dung mới"
+    },
+    {
+      "host": "learnenglish.britishcouncil.org",
+      "path": "^/comment/",
+      "note": "Trang từng bình luận riêng lẻ của người dùng, không có nội dung học"
     }
   ],
   "seeds": [

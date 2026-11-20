@@ -28,6 +28,7 @@ npm.cmd run backup -- create       # restore <backup> <thư mục mới> ; promo
 npm.cmd run sources -- crawl       # quét trang nguồn IELTS (miền cho phép) vào var/sources; duyệt ở Builder & QC → Nguồn
 npm.cmd run tts -- status          # TTS cục bộ (Piper, offline) cho audio Listening; `say "văn bản"` ghi WAV vào kho media
 npm.cmd run author -- framework    # AI soạn khung năng lực Writing Task 2 từ nguồn đã duyệt; duyệt ở Builder & QC → Khung năng lực
+npm.cmd run author -- items        # AI soạn đề Writing Task 2 theo khung đã duyệt; đề đạt QC1–QC4 tự phát hành (C3)
 ```
 
 ## Kiểm tra

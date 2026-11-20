@@ -2951,6 +2951,218 @@
         "findings",
         "limitations"
       ]
+    },
+    "wt2_item_set_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "job_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context_manifest_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "synthetic": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "item_key": {
+                "type": "string",
+                "pattern": "^[a-z0-9_]{1,24}$"
+              },
+              "genre": {
+                "type": "string",
+                "enum": [
+                  "opinion",
+                  "discussion",
+                  "advantages_disadvantages",
+                  "problem_solution",
+                  "two_part"
+                ]
+              },
+              "topic": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "item_family": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{2,40}$"
+              },
+              "prompt": {
+                "type": "string",
+                "minLength": 40,
+                "maxLength": 700
+              },
+              "test_type": {
+                "type": "string",
+                "enum": [
+                  "academic",
+                  "general_training",
+                  "both"
+                ]
+              },
+              "competencies": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 12,
+                "items": {
+                  "type": "string",
+                  "pattern": "^wt2.(tr|cc|lr|gra).[a-z][a-z0-9_]{1,40}$"
+                }
+              },
+              "difficulty_estimate": {
+                "type": "string",
+                "enum": [
+                  "lower",
+                  "middle",
+                  "upper"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 600
+              }
+            },
+            "required": [
+              "item_key",
+              "genre",
+              "topic",
+              "item_family",
+              "prompt",
+              "test_type",
+              "competencies",
+              "difficulty_estimate",
+              "rationale"
+            ]
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "job_id",
+        "context_manifest_id",
+        "synthetic",
+        "items",
+        "limitations"
+      ]
+    },
+    "item_review_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "job_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context_manifest_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "synthetic": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "item_key": {
+                "type": "string",
+                "pattern": "^[a-z0-9_]{1,24}$"
+              },
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "fail"
+                ]
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "check": {
+                      "type": "string",
+                      "enum": [
+                        "clear_unambiguous",
+                        "genre_match",
+                        "originality",
+                        "no_forced_structure",
+                        "no_model_answer_or_ideas",
+                        "competency_mapping"
+                      ]
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "error",
+                        "warning"
+                      ]
+                    },
+                    "issue": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "check",
+                    "severity",
+                    "issue"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "item_key",
+              "verdict",
+              "findings"
+            ]
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "job_id",
+        "context_manifest_id",
+        "synthetic",
+        "items",
+        "limitations"
+      ]
     }
   }
 }

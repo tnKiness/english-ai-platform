@@ -67,6 +67,7 @@ describe('page helpers', () => {
     expect(ex('https://bxsearch.ielts.idp.com/wizard')).toBe(true);
     expect(ex('https://learnenglish.britishcouncil.org/user/login')).toBe(true);
     expect(ex('https://learnenglish.britishcouncil.org/free-resources/writing/x')).toBe(false);
+    expect(ex('https://learnenglish.britishcouncil.org/comment/174215')).toBe(true);
     expect(ex('https://ielts.org/receiving-organisations/aalto-university')).toBe(true);
     expect(ex('https://ielts.org/cdn/ielts-guides/ielts-writing-band-descriptors.pdf')).toBe(false);
     expect(ex('https://learnenglish.britishcouncil.org/free-resources/grammar/x?page=3')).toBe(true);

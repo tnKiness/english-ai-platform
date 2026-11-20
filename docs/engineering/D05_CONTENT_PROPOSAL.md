@@ -134,7 +134,7 @@ Hiện chỉ có hai loại: `synthetic_fixture` và `sourced`. Đề xuất th�
 |---|---|---|
 | C1 | Migration nguồn gốc nội dung (N10); lệnh lấy nguồn có danh sách cho phép, checksum, quyền (N2–N3). **Đã làm:** quét + duyệt (E-37), trích văn bản PDF (E-39), lọc hàng đợi (E-40), migration N10 (E-41) | N2, N3, N10 |
 | C2 | Task type `content.author` / `content.review` + hợp đồng kết quả; AI biên soạn khung năng lực + rubric Writing Task 2 từ nguồn; màn duyệt danh mục. **Code xong (E-42)**; bản v1 chờ người dùng duyệt | N4 |
-| C3 | AI sinh đề Writing Task 2 + QC1–QC4 cho đề + tự phát hành theo N6 | N5, N6 |
+| C3 | AI sinh đề Writing Task 2 + QC1–QC4 cho đề + tự phát hành theo N6. **C3a code xong (E-47)**: soạn, kiểm tra, đóng gói, QC, tự phát hành; chạy thật chờ khung được duyệt. **C3b chưa làm**: màn học cấp đề thật, chấm theo khung | N5, N6 |
 | C4 | Màn nhập đề của bạn + khai quyền/tiếp xúc + loại dữ liệu đồng ý `learner_owned_content` | N7 |
 | C5 | Bộ theo dõi độ phủ + tự bổ sung đề trong hạn mức (worker) | N8 |
 | C6 | Khung bộ đối chứng đã có (P4); nhập bài có điểm, chạy đo, báo cáo | N9 |

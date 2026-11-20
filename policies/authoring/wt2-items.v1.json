@@ -1,0 +1,14 @@
+{
+  "schema_version": "1",
+  "item_set_id": "wt2-ai-items",
+  "decision": "E-47 (D-05 C3, N5/N6/N8): AI soạn đề Writing Task 2 theo khung năng lực đã duyệt; QC1–QC4 đạt thì tự phát hành cho luyện tập và kiểm chứng",
+  "task": "IELTS Writing Task 2 (Academic and General Training)",
+  "batch_size": 5,
+  "daily_ai_call_cap": 10,
+  "similarity_threshold": 0.6,
+  "min_prompt_words": 25,
+  "essay_min_words": 250,
+  "recommended_minutes": 40,
+  "genres": ["opinion", "discussion", "advantages_disadvantages", "problem_solution", "two_part"],
+  "usage_purposes": ["practice", "independent_verification"]
+}

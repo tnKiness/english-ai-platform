@@ -44,6 +44,26 @@ const REVIEW_RULES = [
   'target is the competency_id concerned, or "framework" for issues of the whole draft. suggestion says concretely what to change. verdict "pass" only if there is no error.',
 ];
 
+// E-47 (D-05 C3, N5). DATA.context.framework is the approved competency framework; DATA.context.avoid lists prompts
+// already in the item bank. The application re-checks everything (competency ids, near-duplicates, forced structure).
+const ITEM_AUTHOR_RULES = [
+  'Write DATA.context.requirements.count new, original IELTS Writing Task 2 prompts. Never copy or lightly edit a published IELTS prompt (Cambridge, IDP, British Council, ielts.org or any book); invent the scenario and wording yourself.',
+  'Each prompt is what the learner reads: a short statement of the issue (one to three sentences) followed by the task instruction of its genre. Genres: "opinion" (To what extent do you agree or disagree?), "discussion" (Discuss both views and give your own opinion.), "advantages_disadvantages" (Do the advantages outweigh the disadvantages? or discuss both), "problem_solution" (What are the causes/problems ... and what solutions ...?), "two_part" (two direct questions). End every prompt with: "Give reasons for your answer and include any relevant examples from your own knowledge or experience."',
+  'Do not tell the learner how many paragraphs, sentences or linking words to use, and do not give ideas, arguments, an outline or a model answer.',
+  'Spread the set over different genres from DATA.context.requirements.genres and over different everyday IELTS topic areas (education, work, technology, environment, health, cities, media, culture, government, family). topic is a short English label; item_family is a snake_case name of the topic family, reused only for prompts on the same narrow theme.',
+  'Choose item_family and topic so that no prompt repeats the theme of a prompt in DATA.context.avoid.',
+  'competencies: the competency_ids from DATA.context.framework.competencies that a full essay on this prompt gives a genuine opportunity to show. Use only ids that exist there. A whole Task 2 essay normally gives a chance to show most competencies; leave out one only when the prompt really gives no opportunity for it, and say why in rationale.',
+  'test_type: "both" unless the topic only suits one module. difficulty_estimate is a rough guess (lower / middle / upper); it is labelled as an estimate.',
+  'item_key: short snake_case, unique in the set. rationale: one or two English sentences on why the prompt is clear and which genre features it tests.',
+  'Do not estimate band scores. Put any doubt in "limitations".',
+];
+const ITEM_REVIEW_RULES = [
+  'You are reviewing AI-written IELTS Writing Task 2 prompts in DATA.context.items before they are given to a learner. You did not write them. Judge each prompt as the learner will read it.',
+  'Checks, one finding per problem, each with check, severity and issue: "clear_unambiguous" (a learner can tell exactly what to write about and what to do; no hidden double question unless the genre is two_part); "genre_match" (the instruction matches the declared genre); "originality" (not a copy or light edit of a published IELTS prompt you recognise, and not the same theme as a prompt in DATA.context.avoid); "no_forced_structure" (no imposed number of paragraphs, sentences or linking words); "no_model_answer_or_ideas" (no ready-made ideas, outline or answer); "competency_mapping" (every listed competency_id from DATA.context.framework can genuinely be shown in an essay on this prompt).',
+  'severity "error" means the prompt must not be released as it is; "warning" is a minor issue. verdict "pass" only when the item has no error.',
+  'Return one entry per item in DATA.context.items, with the same item_key. Do not rewrite the prompts. Do not estimate band scores.',
+];
+
 const TASKS: Record<TaskType, { role: string; schema: unknown; rules: string[] }> = {
   'content.author': {
     role: 'You are an assessment designer building an evidence-centred competency framework for IELTS Writing Task 2 from official reference material.',
@@ -54,6 +74,16 @@ const TASKS: Record<TaskType, { role: string; schema: unknown; rules: string[] }
     role: 'You are an independent reviewer of an assessment framework draft. You did not write it.',
     schema: knowledge.$defs.framework_review_result,
     rules: REVIEW_RULES,
+  },
+  'content.item_author': {
+    role: 'You are an IELTS Writing Task 2 item writer creating original practice and verification prompts for one learner.',
+    schema: knowledge.$defs.wt2_item_set_result,
+    rules: ITEM_AUTHOR_RULES,
+  },
+  'content.item_review': {
+    role: 'You are an independent reviewer of IELTS Writing Task 2 prompts written by another AI.',
+    schema: knowledge.$defs.item_review_result,
+    rules: ITEM_REVIEW_RULES,
   },
   'reading.blind_solve': {
     role: 'You are an independent blind solver for one IELTS-style reading task. You see only what a learner sees.',

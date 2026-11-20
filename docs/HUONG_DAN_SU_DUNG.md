@@ -205,6 +205,27 @@ Dành cho việc tạo/kiểm định gói nội dung. Các tab:
 
      Duyệt bản mới thì bản đã duyệt trước chuyển sang *Đã thay thế*. Lịch sử và nội dung mỗi bản không bao giờ bị sửa.
   - Khung không đặt ngưỡng Band; báo Band vẫn tắt. Bản đã duyệt là căn cứ cho bước C3 (AI sinh đề), chưa thay gói synthetic đang dùng.
+- **Đề Writing Task 2 do AI soạn** (E-47, D-05 C3; cùng tab Khung năng lực). Cần một khung **đã duyệt**.
+  1. Chạy:
+     ```
+     npm.cmd run author -- items
+     ```
+     - Mặc định 5 đề một lô; đổi bằng `--count 3` (1–10).
+     - AI soạn đề theo 5 dạng chuẩn (ý kiến, thảo luận, lợi/hại, vấn đề/giải pháp, hai câu hỏi), gắn các năng lực của khung mà bài viết cho cơ hội thể hiện.
+  2. Ứng dụng kiểm tra tự động; đề lỗi bị loại, không đóng gói:
+     - năng lực phải có trong khung đã duyệt;
+     - đề không ép số đoạn/số câu/số từ nối;
+     - đề không đưa sẵn ý hay bài mẫu;
+     - đề không trùng gần với đề đã có. Đây là so khớp từ ngữ sơ bộ, ngưỡng trong `policies/authoring/wt2-items.v1.json`.
+  3. Mỗi đề đạt được đóng thành một gói `ai_authored` (đề + khóa ẩn chứa năng lực đo + rubric từ khung), chạy QC1–3. Một lượt AI khác rà soát đúng nội dung đã đóng băng:
+     - QC2 ngữ nghĩa: năng lực gắn với đề có thật sự thể hiện được không;
+     - QC3 ngữ nghĩa: không ép cấu trúc, không gợi ý sẵn;
+     - QC4: đề rõ ràng, đúng dạng, không chép đề đã xuất bản.
+  4. Đề đạt đủ QC1–QC4 được **tự phát hành** cho luyện tập và kiểm chứng (N6). Đề chưa đạt nằm ở dạng nháp và có mục trong *Cần xử lý*.
+  - Nếu lượt rà soát lỗi (ví dụ hết thời gian), chạy lại riêng nó: `npm.cmd run author -- items-review <batch_id>`. Xem các lô: `npm.cmd run author -- items-list`.
+  - Trần **10 lượt gọi AI sinh/rà soát đề mỗi ngày học** (N8), tách khỏi lượt chấm bài. Mỗi lô dùng 2 lượt.
+  - Phần *Đề Writing Task 2 do AI soạn* chỉ hiện thể loại, chủ đề và trạng thái, **không hiện nguyên văn đề**. Xem đề là một lần tiếp xúc: mở gói ở tab Gói tri thức → *Xem nội dung* (được ghi nhật ký tiếp xúc; đề đã xem không dùng làm bài kiểm chứng độc lập). Thu hồi đề cũng ở tab đó.
+  - **Giới hạn hiện tại:** màn học Writing **chưa cấp** các đề này; vẫn dùng gói synthetic. Việc cấp đề thật và chấm theo khung là bước C3b. Độ khó chỉ là ước tính.
 - **Cần xử lý**: review mở (sau thu hồi, khiếu nại…) và job bị dừng; chọn cách xử lý.
 - **Lần chạy**: các lần chạy AI và trạng thái gateway.
 
@@ -239,6 +260,8 @@ Tóm tắt; hướng dẫn chi tiết từng lệnh: [Codex](engineering/D01_COD
 ### 6.3. Việc định kỳ
 - **Mỗi 30 ngày**: xác nhận lại extra usage vẫn tắt (`confirm-extra-usage … off`), nếu không gateway chặn provider đó. `ai -- status` in hạn xác nhận.
 - Đăng nhập hết hạn (`AUTH_EXPIRED`/`NEEDS_LOGIN`): đăng nhập lại trong profile riêng, `npm.cmd run ai -- recover <provider>`, rồi nạp lại bằng chứng (bước 6).
+  - Với Claude (E-48): mở giao diện `claude` để `/login` sẽ tự tải catalog plugin vào profile (`plugins/marketplaces/`, `plugins/known_marketplaces.json`); kiểm tra ranh giới chặn hai mục này, hãy xóa chúng.
+  - CLI tự cập nhật phiên bản thì cần chạy lại `probe-boundary` và `verify` (bước 4–6) trước khi nạp bằng chứng.
 
 ### 6.4. Model
 - `npm.cmd run ai -- models <provider>`: model ứng viên và model được phép (không gọi AI).
@@ -436,7 +459,7 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 | `npm.cmd run backup` | Sao lưu / khôi phục DB + JSON + media (xem mục lệnh `backup`). |
 | `npm.cmd run export` | Xuất dữ liệu học tập cá nhân ra thư mục riêng, hoặc xem dung lượng đang dùng (xem mục lệnh `export`). |
 | `npm.cmd run sources` | Quét trang nguồn IELTS chính thức/tham chiếu trong danh sách miền cho phép (`crawl`, `status`); duyệt ở Builder & QC → Nguồn. |
-| `npm.cmd run author` | AI soạn khung năng lực + rubric Writing Task 2 từ nguồn đã duyệt rồi một AI khác rà soát (`framework`, `review <version>`, `sources`, `list`); duyệt ở Builder & QC → Khung năng lực. |
+| `npm.cmd run author` | AI soạn khung năng lực + rubric Writing Task 2 từ nguồn đã duyệt rồi một AI khác rà soát (`framework`, `review <version>`, `sources`, `list`); duyệt ở Builder & QC → Khung năng lực. C3: `items [--count n]` AI soạn đề Writing Task 2 theo khung đã duyệt, đề đạt QC1–QC4 tự phát hành; `items-review <batch_id>`, `items-list`. |
 | `npm.cmd run tts` | TTS cục bộ (Piper, offline) để đọc kịch bản Listening: `status` xem engine/giọng đã cài, `say "<văn bản>" [--voice id]` đọc thử và lưu WAV vào kho media. |
 | `npm.cmd run qc:real` | Chạy QC1–4 thật bằng provider READY trên gói synthetic trong kho tạm `var/qc-real/` (tốn vài prompt thuê bao). |
 | `npm.cmd run seed:reading` | Nạp gói Reading synthetic đã qua QC vào kho để thử luồng Reading. |
@@ -585,6 +608,8 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `GET /api/console/frameworks` | Các phiên bản khung năng lực Writing Task 2 do AI soạn (trạng thái, số lỗi/cảnh báo kiểm tra tự động) và các lần gọi AI soạn/rà soát. |
 | `GET /api/console/frameworks/:version` | Một bản khung: năng lực, hợp đồng bằng chứng, trích dẫn nguồn, rubric chính thức, kết quả kiểm tra tự động và lượt AI rà soát. |
 | `POST /api/console/frameworks/:version/decision` | Duyệt hoặc loại một bản nháp khung năng lực (cần không còn lỗi kiểm tra, đã có AI rà soát, không phải synthetic). |
+| `GET /api/console/item-batches` | Các lô đề Writing Task 2 do AI soạn (C3): số đề phát hành/nháp/bị loại, số lượt gọi AI sinh đề hôm nay. Không chứa nguyên văn đề. |
+| `GET /api/console/item-batches/:batchId` | Một lô đề: thể loại, chủ đề, trạng thái QC/phát hành từng đề, lỗi kiểm tra tự động và kết quả AI rà soát; không chứa nguyên văn đề (xem đề qua Gói tri thức để ghi tiếp xúc). |
 <!-- AUTO:routes:END -->
 
 ### Migration cơ sở dữ liệu
@@ -606,6 +631,7 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `0013_source_candidates.sql` | E-37 (D-05 N2, user decision 18/11/2026): pages found by the source crawler, waiting for the learner's review. |
 | `0014_content_origin.sql` | E-41 (D-05 N10, 19/11/2026): content origins 'ai_authored' and 'learner_owned' join 'synthetic_fixture' and 'sourced'. |
 | `0015_competency_frameworks.sql` | E-42 (D-05 C2, 19/11/2026): AI-authored competency framework drafts and the record of every authoring run. |
+| `0016_item_authoring_runs.sql` | E-47 (D-05 C3, 20/11/2026): AI-authored Writing Task 2 prompts add two authoring task types, 'content.item_author' |
 <!-- AUTO:migrations:END -->
 
 ### Quyết định kỹ thuật
@@ -658,6 +684,8 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | E-44 | Audio Listening: thu sẵn từ nguồn + TTS cục bộ (19/11/2026, người dùng chọn "Cả hai nguồn") |
 | E-45 | Profile Claude được chứa cache danh mục plugin (19/11/2026, người dùng "Cho phép cache") |
 | E-46 | Khung năng lực v2: bảng theo đường kẻ, định nghĩa cạnh, soạn lại theo góp ý (19/11/2026, người dùng "Làm v2") |
+| E-47 | C3a: AI soạn đề Writing Task 2, QC1–QC4, tự phát hành (20/11/2026, người dùng "tiến hành triển khai phần tiếp theo"; quyết định triển khai, đảo ngược  |
+| E-48 | Claude Code 2.1.329: plugin dựng sẵn `cc-plugin-privacy` và thư mục `plugins/store/` (20/11/2026, người dùng chốt) |
 <!-- AUTO:decisions:END -->
 
 ### Trạng thái công việc

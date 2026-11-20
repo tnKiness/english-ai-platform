@@ -324,6 +324,7 @@ ID / ngày / trạng thái (đề xuất, áp dụng kỹ thuật, người dùn
 - **Kèm theo:** đọc phần nội dung trang giờ nằm trong khối bắt lỗi. Nội dung bị treo quá `timeout_ms` thì chỉ trang đó bị ghi `FAILED`/`TIMEOUT`; trước đây lỗi này làm hỏng cả lượt chạy.
 - **Kết quả áp luật:** 8.176 dòng QUEUED chuyển sang SKIPPED, còn 2.292 trang trong hàng đợi.
 - **Test:** thêm 3 ca vào `tests/integration/e37-sources.test.ts`: thân trả lời bị treo, khớp luật, và áp luật lúc xếp hàng / với hàng đợi cũ / ở bước chuyển hướng.
+- **Bổ sung 19–20/11/2026** (người dùng "đồng ý, tiến hành"): loại trang bình luận LearnEnglish `^/comment/` (mỗi bình luận là một URL riêng, không có nội dung học). Trang bình luận đã tải trước đó bị loại hồi tố (4.272 dòng REJECTED) theo đồng ý riêng của người dùng.
 
 ## E-41 — Nguồn gốc nội dung `ai_authored` / `learner_owned` (D-05 N10, 19/11/2026)
 - **Nguồn:** N10 đã chốt (E-36); bước còn lại của C1 trong D05_CONTENT_PROPOSAL; người dùng "tiếp tục triển khai bước tiếp theo".
@@ -450,3 +451,64 @@ ID / ngày / trạng thái (đề xuất, áp dụng kỹ thuật, người dùn
   - Bản mới ghi `revised_from {version, review_run_id}`; bản cũ giữ trạng thái DRAFT để người dùng quyết định.
   - Cùng contract `competency_framework_result`, không thêm task type.
 - **Test:** `e39-pdf-text` thêm ca đường kẻ; `e42-framework-authoring` thêm ca bảng theo đường kẻ/ô gộp và ca soạn lại (10 ca).
+
+## E-47 — C3a: AI soạn đề Writing Task 2, QC1–QC4, tự phát hành (20/11/2026, người dùng "tiến hành triển khai phần tiếp theo"; quyết định triển khai, đảo ngược được)
+- **Căn cứ:** D-05 N5 (quy chuẩn sinh đề), N6 phương án A (đạt đủ QC1–QC4 thì tự phát hành), N8 (trần 10 lượt gọi AI/ngày cho sinh và QC đề). Các điểm này người dùng đã chốt ở E-36.
+- **Điều kiện chạy:** cần khung năng lực **đã duyệt**, không synthetic. Chưa có khung đã duyệt thì từ chối trước khi gọi AI (`FRAMEWORK_NOT_APPROVED`).
+- **Task type mới** `content.item_author`, `content.item_review`, với hợp đồng `wt2_item_set_result`, `item_review_result` trong knowledge.v1.
+  - Đi qua cùng gateway, chỉ gửi dữ liệu loại `knowledge_content`: năng lực của khung (mã, tiêu chí) và các đề đã có để tránh trùng chủ đề.
+  - Không gửi nguồn hay dữ liệu người học.
+  - Migration `0016_item_authoring_runs` dựng lại `authoring_runs` (giữ mọi dòng) để mở rộng CHECK task_type.
+- **Kiểm tra xác định trước khi đóng gói** (`src/domain/knowledge/item-checks.ts`). Đề có lỗi bị ghi là loại và không đóng gói:
+  - năng lực phải có trong khung;
+  - đề đủ dài;
+  - không ép cấu trúc (số đoạn, số câu, số từ nối);
+  - không đưa ý hay bài mẫu;
+  - không trùng gần với đề đã có hoặc đề cùng lô. Trùng gần đo bằng Jaccard trên từ nội dung, bỏ câu lệnh chung của dạng đề; ngưỡng 0,6 ở `policies/authoring/wt2-items.v1.json`. Đây chỉ là bộ lọc sơ bộ; QC4 vẫn xét ngữ nghĩa "originality".
+- **Đóng gói:** mỗi đề là một gói `ai_authored` riêng (`pkg-wt2-ai-<lô>-<key>@v1`), để một đề lỗi không chặn cả lô và thu hồi theo từng đề. Gói gồm:
+  - `task_item`: đề, một câu hỏi `essay` "Write at least 250 words.";
+  - `answer_key`: chỉ verifier/assessor thấy. Bài luận không có đáp án cố định, nên khóa ghi `essay_assessed_by_rubric`; `measurement_targets` là các năng lực đo (mục tiêu ẩn);
+  - `rubric`: tiêu chí chính thức (vị trí ô trong bảng band descriptors), hướng dẫn quan sát của các năng lực đo, ghi chú tổng hợp của khung.
+  - Căn cứ nguồn là các nguồn của khung đã duyệt.
+- **Bao phủ:** cả hai vai trò `practice`, `independent_verification` yêu cầu `support_content` (rubric).
+  - Gói đề không khai ca kiểm thử chấm có kết quả kỳ vọng. Các ca đó thuộc bộ đối chứng (C6, N9): bài mẫu AI viết không được làm chuẩn (05 §5.C).
+- **QC:**
+  - QC1–3 phần xác định chạy như mọi gói.
+  - Một lượt AI rà soát độc lập (`content.item_review`) đọc lại **đúng nội dung đã đóng băng** từ kho bất biến. `BuilderPipeline.recordAiReview` ghi kết quả gắn với bundle hash đó:
+    - QC2 ngữ nghĩa ← `competency_mapping`;
+    - QC3 ngữ nghĩa ← `no_forced_structure`, `no_model_answer_or_ideas`;
+    - QC4 ← `clear_unambiguous`, `genre_match`, `originality`, và verdict.
+  - Phương thức `ai_semantic` chỉ cho provider CLI thật; FakeAdapter hoặc kết quả synthetic ghi `synthetic_fake`, và cổng phát hành từ chối với nội dung không synthetic.
+  - Đây là cách tự động hóa phần ngữ nghĩa theo N6; trước đây phần này là xác nhận tay (`manual_attestation`).
+- **Phát hành:** gọi `release` với đúng bundle hash đã rà soát; cổng kiểm lại mọi điều kiện như cũ. Đề không đạt ở lại dạng nháp, có mục *Cần xử lý*.
+  - Lượt rà soát lỗi thì gói đã đóng băng chờ `author -- items-review <lô>`; lệnh này không gọi AI soạn lại.
+- **N8:** mỗi lô dùng 2 lượt gọi AI (soạn + rà soát). Trần 10 lượt mỗi ngày học (`Asia/Bangkok`), kiểm trước khi gọi, tính cả lượt lỗi.
+- **Tiếp xúc:** API và màn lô đề không gửi nguyên văn đề xuống trình duyệt. Đọc đề phải qua *Xem nội dung* của Gói tri thức, nơi ghi tiếp xúc trước, để đề đã xem không bị dùng làm bài kiểm chứng độc lập.
+- **Chưa làm (C3b):**
+  - màn học Writing chưa cấp các đề này (vẫn dùng gói synthetic);
+  - chấm chưa dùng năng lực của khung;
+  - màn duyệt mẫu ngẫu nhiên của N6 chưa có (hiện chỉ có danh sách lô và *Xem nội dung*/thu hồi ở Gói tri thức);
+  - nhiệm vụ đoạn ngắn 7A (`meets_min_scope`) chưa sinh.
+- **Test:** `tests/integration/e47-item-authoring.test.ts` (9 ca), executor giả, không gọi AI thật:
+  - kiểm tra xác định; hợp đồng và chỉ dẫn;
+  - chặn khi chưa có khung;
+  - phát hành ai_authored với QC `ai_semantic`;
+  - lỗi rà soát giữ nháp; FakeAdapter bị chặn;
+  - rà soát lại sau lỗi; tránh trùng giữa các lô và trần N8;
+  - API cần phiên.
+
+
+## E-48 — Claude Code 2.1.329: plugin dựng sẵn `cc-plugin-privacy` và thư mục `plugins/store/` (20/11/2026, **người dùng chốt**)
+- **Bối cảnh:** khi đăng nhập lại profile `claude-main`, Claude Code tự cập nhật 2.1.304 → 2.1.329. Bản mới có ba thay đổi:
+  - nạp thêm plugin dựng sẵn `cc-plugin-privacy`;
+  - tự ghi `plugins/store/<plugin>_builtin-<hex>.json` (dấu trạng thái của plugin dựng sẵn, ví dụ một dòng `usage-rows-queued` của `cc-plugin-agents-md`);
+  - khi mở giao diện tương tác thì tự tải catalog `plugins/marketplaces/…` và `known_marketplaces.json`.
+- **Quyết định:**
+  - **Người dùng chọn cho phép `cc-plugin-privacy`.** `CLAUDE_ALLOWED_BUILTIN_PLUGINS` nay có 4 plugin; plugin khác vẫn làm probe FAIL. `tools: []` và `mcp_servers: []` vẫn bắt buộc.
+  - `isClaudePluginCacheOnly` chấp nhận thêm `plugins/store/` nếu thư mục chỉ chứa file thường tên `<plugin dựng sẵn được phép>_builtin-<hex>.json`. Đây là áp dụng kỹ thuật trong phạm vi quyết định trên.
+  - Catalog marketplace **không** được cho phép. Người dùng chọn xóa (đã xóa); nếu đăng nhập lại bằng giao diện tương tác thì cần xóa lại.
+- **Bằng chứng:**
+  - probe-boundary 20/11/2026: PASS (`tools=[]`, `mcp_servers=[]`, cấu hình sạch);
+  - verify 2.1.329: `claude.ai (pro)`, prompt synthetic thoát 0, claude-opus-5-5 đạt, timeout/cancel đạt.
+  - Các trường xác nhận (Claude Pro, `applies_to_cli`, envelope VERIFIED, error_patterns như bản 21/10/2026) được điền theo đồng ý của người dùng qua chat ("Nạp và chạy"). Nạp `var/ai/evidence-claude-3.json` → claude-code READY.
+- **Test:** `tests/unit/e45-claude-plugin-cache.test.ts` thêm 2 ca: danh sách đúng 4 plugin; `store/` chỉ nhận file trạng thái của plugin được phép, từ chối plugin lạ, thư mục con và `marketplaces/`.

@@ -366,13 +366,30 @@ export interface ClaudeConfigInspection {
   ok: boolean;
 }
 
-export const CLAUDE_ALLOWED_BUILTIN_PLUGINS = ['cc-plugin-agents-md', 'cc-plugin-telemetry', 'cc-plugin-plugin-authoring'] as const;
+// E-48 (20/11/2026, user decision): Claude Code 2.1.329 adds the builtin cc-plugin-privacy; allowed by the learner.
+// Any other plugin still fails the probe. Tools stay disabled (`tools: []` must still be observed).
+export const CLAUDE_ALLOWED_BUILTIN_PLUGINS = ['cc-plugin-agents-md', 'cc-plugin-telemetry', 'cc-plugin-plugin-authoring', 'cc-plugin-privacy'] as const;
 
-/** E-45: true only for a real directory whose entries are all regular files named plugin-directory-cache[-vN].json. */
+const BUILTIN_STORE_FILE = /^(cc-plugin-[a-z0-9-]+)_builtin-[0-9a-f]{6,64}\.json$/;
+/**
+ * E-45: true only for a real directory whose entries are regular files named plugin-directory-cache[-vN].json.
+ * E-48: plus an optional real `store/` directory holding only the state files Claude Code 2.1.329+ writes for its
+ * builtin plugins (`<plugin>_builtin-<hex>.json`), and only for builtins in CLAUDE_ALLOWED_BUILTIN_PLUGINS.
+ */
 export function isClaudePluginCacheOnly(dir: string): boolean {
+  const file = (p: string) => lstatSync(p).isFile();
   try {
     if (!lstatSync(dir).isDirectory()) return false;
-    return readdirSync(dir).every((name) => /^plugin-directory-cache(-v\d+)?\.json$/.test(name) && lstatSync(join(dir, name)).isFile());
+    return readdirSync(dir).every((name) => {
+      const p = join(dir, name);
+      if (name === 'store') {
+        return lstatSync(p).isDirectory() && readdirSync(p).every((f) => {
+          const m = BUILTIN_STORE_FILE.exec(f);
+          return !!m && (CLAUDE_ALLOWED_BUILTIN_PLUGINS as readonly string[]).includes(m[1]!) && file(join(p, f));
+        });
+      }
+      return /^plugin-directory-cache(-v\d+)?\.json$/.test(name) && file(p);
+    });
   } catch { return false; }
 }
 
@@ -385,7 +402,7 @@ export function inspectClaudeConfig(profileDir: string, cwd: string, stopAt?: st
     // E-45: Claude Code writes the plugin catalogue cache into plugins/ by itself. A directory holding nothing but that
     // cache file installs or enables nothing; anything else in it (installed plugins, marketplaces, manifests, code,
     // sub-directories, links) still blocks.
-    if (f === 'plugins' && isClaudePluginCacheOnly(join(profileDir, f))) { notes.push('plugins/ chỉ chứa cache danh mục plugin (E-45)'); continue; }
+    if (f === 'plugins' && isClaudePluginCacheOnly(join(profileDir, f))) { notes.push('plugins/ chỉ chứa cache danh mục plugin (E-45) và trạng thái plugin dựng sẵn được phép (E-48)'); continue; }
     findings.push(`PROFILE_${f}`);
   }
   if (entries.includes('settings.json')) {

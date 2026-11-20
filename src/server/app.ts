@@ -9,7 +9,8 @@ import { LearningWorkflowService } from '../application/learning/writing-workflo
 import { ReplanPlanner } from '../application/learning/replan-planner.js';
 import { SourceReview } from '../infrastructure/sources/review.js';
 import { FrameworkAuthoringService } from '../application/authoring/framework-authoring.js';
-import { loadFrameworkPolicy, loadFrameworkSources } from '../infrastructure/authoring/framework-sources.js';
+import { ItemAuthoringService } from '../application/authoring/item-authoring.js';
+import { loadFrameworkPolicy, loadFrameworkSources, loadItemPolicy } from '../infrastructure/authoring/framework-sources.js';
 import { ConsoleService } from '../application/qc/console.js';
 import type { BuilderPipeline } from '../application/qc/pipeline.js';
 import type { ContextRole } from '../application/context/scoped-reader.js';
@@ -214,6 +215,11 @@ export function createApp(deps: AppDeps = {}) {
   app.post<{ Params: { version: string }; Body: { decision: 'approve' | 'reject'; note: string } }>('/api/console/frameworks/:version/decision', {
     schema: body({ decision: { enum: ['approve', 'reject'] }, note: { type: 'string', maxLength: 2000 } }),
   }, async (r) => frameworks.decide(r.params.version, r.body.decision, r.body.note));
+  // E-47 (D-05 C3): AI-authored Writing Task 2 prompts. The AI runs only from `npm run author -- items`; prompts that
+  // pass QC1–QC4 are released automatically (N6); the learner reads them here and revokes from the package console.
+  const items = new ItemAuthoringService(store, pipeline, () => frameworks.approved(), loadItemPolicy());
+  app.get('/api/console/item-batches', async () => ({ batches: items.list(), calls_today: items.callsToday() }));
+  app.get<{ Params: { batchId: string } }>('/api/console/item-batches/:batchId', async (r) => items.detail(r.params.batchId));
 
   // ---- P3 Khung học, Vòng Writing & Gợi mở theo nấc (01, 02, 03, 06) -------------------------
   const bandNum = { type: 'number', minimum: 0, maximum: 9 } as const;

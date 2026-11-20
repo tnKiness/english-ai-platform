@@ -22,6 +22,16 @@ interface Detail {
   review: { provider: string; model: string | null; result: { verdict: 'pass' | 'revise'; findings: Finding[]; limitations: string[] } } | null;
 }
 
+interface Batch { batch_id: string; created_at: string; framework_version: string; provider: string; model: string | null; items: number; rejected: number; active: number; draft: number }
+interface ItemStatus { item_id: string; package_id: string; item_key: string; genre: string; topic: string; competencies: string[]; precheck: 'passed' | 'rejected'; release_state: string | null; qc: { stage: string; status: string }[] }
+interface BatchDetail {
+  batch: { batch_id: string; framework: { version: string }; author: { provider: string; model: string | null }; checks: { code: string; severity: string; item_key: string; detail: string }[]; limitations: string[] };
+  items: ItemStatus[]; reviews: { run_id: string; provider: string; result: { items: { item_key: string; verdict: string; findings: { check: string; severity: string; issue: string }[] }[] } }[];
+  calls_today: number; daily_cap: number;
+}
+const GENRE: Record<string, string> = { opinion: 'Ý kiến', discussion: 'Thảo luận hai quan điểm', advantages_disadvantages: 'Lợi/hại', problem_solution: 'Vấn đề/giải pháp', two_part: 'Hai câu hỏi' };
+const RELEASE: Record<string, string> = { active: 'Đã phát hành', draft: 'Chưa đạt QC (nháp)', suspended: 'Tạm ngừng', retired: 'Đã ngừng' };
+
 const STATE: Record<string, string> = { DRAFT: 'Bản nháp', APPROVED: 'Đã duyệt', REJECTED: 'Đã loại', SUPERSEDED: 'Đã thay thế' };
 const CRITERIA: [string, string][] = [['task_response', 'Task Response'], ['coherence_cohesion', 'Coherence & Cohesion'], ['lexical_resource', 'Lexical Resource'], ['grammatical_range_accuracy', 'Grammatical Range & Accuracy']];
 const EDGE: Record<string, string> = { component_of: 'thành phần của', supports: 'hỗ trợ cho', prerequisite: 'tiên quyết của', transferable_to: 'chuyển giao sang', confusable_with: 'dễ nhầm với' };
@@ -36,9 +46,12 @@ export function FrameworksPanel({ onError }: { onError: (e: unknown) => void }) 
   const [detail, setDetail] = useState<Detail | null>(null);
   const [note, setNote] = useState('');
   const [status, setStatus] = useState('');
+  const [batches, setBatches] = useState<{ batches: Batch[]; calls_today: number }>({ batches: [], calls_today: 0 });
+  const [batch, setBatch] = useState<BatchDetail | null>(null);
 
   const load = useCallback(() => {
     get<{ rows: Row[]; runs: Run[] }>('/api/console/frameworks').then((d) => { setRows(d.rows); setRuns(d.runs); }).catch(onError);
+    get<{ batches: Batch[]; calls_today: number }>('/api/console/item-batches').then(setBatches).catch(onError);
   }, [onError]);
   useEffect(load, [load]);
   const open = (version: string) => get<Detail>(`/api/console/frameworks/${encodeURIComponent(version)}`).then((d) => { setDetail(d); setNote(''); setStatus(''); }).catch(onError);
@@ -48,6 +61,7 @@ export function FrameworksPanel({ onError }: { onError: (e: unknown) => void }) 
       .then((r) => { setStatus(`${r.version}: ${STATE[r.state] ?? r.state}.`); load(); return open(r.version); }).catch(onError);
   };
 
+  const openBatch = (id: string) => get<BatchDetail>(`/api/console/item-batches/${encodeURIComponent(id)}`).then(setBatch).catch(onError);
   const doc = detail?.document;
   const sourceUrl = (ref: string) => doc?.sources.find((s) => s.source_ref === ref);
   return <div>
@@ -63,6 +77,33 @@ export function FrameworksPanel({ onError }: { onError: (e: unknown) => void }) 
       {runs.length > 0 && <details><summary>Các lần gọi AI ({runs.length})</summary><ul>{runs.map((r) =>
         <li key={r.run_id} className="mono">{r.started_at} · {r.task_type} {r.target_version ?? ''} · {r.provider}{r.model ? ` (${r.model})` : ''} · {r.ok ? 'thành công' : `lỗi: ${r.error ?? ''}`}</li>)}</ul></details>}
     </section>
+
+    <section className="card">
+      <h3>Đề Writing Task 2 do AI soạn (D-05 C3)</h3>
+      <p>AI soạn đề theo khung <b>đã duyệt</b>; ứng dụng kiểm tra (năng lực có trong khung, không ép cấu trúc, không gợi ý sẵn, không trùng gần với đề đã có), đóng gói, chạy QC1–3; một lượt AI khác rà soát (QC2/QC3 ngữ nghĩa và QC4). Đề đạt đủ QC1–QC4 được <b>tự phát hành</b> cho luyện tập và kiểm chứng (N6). Thu hồi ở tab Gói tri thức. Chạy:</p>
+      <pre className="mono">npm.cmd run author -- items</pre>
+      <p>Lượt gọi AI sinh đề hôm nay: {batches.calls_today} (trần theo N8). Độ khó chỉ là <i>ước tính</i>.</p>
+      {batches.batches.length === 0 ? <p>Chưa có lô đề nào.</p> : <table><thead><tr><th>Lô</th><th>Khung</th><th>Đề</th><th>Phát hành</th><th>Nháp</th><th>Bị loại</th><th>Tạo lúc</th><th></th></tr></thead><tbody>
+        {batches.batches.map((b) => <tr key={b.batch_id}><td className="mono">{b.batch_id.slice(0, 8)}</td><td>{b.framework_version}</td><td>{b.items}</td><td>{b.active}</td><td>{b.draft}</td><td>{b.rejected}</td>
+          <td>{new Date(b.created_at).toLocaleString('vi-VN')}</td><td><button onClick={() => { void openBatch(b.batch_id); }}>Xem</button></td></tr>)}
+      </tbody></table>}
+    </section>
+
+    {batch && <section className="card">
+      <div className="actions"><h3>Lô {batch.batch.batch_id.slice(0, 8)} — khung {batch.batch.framework.version} · {batch.batch.author.provider}{batch.batch.author.model ? ` (${batch.batch.author.model})` : ''}</h3><button onClick={() => setBatch(null)}>Đóng</button></div>
+      {batch.items.map((i) => {
+        const review = batch.reviews.flatMap((r) => r.result.items).filter((x) => x.item_key === i.item_key).at(-1);
+        const checks = batch.batch.checks.filter((c) => c.item_key === i.item_key);
+        return <details key={i.item_id}>
+          <summary><b>{GENRE[i.genre] ?? i.genre}</b> · {i.topic} — {i.precheck === 'rejected' ? 'Bị loại ở kiểm tra tự động' : RELEASE[i.release_state ?? ''] ?? i.release_state} {i.qc.length > 0 && <span className="mono">({i.qc.map((q) => `${q.stage}:${q.status}`).join(' ')})</span>}</summary>
+          <p className="mono">{i.package_id} · {i.competencies.length} năng lực đo</p>
+          <p>Nguyên văn đề không hiện ở đây: xem đề là một lần tiếp xúc. Muốn đọc, mở gói này ở tab Gói tri thức → Xem nội dung (được ghi nhật ký tiếp xúc, đề đã xem không dùng làm bài kiểm chứng độc lập).</p>
+          {checks.length > 0 && <ul>{checks.map((c, k) => <li key={k}><b>{c.severity === 'error' ? 'Lỗi' : 'Cảnh báo'}</b> · {c.code}: {c.detail}</li>)}</ul>}
+          {review && <><b>AI rà soát: {review.verdict === 'pass' ? 'đạt' : 'không đạt'}</b>{review.findings.length > 0 && <ul>{review.findings.map((x, k) => <li key={k}>{x.severity === 'error' ? 'Lỗi' : 'Cảnh báo'} · {x.check}: {x.issue}</li>)}</ul>}</>}
+        </details>;
+      })}
+      <List title="Giới hạn AI soạn nêu" items={batch.batch.limitations} />
+    </section>}
 
     {detail && doc && <>
       <section className="card">
