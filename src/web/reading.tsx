@@ -38,15 +38,15 @@ export function ReadingScreen() {
     }, 500);
     return () => clearTimeout(timer);
   }, [answers, dirty, view]);
-  return <article className="card">
-    <h3>Reading — bài synthetic đã qua QC</h3>
-    <p>Không quy đổi kết quả thành Band. Bản lý giải có thể viết bằng tiếng Việt.</p>
-    {error && <p role="alert">{error}</p>}
+  return <div>
+    <h3>Kho đề Reading</h3>
+    <p className="muted">Không quy đổi kết quả thành Band. Bản lý giải có thể viết bằng tiếng Việt.</p>
+    {error && <p role="alert" className="error">{error}</p>}
     {!view ? <>
       <label>Chế độ <select value={mode} onChange={(e) => setMode(e.target.value)}>
         <option value="guided">Có hướng dẫn</option><option value="self_practice">Tự luyện</option><option value="exam">Thi thử</option>
       </select></label>
-      {catalog?.items.length === 0 && <p>Chưa có bài Reading được phát hành.</p>}
+      {catalog?.items.length === 0 && <p className="muted">Chưa có bài Reading được phát hành.</p>}
       {catalog?.items.map((i) => <button disabled={busy} key={`${i.item_id}:${i.version}`} onClick={() => run(async () => accept(await post<View>('/api/learning/reading', { ...i, title: undefined, mode, request_key: requestId() }))) }>{i.title}</button>)}
       {catalog?.attempts.map((a) => <button disabled={busy} key={a.attempt_id} onClick={() => run(async () => accept(await get<View>(`/api/learning/reading/${a.attempt_id}`)))}>Tiếp tục Reading ({a.state})</button>)}
     </> : <>
@@ -73,5 +73,5 @@ export function ReadingScreen() {
         setView(null);
       })}>Lưu và về danh sách Reading</button>
     </>}
-  </article>;
+  </div>;
 }

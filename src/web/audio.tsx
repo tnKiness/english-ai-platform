@@ -74,7 +74,7 @@ export function AudioScreen() {
     } catch (e) { tracks.getTracks().forEach((t) => t.stop()); throw e; }
   };
   return <article className="card">
-    <h3>Speaking — mẫu thu/phát audio cục bộ</h3>
+    <h3>Thu âm và nghe lại (lưu trên máy)</h3>
     <p>Describe a quiet place you would like to create in your neighbourhood. (Synthetic)</p>
     {error && <p role="alert">{error}</p>}
     {!view ? <>

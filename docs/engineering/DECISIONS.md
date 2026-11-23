@@ -680,3 +680,26 @@ ID / ngày / trạng thái (đề xuất, áp dụng kỹ thuật, người dùn
 - **Còn mở (cần chính sách):** đo định lượng và báo Band. Cần ≥ 20–30 bài Task 2 có điểm (N9) và một quy tắc ánh xạ do người dùng chốt.
 - **Test:** `tests/integration/e55-calibration.test.ts` (3 ca: tách, chỉ chấm Task 2 không lộ Band, chặn khi chưa có khung).
 
+## E-56 — Tối ưu giao diện (23/11/2026, người dùng chọn cả 4 phần: Học hôm nay, Tiến độ, giao diện chung, Builder & QC; quyết định triển khai, đảo ngược được)
+- **Giao diện chung** (`src/web/style.css`):
+  - Token màu cho sáng/tối theo `prefers-color-scheme`; nút chính (`.primary`), nhãn trạng thái (`.chip ok|warn|bad|info`), danh sách thẻ (`.item-list`), tab phụ (`.subtabs`), ô số liệu (`.stat`), bảng cuộn ngang (`.table-wrap`).
+  - Viền focus rõ; bố cục co giãn dưới 640 px.
+  - Giữ nguyên các class cũ.
+- **Học hôm nay** (`learning.tsx`, `main.tsx`):
+  - Ba phần: *Hôm nay* (đang dở, nhiệm vụ ưu tiên, lịch sắp tới thu gọn, đề xuất đổi lịch), *Luyện tập* với tab Writing/Speaking/Reading/Listening, và *Ngày học, quỹ thời gian và mục tiêu* (thu gọn).
+  - Kho đề tách theo kỹ năng: API `writing-bank` thêm trường `skill`.
+  - Bỏ tham chiếu đặc tả ("06 §2.2"…) và thuật ngữ nội bộ khỏi tiêu đề màn người học.
+  - Tab đang chọn lưu bằng `localStorage`: chỉ là tiện ích theo máy; lỗi đọc/ghi thì về mặc định.
+- **Tiến độ:**
+  - Có ô tổng quan, bảng 7 ngày, hồ sơ năng lực nhóm theo kỹ năng → tiêu chí (theo mã `wt2./spk.` và tiêu chí).
+  - Mỗi năng lực một dòng gập/mở, nhãn theo đúng mức D-02 (A1–A6, nhãn của chính sách). Năng lực synthetic ẩn mặc định.
+  - **Sửa lỗi:** `all_synthetic` trả `true` cho năng lực chưa có quan sát (đúng với tập rỗng), nên năng lực thật của khung bị gắn "synthetic". Nay chỉ năng lực `syn.` hoặc năng lực mà mọi quan sát đều synthetic mới bị gắn.
+- **Builder & QC:** tab phụ theo thứ tự làm việc (Nguồn → Khung năng lực & đề → Gói tri thức → Cần xử lý → Lần chạy & AI), số mục *Cần xử lý* trên tab, nhớ tab đang chọn.
+- **Sửa lỗi môi trường dev:** proxy Vite `'/api'` khớp cả module nguồn `/api.ts`, nên `npm run dev` ra trang trắng. Nay chỉ khớp `^/api/`.
+- **Thêm** `.claude/launch.json` (api 4317, web 5173) để xem trước trong trình duyệt tích hợp.
+- **Kiểm tra:**
+  - typecheck/lint;
+  - xem trực tiếp Học hôm nay, Tiến độ, Builder & QC, cả màn hẹp 375 px và chế độ tối. Chỉ xem, không mở đề nào để không ghi tiếp xúc.
+  - `npm.cmd run check` 389/389. Lần đầu có `e22-models` lỗi `EBUSY` (khóa thư mục tạm trên Windows); chạy lại đạt.
+- **Chưa làm:** Workspace Writing (màn làm bài) và Cài đặt chưa sắp xếp lại; chưa có test giao diện tự động.
+

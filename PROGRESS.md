@@ -1082,3 +1082,20 @@ P0–P3 đã hoàn tất phần code và nghiệm thu trên gói synthetic (D-01
 - **Sửa nhỏ:** CLI `items --skill speaking` in sai "đề Writing Task 2".
 - **Kiểm tra:** `npm.cmd run check`: 389/389 test (57 file), build OK.
 - **Chưa kiểm:** chưa ai làm bài Speaking/Listening thật qua giao diện; người dùng sẽ thử sau bước tối ưu giao diện.
+
+### 23/11/2026 — Tối ưu giao diện (E-56)
+- **Nguồn:** người dùng "Tối ưu giao diện", chọn cả 4 phần.
+- **Đã làm:**
+  - CSS chung: token màu, sáng/tối, màn hẹp;
+  - Học hôm nay 3 phần với tab kỹ năng; kho đề tách theo kỹ năng;
+  - Tiến độ nhóm theo kỹ năng/tiêu chí, nhãn mức D-02, ẩn synthetic;
+  - Builder & QC tab phụ theo luồng làm việc;
+  - bỏ tham chiếu đặc tả khỏi tiêu đề màn người học.
+- **Sửa lỗi:**
+  - proxy Vite `'/api'` khớp module `/api.ts` (trang trắng khi `npm run dev`);
+  - nhãn "synthetic" sai cho năng lực khung chưa có quan sát.
+- **Kiểm tra:**
+  - xem trực tiếp trong trình duyệt tích hợp (desktop, 375 px, tối). Chỉ xem, không mở đề.
+  - `npm.cmd run check` 389/389 (lần đầu `e22-models` lỗi `EBUSY` chập chờn, chạy lại đạt).
+- **Chưa làm:** sắp xếp lại Workspace Writing và Cài đặt; test giao diện tự động. Tiếp theo: người dùng làm thử đề qua giao diện.
+

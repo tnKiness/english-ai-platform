@@ -20,17 +20,19 @@ function App() {
     return () => controller.abort();
   }, []);
   return <main>
-    <div className="actions" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-      <p className="eyebrow">KHÔNG GIAN HỌC IELTS</p>
+    <header className="app-header">
+      <div>
+        <p className="eyebrow">KHÔNG GIAN HỌC IELTS</p>
+        <p className={connected === false ? 'status offline' : 'status'} aria-live="polite">{connected === null ? 'Đang kết nối…' : connected ? 'Đã kết nối ứng dụng cục bộ' : 'Chưa kết nối được ứng dụng cục bộ: chạy npm.cmd run app'}</p>
+      </div>
       <button className={view === 'settings' ? 'active' : ''} onClick={() => { setActiveAttemptId(null); setView('settings'); }}>Cài đặt &amp; Mục tiêu</button>
-    </div>
+    </header>
     <nav className="tabs">{([['today', 'Học hôm nay'], ['progress', 'Tiến độ'], ['builder', 'Builder & QC']] as const).map(([k, label]) =>
       <button key={k} className={view === k && !activeAttemptId ? 'active' : ''} onClick={() => { setActiveAttemptId(null); setView(k); }}>{label}</button>)}</nav>
-    <p className="status" aria-live="polite">{connected === null ? 'Đang kiểm tra kết nối…' : connected ? 'Đã kết nối ứng dụng cục bộ. Trạng thái AI thật xem ở Cài đặt & Mục tiêu.' : 'Chưa kết nối được ứng dụng cục bộ.'}</p>
     {activeAttemptId ? (
       <WorkspaceScreen attemptId={activeAttemptId} onSwitchAttempt={setActiveAttemptId} onBack={() => setActiveAttemptId(null)} />
     ) : view === 'today' ? (
-      <><TodayScreen onOpenAttempt={setActiveAttemptId} /><ReadingScreen /><ListeningScreen /><AudioScreen /></>
+      <TodayScreen onOpenAttempt={setActiveAttemptId} extras={{ reading: <ReadingScreen />, listening: <ListeningScreen />, audio: <AudioScreen /> }} />
     ) : view === 'progress' ? (
       <ProgressScreen />
     ) : view === 'settings' ? (

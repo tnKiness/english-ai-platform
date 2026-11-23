@@ -101,19 +101,28 @@ Lưu ý:
 
 ## 4. Học trên giao diện
 
-Thanh điều hướng: **Học hôm nay** · **Tiến độ** · **Builder & QC**, và nút **Cài đặt & Mục tiêu** ở góc trên.
+Thanh điều hướng: **Học hôm nay** · **Tiến độ** · **Builder & QC**, và nút **Cài đặt & Mục tiêu** ở góc trên. Giao diện theo chế độ sáng/tối của hệ điều hành và dùng được trên màn hẹp (E-56).
 
 ### 4.1. Cài đặt & Mục tiêu
 Nhập Band mục tiêu tổng và từng kỹ năng, loại thi (Academic/General), ngày thi dự kiến, **số phút học mỗi ngày** và **mỗi tuần**. Số phút/ngày là quỹ thời gian mặc định cho mỗi ngày học. Màn này cũng cho xem trạng thái gateway AI, và khung **Dữ liệu của bạn** (dung lượng, sao lưu tự động: bản gần nhất và kết quả diễn tập, nút xuất dữ liệu; xem [mục 8](#8-sao-lưu-khôi-phục-và-xuất-dữ-liệu)).
 
 ### 4.2. Học hôm nay
+Màn chia ba phần (E-56):
+1. **Hôm nay**: bài đang làm dở (*Tiếp tục*), **nhiệm vụ ưu tiên** (*Bắt đầu*; chọn chế độ cho bài học mới ở góc phải; bấm *Vì sao ưu tiên* để xem điểm), lịch kiểm chứng/ôn tập sắp tới (thu gọn), đề xuất sắp xếp lại lịch khi cần.
+2. **Luyện tập**, theo tab kỹ năng **Writing · Speaking · Reading · Listening** (app nhớ tab bạn chọn trên máy này):
+   - *Writing*: kho đề Writing Task 2 và mục thêm đề của bạn.
+   - *Speaking*: kho đề Speaking (trả lời bằng văn bản) và mục thu âm để tự nghe lại.
+   - *Reading*, *Listening*: kho đề của từng kỹ năng.
+3. **Ngày học, quỹ thời gian và mục tiêu** (thu gọn): các mục bên dưới. Khi chưa có mục tiêu, form mục tiêu hiện ở đầu màn.
+
+Chi tiết từng phần:
 - **Ngày học hôm nay** (theo giờ Việt Nam):
   - Lời nhắc học trong ứng dụng, tối đa 1 lần/ngày; bấm *Đã xem* để ẩn.
   - *Hôm nay nghỉ có kế hoạch*: ngày được ghi là nghỉ, quỹ = 0, không nhắc. Bấm lại để bỏ.
   - *Quỹ thời gian hôm nay*: đổi số phút chỉ cho hôm nay.
   - *Đã học ngoài ứng dụng*: ghi ngày học offline, kèm số phút tự khai (không bắt buộc). Phút tự khai hiển thị tách biệt với phút đo được.
 - **Tiếp tục bài đang làm**: bài Writing còn dở hiện ở đầu.
-- **Quỹ thời gian phiên này** và **chế độ làm bài**: *Có hướng dẫn*, *Tự luyện*, *Mô phỏng thi* (ẩn mọi hỗ trợ). Bấm *Cập nhật danh sách nhiệm vụ* để lọc nhiệm vụ vừa với số phút.
+- **Quỹ thời gian phiên này** (trong phần thu gọn cuối màn): nhập số phút rồi bấm *Lọc lại nhiệm vụ*. **Chế độ làm bài** cho bài học mới (*Có hướng dẫn*, *Tự luyện*, *Mô phỏng thi* — ẩn mọi hỗ trợ) chọn ngay cạnh danh sách nhiệm vụ.
 - **Nhiệm vụ đề xuất** kèm lý do và nhãn mục đích: bài học/luyện, kiểm chứng 7A, tổng hợp 7B, ôn giãn cách Bước 9. Danh sách được xếp theo **điểm ưu tiên D-02** (hiện ngay dưới mỗi nhiệm vụ): ảnh hưởng + độ chắc chắn + tần suất lỗi + liên quan mục tiêu (mỗi phần 0–3) + thời hạn (+3 đến hạn hôm nay, +5 quá hạn) + đã chờ (+1 mỗi 3 ngày, tối đa +3). Nhiệm vụ kiểm chứng bị bỏ qua 3 buổi học hoặc quá hạn hơn 7 ngày được **giữ chỗ đầu danh sách** (mỗi buổi một nhiệm vụ).
 - **Đề xuất sắp xếp lại lịch** (chỉ hiện khi cần): khi có nhiệm vụ trễ quá 1 ngày và tổng phút (trễ + đến hạn 3 ngày tới) vượt quỹ 3 ngày tới, hệ thống đề xuất dời nhiệm vụ sang các ngày tới, không ngày nào vượt quỹ, tối đa 1 bài kiểm chứng/ngày, không cắt nhỏ bài kiểm chứng. Nếu 14 ngày qua bạn học dưới 60 % quỹ (không tính ngày nghỉ có kế hoạch), đề xuất kèm gợi ý thu hẹp phạm vi hoặc dời mốc thi. **Không có gì thay đổi cho tới khi bạn bấm** *Áp dụng lịch mới* hoặc *Giữ nguyên lịch*; đề xuất hết hạn sau 48 giờ và tối đa 1 đề xuất mỗi ngày.
 - **Kho đề Writing Task 2 (AI soạn theo khung đã duyệt)** (E-49, D-05 C3b): danh sách đề đã qua QC1–QC4.
@@ -135,7 +144,7 @@ Nhập Band mục tiêu tổng và từng kỹ năng, loại thi (Academic/Gener
 - **Listening** (E-54), dưới phần Reading: danh sách Part Listening AI soạn đã phát hành. Chọn *Tự luyện* (nghe lại được) hoặc *Mô phỏng thi* (chỉ một lần *Bắt đầu nghe*, không tua), rồi *Làm Part này*.
   - Trả lời rồi *Nộp bài*. App chấm ngay theo khóa đã được kiểm bằng giải mù, cho phép khác hoa/thường, dấu cách và dấu câu cuối. Mỗi lượt chấm một lần; muốn làm lại thì mở lượt mới (bài đã xem không còn "mới").
   - Sau khi nộp mới hiện đáp án, câu trích trong transcript và toàn bộ transcript. Kết quả là số câu đúng; chưa kết luận năng lực Listening và không báo Band.
-- Phía dưới cùng màn: **Reading** và **Luyện nói (audio mẫu)**.
+- Reading và thu âm tự nghe lại nằm trong tab *Reading* và *Speaking* của phần Luyện tập.
 
 ### 4.3. Workspace Writing (vòng học)
 1. Viết bài; nháp **tự lưu lên server** (hoặc bấm *Lưu nháp ngay*). Tải lại trang không mất bài.
@@ -169,14 +178,20 @@ Thu âm (WAV/WebM/OGG, tối đa 8 MiB), nghe lại, thu lại; mọi bản thu 
 - **Theo dõi 7 ngày**: trạng thái từng ngày (*Có ghi nhận học*, *Nghỉ có kế hoạch*, *Học ngoài ứng dụng / offline*, *Thiếu dữ liệu quan sát*, *Hôm nay: chưa có dữ liệu*), phút ghi nhận / quỹ (chia theo viết, đọc, nghe, nói), vòng học (bắt đầu / nộp / sửa / nhiệm vụ xong), nhận định (đạt / chưa đạt / chưa kết luận), độ lệch lộ trình (nhiệm vụ đã đến hạn), kèm thời điểm tính.
 - Thời gian học được ghi **tự động mỗi phút** khi màn Workspace/Reading/Luyện nói đang hiển thị hoặc audio đang phát; không cần gõ phím. Mất mạng thì trình duyệt giữ lại và gửi sau.
 - Ngày không có dữ liệu **không** bị coi là bỏ học; thiếu giờ **không** cộng dồn sang ngày sau và **không** làm giảm hồ sơ năng lực.
+- **Bố cục** (E-56): đầu màn là số năng lực đang theo dõi, số đã có bằng chứng và trạng thái báo Band. Tiếp theo là bảng 7 ngày, rồi **Hồ sơ năng lực** nhóm theo kỹ năng → tiêu chí.
+  - Mỗi năng lực là một dòng có nhãn mức hiện tại; bấm vào để mở chi tiết 4 phần.
+  - Năng lực thử nghiệm (synthetic) ẩn mặc định; tích *Hiện năng lực thử nghiệm* để xem.
+  - *Cách đọc hồ sơ này* (thu gọn) nêu giới hạn suy luận và chính sách đang áp dụng.
 - **Hồ sơ năng lực** theo 4 thành phần, chỉ từ dữ liệu thật trong DB; báo Band đang tắt. Dòng *Nhận định hiện tại* cho:
   - **Mức** A1–A6: *Chưa đủ dữ liệu* → *Cần hỗ trợ* → *Tự sửa được khi có gợi ý* (bản sửa đạt khi chỉ mở tới nấc 2; mở nấc 3 là đã xem lời giải, không tính) → *Vận dụng bước đầu trong nhiệm vụ ngắn* → *Vận dụng được trong bài tổng hợp* → *Duy trì ổn định* (2 lần đạt Bước 9 cách nhau ≥ 7 ngày).
   - **Độ tin cậy**: *Chưa xác lập* / *Thấp* / *Trung bình* (≥ 2 nguồn, ≥ 2 ngày, ≥ 2 họ bài) / *Cao* (≥ 3 nguồn, ≥ 2 họ bài, ≥ 2 điều kiện, 3 lần gần nhất đều đạt).
   - **Mức theo từng điều kiện làm bài** (phương thức × tự luyện/thi thử × giảm tải × loại ràng buộc): đạt ở tự luyện không suy ra đạt ở thi thử. Một lần chưa đạt độc lập chỉ đánh dấu *cần kiểm tra lại*; 2 lần liên tiếp ở 2 bài khác nhau cùng điều kiện mới hạ một mức. Không bao giờ hạ vì nghỉ học hay quá hạn.
   - Bấm *Lý do* để xem căn cứ từng kết luận. Mỗi kết luận được lưu lịch sử kèm phiên bản chính sách (bảng `competency_conclusions`).
-- **Yêu cầu xem xét lại** một nhận định: nhập lý do, bấm nút cạnh nhận định. Hệ thống tạo job tái đánh giá (worker `--complaints` xử lý), giữ nguyên bản cũ và lịch sử.
+- **Yêu cầu xem xét lại** một nhận định: nhập lý do ở ô đầu phần Hồ sơ năng lực, mở năng lực rồi bấm *Yêu cầu xem xét lại* cạnh nhận định. Hệ thống tạo job tái đánh giá (worker `--complaints` xử lý), giữ nguyên bản cũ và lịch sử.
 
 ## 5. Builder & QC
+
+Các tab theo thứ tự làm việc (E-56): **Nguồn** → **Khung năng lực & đề** → **Gói tri thức** → **Cần xử lý** (số mục đang mở hiện trên tab) → **Lần chạy & AI**. App nhớ tab bạn chọn trên máy này. Các phần dưới đây gọi "tab Khung năng lực" là tab *Khung năng lực & đề*.
 
 Dành cho việc tạo/kiểm định gói nội dung. Các tab:
 - **Tìm trong kho tri thức** (đầu tab Gói tri thức): gõ từ khóa (gõ không dấu cũng được), chọn **vai trò** để xem đúng những gì vai trò đó được phép thấy (ví dụ `blind_solver` không bao giờ thấy đáp án), bấm *Tìm*. Kết quả xếp theo BM25, chỉ hiện tham chiếu + tiêu đề, không hiện nội dung; muốn xem nội dung thì mở gói bên dưới (được ghi vào nhật ký tiếp xúc). Nội dung bị thu hồi hoặc gói đã loại bỏ biến mất khỏi kết quả ngay. *Dựng lại chỉ mục* tạo lại chỉ mục từ các file JSON (an toàn, không mất dữ liệu).
@@ -767,6 +782,7 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | E-53 | D-07: ổ đĩa sắp đầy (20/11/2026, người dùng chốt "Cảnh báo + dọn bản sao nguồn") |
 | E-54 | Listening: khung, Part do AI soạn, audio Piper, QC4 giải mù trên transcript, màn làm bài (23/11/2026, người dùng "Làm tiếp"; theo N1/N5/N6/N8 và E-44; |
 | E-55 | C6: đối chiếu định tính với bài mẫu chính thức có điểm (23/11/2026, người dùng chốt "Nhập mẫu, đo định tính") |
+| E-56 | Tối ưu giao diện (23/11/2026, người dùng chọn cả 4 phần: Học hôm nay, Tiến độ, giao diện chung, Builder & QC; quyết định triển khai, đảo ngược được) |
 <!-- AUTO:decisions:END -->
 
 ### Trạng thái công việc

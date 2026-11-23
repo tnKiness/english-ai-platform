@@ -1,7 +1,7 @@
 // Giao diện học tập P3 (06 §2.1–2.5): Mục tiêu ban đầu, Học hôm nay, Workspace làm bài (3 chế độ + autosave thật +
 // gợi mở từng nấc + bổ sung kiến thức + 7A sạch), Tiến độ & Hồ sơ năng lực (4 thành phần, không bịa số, nhãn synthetic,
 // D-02 "chưa đủ kết luận") và Cài đặt.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { DayPanel, TrackingPanel, useStudyHeartbeat } from './tracking.js';
 import { get, post, requestId } from './api.js';
 
@@ -243,7 +243,7 @@ export function GoalForm({ initial, onSaved }: { initial: LearnerGoal | null; on
   };
 
   return <article className="card">
-    <h3>Mục tiêu ban đầu &amp; Quỹ thời gian (01 Bước 1, 06 §2.1)</h3>
+    <h3>Mục tiêu và quỹ thời gian</h3>
     <p>Thiết lập mục tiêu để bộ điều phối lọc nhiệm vụ phù hợp quỹ thời gian mỗi phiên. Không tạo bài thi xếp lớp giả lập khi chưa có gói đầu vào đã kiểm định.</p>
     {error && <p role="alert" className="error">{error}</p>}
     <div className="actions">
@@ -262,7 +262,7 @@ export function GoalForm({ initial, onSaved }: { initial: LearnerGoal | null; on
       <label>Phút/tuần: <input type="number" min="15" max="3360" value={weekly} onChange={(e) => setWeekly(Number(e.target.value))} /></label>
       <label>Ngày thi dự kiến: <input type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} /></label>
     </div>
-    <button disabled={saving} onClick={submit}>{saving ? 'Đang lưu…' : 'Lưu mục tiêu học tập'}</button>
+    <button className="primary" disabled={saving} onClick={submit}>{saving ? 'Đang lưu…' : 'Lưu mục tiêu học tập'}</button>
   </article>;
 }
 
@@ -578,18 +578,19 @@ function ReplanPanel({ onChanged }: { onChanged: () => void }) {
   </article>;
 }
 
-interface WritingBank { ai_mode: string; available: boolean; note: string; items: { item_id: string; item_version: string; title: string; genre: string; estimated_minutes: number; min_words: number; competencies: number; seen: boolean }[] }
+interface BankItem { item_id: string; item_version: string; skill: 'writing' | 'speaking_text'; title: string; origin: string; genre: string; estimated_minutes: number; min_words: number; competencies: number; seen: boolean }
+interface WritingBank { ai_mode: string; available: boolean; note: string; items: BankItem[] }
 
 /** E-53 (D-07): warn when the data disk runs low; nothing is deleted automatically. */
 function DiskBanner() {
   const [d, setD] = useState<{ level: string; message: string | null } | null>(null);
   useEffect(() => { get<{ level: string; message: string | null }>('/api/learning/disk').then(setD).catch(() => setD(null)); }, []);
   if (!d?.message) return null;
-  return <p role="alert" className={d.level === 'block' ? 'error' : 'FAIL'}>{d.message}</p>;
+  return <p role="alert" className={d.level === 'block' ? 'notice error' : 'notice'}>{d.message}</p>;
 }
 
 interface OwnItem { item_id: string; created_at: string; genre: string; topic: string; exposure: string; state: 'awaiting_review' | 'released' | 'qc_failed' | 'withdrawn'; review_findings: { check: string; severity: string; issue: string }[] }
-const OWN_STATE: Record<OwnItem['state'], string> = { awaiting_review: 'Chờ AI rà soát (worker --learning)', released: 'Đã vào kho đề', qc_failed: 'Không đạt kiểm tra', withdrawn: 'Đã ngừng' };
+const OWN_STATE: Record<OwnItem['state'], [string, string]> = { awaiting_review: ['Chờ AI kiểm tra', 'warn'], released: ['Đã vào kho đề', 'ok'], qc_failed: ['Không đạt kiểm tra', 'bad'], withdrawn: ['Đã ngừng', 'bad'] };
 
 /** E-51 (D-05 C4, N7): import a Writing Task 2 prompt you own; it joins the bank after QC as practice-only. */
 function OwnItemsPanel({ onError, onChanged }: { onError: (e: unknown) => void; onChanged: () => void }) {
@@ -598,69 +599,75 @@ function OwnItemsPanel({ onError, onChanged }: { onError: (e: unknown) => void; 
   const load = useCallback(() => { get<{ items: OwnItem[] }>('/api/learning/own-items').then((d) => setItems(d.items)).catch(onError); }, [onError]);
   useEffect(load, [load]);
   const set = (k: keyof typeof form, v: string | boolean) => setForm({ ...form, [k]: v });
-  return <article className="card">
-    <details>
-      <summary><b>Thêm đề Writing Task 2 của bạn</b> ({items.length} đề đã nhập)</summary>
-      <p>Đề bạn sở hữu (sách, lớp học…) chỉ lưu trên máy này để luyện tập; không vào Git hay bản xuất công khai. Đề đã nhập là đề bạn đã thấy, nên chỉ dùng để luyện, không dùng làm bài kiểm chứng. Một lượt AI (cần đồng ý loại dữ liệu <code>learner_owned_content</code>) kiểm tra độ rõ và đúng dạng trước khi đề vào kho.</p>
-      <textarea rows={5} style={{ width: '100%' }} placeholder="Dán nguyên văn đề Task 2…" value={form.prompt} onChange={(e) => set('prompt', e.target.value)} />
-      <div className="actions">
-        <label>Dạng: <select value={form.genre} onChange={(e) => set('genre', e.target.value)}>
-          <option value="opinion">Ý kiến (agree/disagree)</option><option value="discussion">Thảo luận hai quan điểm</option>
-          <option value="advantages_disadvantages">Lợi / hại</option><option value="problem_solution">Vấn đề / giải pháp</option><option value="two_part">Hai câu hỏi</option>
-        </select></label>
-        <label>Module: <select value={form.test_type} onChange={(e) => set('test_type', e.target.value)}><option value="both">Cả hai</option><option value="academic">Academic</option><option value="general_training">General Training</option></select></label>
-        <label>Đã tiếp xúc: <select value={form.exposure} onChange={(e) => set('exposure', e.target.value)}>
-          <option value="never_done">Chưa từng làm</option><option value="done">Đã làm</option><option value="seen_sample">Đã xem bài mẫu / đáp án</option>
-        </select></label>
-      </div>
-      <div className="actions">
-        <input placeholder="Chủ đề ngắn (tùy chọn)" value={form.topic} onChange={(e) => set('topic', e.target.value)} />
-        <input style={{ flex: 1 }} placeholder="Nguồn (ví dụ: sách X, trang Y — tùy chọn)" value={form.source_note} onChange={(e) => set('source_note', e.target.value)} />
-      </div>
-      <label><input type="checkbox" checked={form.rights_confirmed} onChange={(e) => set('rights_confirmed', e.target.checked)} /> Tôi sở hữu tài liệu này và chỉ dùng cá nhân.</label>
-      <div className="actions"><button disabled={!form.prompt.trim() || !form.rights_confirmed} onClick={() => {
-        post<OwnItem>('/api/learning/own-items', { request_key: requestId(), task: 'writing_task2', ...form })
-          .then(() => { setForm({ ...form, prompt: '', topic: '', source_note: '' }); load(); onChanged(); }).catch(onError);
-      }}>Nhập đề</button></div>
-      {items.length > 0 && <ul>{items.map((i) => <li key={i.item_id}>
-        <b>{i.topic}</b> · {i.genre} · {OWN_STATE[i.state]}{i.review_findings.length ? ` — ${i.review_findings.map((f) => `${f.severity === 'error' ? 'Lỗi' : 'Lưu ý'}: ${f.issue}`).join('; ')}` : ''}
-      </li>)}</ul>}
-    </details>
-  </article>;
+  return <details className="card">
+    <summary><b>Thêm đề Writing Task 2 của bạn</b> <span className="muted">({items.length} đề đã nhập)</span></summary>
+    <p className="muted">Đề từ sách, lớp học… chỉ lưu trên máy này để luyện tập. Đề bạn nhập là đề bạn đã thấy, nên không dùng làm bài kiểm chứng. AI kiểm tra đề rõ ràng và đúng dạng trước khi đề vào kho.</p>
+    <textarea rows={5} style={{ width: '100%' }} placeholder="Dán nguyên văn đề Task 2…" value={form.prompt} onChange={(e) => set('prompt', e.target.value)} />
+    <div className="actions">
+      <label>Dạng <select value={form.genre} onChange={(e) => set('genre', e.target.value)}>
+        <option value="opinion">Ý kiến (agree/disagree)</option><option value="discussion">Thảo luận hai quan điểm</option>
+        <option value="advantages_disadvantages">Lợi / hại</option><option value="problem_solution">Vấn đề / giải pháp</option><option value="two_part">Hai câu hỏi</option>
+      </select></label>
+      <label>Module <select value={form.test_type} onChange={(e) => set('test_type', e.target.value)}><option value="both">Cả hai</option><option value="academic">Academic</option><option value="general_training">General Training</option></select></label>
+      <label>Đã tiếp xúc <select value={form.exposure} onChange={(e) => set('exposure', e.target.value)}>
+        <option value="never_done">Chưa từng làm</option><option value="done">Đã làm</option><option value="seen_sample">Đã xem bài mẫu / đáp án</option>
+      </select></label>
+    </div>
+    <div className="actions">
+      <input placeholder="Chủ đề ngắn (tùy chọn)" value={form.topic} onChange={(e) => set('topic', e.target.value)} />
+      <input style={{ flex: 1, minWidth: 200 }} placeholder="Nguồn, ví dụ: sách X, trang Y (tùy chọn)" value={form.source_note} onChange={(e) => set('source_note', e.target.value)} />
+    </div>
+    <label><input type="checkbox" checked={form.rights_confirmed} onChange={(e) => set('rights_confirmed', e.target.checked)} /> Tôi sở hữu tài liệu này và chỉ dùng cá nhân.</label>
+    <div className="actions"><button className="primary" disabled={!form.prompt.trim() || !form.rights_confirmed} onClick={() => {
+      post<OwnItem>('/api/learning/own-items', { request_key: requestId(), task: 'writing_task2', ...form })
+        .then(() => { setForm({ ...form, prompt: '', topic: '', source_note: '' }); load(); onChanged(); }).catch(onError);
+    }}>Nhập đề</button></div>
+    {items.length > 0 && <ul className="item-list">{items.map((i) => <li key={i.item_id}>
+      <span><b>{i.topic}</b> <span className="meta">· {i.genre}</span>{i.review_findings.length > 0 && <span className="meta"><br />{i.review_findings.map((f) => `${f.severity === 'error' ? 'Lỗi' : 'Lưu ý'}: ${f.issue}`).join('; ')}</span>}</span>
+      <span className={`chip ${OWN_STATE[i.state][1]}`}>{OWN_STATE[i.state][0]}</span>
+    </li>)}</ul>}
+  </details>;
 }
 
-/** E-49 (D-05 C3b): practice on released AI-authored Writing Task 2 prompts. The prompt appears only after starting. */
-function WritingBankPanel({ onOpenAttempt, onError }: { onOpenAttempt: (attemptId: string) => void; onError: (e: unknown) => void }) {
+/** E-49/E-52: released AI-authored (and own) prompts of one skill. The prompt text appears only after starting. */
+function BankPanel({ skill, onOpenAttempt, onError }: { skill: BankItem['skill']; onOpenAttempt: (attemptId: string) => void; onError: (e: unknown) => void }) {
   const [bank, setBank] = useState<WritingBank | null>(null);
   const [mode, setMode] = useState<Mode>('self_practice');
   useEffect(() => { get<WritingBank>('/api/learning/writing-bank').then(setBank).catch(onError); }, [onError]);
-  if (!bank || bank.items.length === 0) return null;
-  return <article className="card">
-    <h3>Kho đề Writing Task 2 (AI soạn theo khung đã duyệt)</h3>
-    <p>{bank.note}</p>
-    {bank.available && <label>Chế độ:{' '}
-      <select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-        <option value="self_practice">Tự luyện (Self-practice)</option>
-        <option value="exam">Mô phỏng thi (Exam)</option>
-      </select>
-    </label>}
-    <ul>
-      {bank.items.map((i) => <li key={i.item_id}>
-        <b>{i.title}</b> — {i.genre} · {i.estimated_minutes} phút · tối thiểu {i.min_words} từ · {i.competencies} năng lực được chấm{i.seen ? ' · đã xem' : ''}{' '}
-        {bank.available && <button onClick={() => {
+  if (!bank) return <p className="muted">Đang tải kho đề…</p>;
+  const items = bank.items.filter((i) => i.skill === skill);
+  return <div>
+    <div className="actions" style={{ justifyContent: 'space-between' }}>
+      <h3 style={{ margin: 0 }}>{skill === 'writing' ? 'Kho đề Writing Task 2' : 'Kho đề Speaking (trả lời bằng văn bản)'}</h3>
+      {bank.available && items.length > 0 && <label className="muted">Chế độ <select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+        <option value="self_practice">Tự luyện</option><option value="exam">Mô phỏng thi</option>
+      </select></label>}
+    </div>
+    {!bank.available && <p className="notice">Cần bật chế độ chấm thật để làm đề: chạy app với <code>STUDY_ENGLISH_LEARNING_AI=real</code> và <code>npm.cmd run worker -- --learning</code>.</p>}
+    {skill === 'speaking_text' && <p className="muted">Bạn trả lời bằng văn bản như khi nói; app chấm ý tưởng, mạch lạc, từ vựng, ngữ pháp, không chấm phát âm.</p>}
+    {items.length === 0 ? <p className="muted">Chưa có đề nào được phát hành cho kỹ năng này.</p> : <ul className="item-list">
+      {items.map((i) => <li key={i.item_id}>
+        <span><b>{i.title}</b>{i.seen && <span className="chip">đã xem</span>}<br /><span className="meta">{i.genre} · {i.estimated_minutes} phút · tối thiểu {i.min_words} từ</span></span>
+        {bank.available && <button className="primary" onClick={() => {
           post<WorkspaceData>('/api/learning/attempts', { request_key: requestId(), item_id: i.item_id, item_version: i.item_version, mode, purpose: 'practice' })
             .then((w) => onOpenAttempt(w.attempt.attempt_id)).catch(onError);
-        }}>Làm đề này</button>}
+        }}>Làm đề</button>}
       </li>)}
-    </ul>
-  </article>;
+    </ul>}
+  </div>;
 }
 
-export function TodayScreen({ onOpenAttempt }: { onOpenAttempt: (attemptId: string) => void }) {
+type SkillTab = 'writing' | 'speaking' | 'reading' | 'listening';
+const SKILL_TABS: [SkillTab, string][] = [['writing', 'Writing'], ['speaking', 'Speaking'], ['reading', 'Reading'], ['listening', 'Listening']];
+const readTab = (): SkillTab => { try { const v = localStorage.getItem('today.skill'); return SKILL_TABS.some(([k]) => k === v) ? v as SkillTab : 'writing'; } catch { return 'writing'; } };
+
+export function TodayScreen({ onOpenAttempt, extras }: { onOpenAttempt: (attemptId: string) => void; extras: Record<'reading' | 'listening' | 'audio', ReactNode> }) {
   const [data, setData] = useState<TodayData | null>(null);
   const [minutesInput, setMinutesInput] = useState<string>('');
   const [selectedMode, setSelectedMode] = useState<Mode>('guided');
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTabState] = useState<SkillTab>(readTab);
+  const setTab = (t: SkillTab) => { setTabState(t); try { localStorage.setItem('today.skill', t); } catch { /* per-viewer convenience only */ } };
 
   const load = useCallback((mins?: number) => {
     setError(null);
@@ -675,101 +682,118 @@ export function TodayScreen({ onOpenAttempt }: { onOpenAttempt: (attemptId: stri
   const onBankError = useCallback((e: unknown) => setError(e instanceof Error ? e.message : String(e)), []);
   const [bankKey, setBankKey] = useState(0);
 
-  if (error) return <section><p role="alert" className="error">{error}</p></section>;
-  if (!data) return <section><p>Đang tải nhiệm vụ Học hôm nay…</p></section>;
+  if (!data) return <section>{error ? <p role="alert" className="error">{error}</p> : <p className="muted">Đang tải…</p>}</section>;
 
-  return <section>
-    <h2>Học hôm nay (06 §2.2)</h2>
-    <p className="mono">{data.speaking_mode_note}</p>
+  const start = (t: TodayData['recommended_tasks'][number]) => {
+    const modeToUse = t.purpose === '7A' || t.purpose === '7B' || t.purpose === '9' ? t.mode : selectedMode;
+    post<WorkspaceData>('/api/learning/attempts', { request_key: requestId(), item_id: t.item_id, item_version: t.item_version, rubric_id: t.rubric_id, rubric_version: t.rubric_version,
+      mode: modeToUse, purpose: t.purpose, task_id: t.task_id, competency_id: t.competency_id }).then((w) => onOpenAttempt(w.attempt.attempt_id)).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  };
 
-    {!data.goal && <GoalForm initial={null} onSaved={() => load()} />}
-
-    {/* Remount when the goal appears so budget and reminder are read again. */}
-    <DayPanel key={data.goal ? 'with-goal' : 'no-goal'} />
-
-    <article className="card">
-      <h3>Quỹ thời gian phiên này</h3>
-      <div className="actions">
-        <label>Số phút hiện có:{' '}
-          <input type="number" min="5" max="480" value={minutesInput} onChange={(e) => setMinutesInput(e.target.value)} />
-        </label>
-        <button onClick={() => load(Number(minutesInput))}>Cập nhật danh sách nhiệm vụ</button>
-        <label>Chế độ làm bài khi mở bài học mới:{' '}
-          <select value={selectedMode} onChange={(e) => setSelectedMode(e.target.value as Mode)}>
-            <option value="guided">Có hướng dẫn (Guided)</option>
-            <option value="self_practice">Tự luyện (Self-practice)</option>
-            <option value="exam">Mô phỏng thi (Exam)</option>
-          </select>
-        </label>
-      </div>
-    </article>
-
-    <ReplanPanel onChanged={() => load()} />
-
+  return <>
     <DiskBanner />
-    <WritingBankPanel key={bankKey} onOpenAttempt={onOpenAttempt} onError={onBankError} />
-    <OwnItemsPanel onError={onBankError} onChanged={() => setBankKey((k) => k + 1)} />
+    {error && <p role="alert" className="notice error">{error}</p>}
+    {!data.goal && <section className="card highlight"><GoalForm initial={null} onSaved={() => load()} /></section>}
 
-    {data.in_progress.length > 0 && (
-      <article className="card">
-        <h3>Bài đang làm dở (tiếp tục ngay đúng trạng thái đã lưu)</h3>
-        <ul>
-          {data.in_progress.map((a) => (
-            <li key={a.attempt_id}>
-              <b>{a.title}</b> — {MODE_LABELS[a.mode]} · {PURPOSE_LABELS[a.purpose]} · Trạng thái: <code>{a.state}</code>{' '}
-              <button onClick={() => onOpenAttempt(a.attempt_id)}>Tiếp tục làm bài</button>
-            </li>
-          ))}
-        </ul>
-      </article>
-    )}
+    <section>
+      <h2>Hôm nay</h2>
+      {data.in_progress.length > 0 && <>
+        <h3>Đang làm dở</h3>
+        <ul className="item-list">{data.in_progress.map((a) => <li key={a.attempt_id}>
+          <span><b>{a.title}</b><br /><span className="meta">{MODE_LABELS[a.mode]} · {PURPOSE_LABELS[a.purpose]}</span></span>
+          <button className="primary" onClick={() => onOpenAttempt(a.attempt_id)}>Tiếp tục</button>
+        </li>)}</ul>
+      </>}
+      <div className="actions" style={{ justifyContent: 'space-between' }}>
+        <h3 style={{ margin: 0 }}>Nhiệm vụ ưu tiên</h3>
+        <label className="muted">Chế độ cho bài học mới <select value={selectedMode} onChange={(e) => setSelectedMode(e.target.value as Mode)}>
+          <option value="guided">Có hướng dẫn</option><option value="self_practice">Tự luyện</option><option value="exam">Mô phỏng thi</option>
+        </select></label>
+      </div>
+      {data.recommended_tasks.length === 0 ? <p className="muted">Không có nhiệm vụ nào vừa quỹ thời gian hiện tại hoặc đang chờ kiểm chứng. Bạn có thể luyện tự do ở phần dưới.</p>
+        : <ul className="item-list">{data.recommended_tasks.map((t) => <li key={t.task_id}>
+          <span><b>{t.title}</b>{t.synthetic && <span className="chip">synthetic</span>}<br />
+            <span className="meta">{PURPOSE_LABELS[t.purpose]} · {MODE_LABELS[t.mode]} · {t.estimated_minutes} phút — {t.reason}</span>
+            {t.priority && <details><summary className="meta">Vì sao ưu tiên (điểm {t.priority.score})</summary><span className="meta">{Object.entries(t.priority.parts).map(([k, v]) => `${PRIORITY_LABELS[k] ?? k} ${v}`).join(' + ')}{t.priority.starving ? ' · giữ chỗ chống trì hoãn' : ''}</span></details>}</span>
+          <button className="primary" onClick={() => start(t)}>Bắt đầu</button>
+        </li>)}</ul>}
+      {data.upcoming_scheduled.length > 0 && <details>
+        <summary>Lịch kiểm chứng và ôn tập sắp tới ({data.upcoming_scheduled.length})</summary>
+        <ul className="item-list">{data.upcoming_scheduled.map((u) => <li key={u.task_id}>
+          <span><b>{u.title}</b>{u.synthetic && <span className="chip">synthetic</span>}<br /><span className="meta">{PURPOSE_LABELS[u.purpose]} · {u.estimated_minutes} phút</span></span>
+          <span className="chip info">đến hạn {new Date(u.due_at).toLocaleDateString('vi-VN')}</span>
+        </li>)}</ul>
+      </details>}
+      <ReplanPanel onChanged={() => load()} />
+    </section>
 
-    <article className="card">
-      <h3>Nhiệm vụ ưu tiên hôm nay (tối đa 3 nhiệm vụ đủ điều kiện)</h3>
-      {data.recommended_tasks.length === 0 ? (
-        <p>Không có nhiệm vụ nào vừa quỹ thời gian hiện tại hoặc đang chờ kiểm chứng.</p>
-      ) : (
-        data.recommended_tasks.map((t) => (
-          <div key={t.task_id} className="card">
-            <h4>{t.title} {t.synthetic && <span className="tag">synthetic</span>}</h4>
-            <p>{t.reason}</p>
-            <p className="mono">Mục đích: {PURPOSE_LABELS[t.purpose]} · Chế độ: {MODE_LABELS[t.mode]} · Ước tính: {t.estimated_minutes} phút</p>
-            {t.priority && <p className="mono">Điểm ưu tiên (D-02): {t.priority.score} = {Object.entries(t.priority.parts).map(([k, v]) => `${PRIORITY_LABELS[k] ?? k} ${v}`).join(' + ')}{t.priority.starving ? ' · giữ chỗ chống trì hoãn' : ''}</p>}
-            <button onClick={() => {
-              const modeToUse = t.purpose === '7A' || t.purpose === '7B' || t.purpose === '9' ? t.mode : selectedMode;
-              post<WorkspaceData>('/api/learning/attempts', {
-                request_key: requestId(),
-                item_id: t.item_id,
-                item_version: t.item_version,
-                rubric_id: t.rubric_id,
-                rubric_version: t.rubric_version,
-                mode: modeToUse,
-                purpose: t.purpose,
-                task_id: t.task_id,
-                competency_id: t.competency_id,
-              }).then((w) => onOpenAttempt(w.attempt.attempt_id)).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
-            }}>
-              Bắt đầu nhiệm vụ này
-            </button>
+    <section>
+      <h2>Luyện tập</h2>
+      <nav className="subtabs" role="tablist">{SKILL_TABS.map(([k, label]) =>
+        <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>{label}</button>)}</nav>
+      {tab === 'writing' && <><BankPanel key={`w${bankKey}`} skill="writing" onOpenAttempt={onOpenAttempt} onError={onBankError} /><OwnItemsPanel onError={onBankError} onChanged={() => setBankKey((k) => k + 1)} /></>}
+      {tab === 'speaking' && <><BankPanel skill="speaking_text" onOpenAttempt={onOpenAttempt} onError={onBankError} />
+        <details className="card"><summary><b>Thu âm để tự nghe lại</b> <span className="muted">(không chấm phát âm)</span></summary>{extras.audio}</details></>}
+      {tab === 'reading' && <div className="embedded">{extras.reading}</div>}
+      {tab === 'listening' && <div className="embedded">{extras.listening}</div>}
+    </section>
+
+    <section>
+      <details>
+        <summary><b>Ngày học, quỹ thời gian và mục tiêu</b></summary>
+        {/* Remount when the goal appears so budget and reminder are read again. */}
+        <DayPanel key={data.goal ? 'with-goal' : 'no-goal'} />
+        <div className="card">
+          <h3>Quỹ thời gian phiên này</h3>
+          <div className="actions">
+            <label>Số phút hiện có <input type="number" min="5" max="480" value={minutesInput} onChange={(e) => setMinutesInput(e.target.value)} style={{ width: 90 }} /></label>
+            <button onClick={() => load(Number(minutesInput))}>Lọc lại nhiệm vụ</button>
           </div>
-        ))
-      )}
-    </article>
+        </div>
+        {data.goal && <p className="muted">Sửa mục tiêu ở Cài đặt &amp; Mục tiêu.</p>}
+      </details>
+    </section>
+  </>;
+}
 
-    {data.upcoming_scheduled.length > 0 && (
-      <article className="card">
-        <h3>Lịch kiểm chứng / ôn tập giãn cách sắp tới (Bước 7B &amp; Bước 9)</h3>
-        <ul>
-          {data.upcoming_scheduled.map((u) => (
-            <li key={u.task_id}>
-              <b>{u.title}</b> — {PURPOSE_LABELS[u.purpose]} · Đến hạn: <span className="mono">{u.due_at}</span> ({u.estimated_minutes} phút)
-              {u.synthetic && <span className="tag">synthetic</span>}
-            </li>
-          ))}
-        </ul>
-      </article>
-    )}
-  </section>;
+type Competency = ProgressData['competencies'][number];
+const CRITERION_LABEL: Record<string, string> = {
+  tr: 'Task Response', cc: 'Coherence & Cohesion', lr: 'Lexical Resource', gra: 'Grammatical Range & Accuracy', fc: 'Fluency & Coherence',
+};
+const SKILL_LABEL: Record<string, string> = { writing: 'Writing Task 2', speaking_text: 'Speaking (dạng văn bản)' };
+/** Group key of a competency: framework id prefix and criterion code (wt2.tr.x → writing / Task Response). */
+const criterionOf = (id: string) => CRITERION_LABEL[id.split('.')[1] ?? ''] ?? 'Khác';
+/** Chip tone from the D-02 level code (A1 insufficient … A6 stable); the label is the policy's own wording. */
+const LEVEL_TONE: Record<string, string> = { A1: '', A2: 'bad', A3: 'warn', A4: 'info', A5: 'ok', A6: 'ok' };
+const stateChip = (c: Competency): [string, string] => {
+  if (!c.decision) return [c.evidence_summary.observation_count > 0 ? c.current_state_label : 'Chưa có dữ liệu', ''];
+  return [c.decision.label, LEVEL_TONE[c.decision.level] ?? ''];
+};
+
+function CompetencyDetail({ c, reason, onReview }: { c: Competency; reason: string; onReview: (observationId: string) => void }) {
+  return <div className="table-wrap">
+    <p className="muted">{c.description}</p>
+    <table><tbody>
+      <tr><th>Nhận định hiện tại</th><td>
+        {c.current_state_label}{c.conclusion.reason ? ` — ${c.conclusion.reason}` : ''}
+        {c.decision && c.decision.by_condition.length > 0 && <ul>{c.decision.by_condition.map((k) => <li key={k.key}><span className="mono">{k.key}</span>: {k.level} · đạt {k.independent_met} / chưa đạt {k.independent_not_met}{k.needs_recheck ? ' · cần kiểm tra lại' : ''}</li>)}</ul>}
+        {c.decision && c.decision.rationale.length > 0 && <details><summary className="muted">Lý do</summary><ul>{c.decision.rationale.map((r) => <li key={r}>{r}</li>)}</ul></details>}
+      </td></tr>
+      <tr><th>Bằng chứng</th><td>
+        {c.evidence_summary.observation_count} nhận định · độc lập đạt {c.evidence_summary.independent_sources_met} · độc lập chưa đạt {c.evidence_summary.independent_sources_not_met} · đã loại (thu hồi/thay thế) {c.excluded_observations_count}
+        {c.observations.length > 0 && <ul>{c.observations.map((o) => <li key={o.observation_id}>{o.outcome}{' '}
+          <button className="link" disabled={!reason.trim()} title={reason.trim() ? '' : 'Nhập lý do ở đầu trang trước'} onClick={() => onReview(o.observation_id)}>Yêu cầu xem xét lại</button></li>)}</ul>}
+      </td></tr>
+      <tr><th>Giả thuyết lỗi</th><td>
+        {c.error_hypotheses.length === 0 ? <span className="muted">Chưa có.</span> : <ul>{c.error_hypotheses.map((h) => <li key={h.hypothesis_id}>
+          <b>[{h.status}]</b> {h.symptom} → {h.hypothesis} <span className="muted">({h.verification_note})</span>{h.synthetic && <span className="chip">synthetic</span>}</li>)}</ul>}
+      </td></tr>
+      <tr><th>Lịch kiểm chứng</th><td>
+        {c.verification_schedule.tasks.length === 0 ? <span className="muted">Chưa có.</span> : <ul>{c.verification_schedule.tasks.map((t) => <li key={t.task_id}>
+          {PURPOSE_LABELS[t.purpose]} · {t.state} · hạn {new Date(t.due_at).toLocaleDateString('vi-VN')}{t.synthetic && <span className="chip">synthetic</span>}</li>)}</ul>}
+      </td></tr>
+    </tbody></table>
+  </div>;
 }
 
 export function ProgressScreen() {
@@ -777,6 +801,7 @@ export function ProgressScreen() {
   const [error, setError] = useState<string | null>(null);
   const [complaintStatus, setComplaintStatus] = useState('');
   const [reason, setReason] = useState('');
+  const [showSynthetic, setShowSynthetic] = useState(false);
   const requestReview = async (observationId: string) => {
     try {
       await post('/api/learning/complaints', { request_key: crypto.randomUUID(), observation_id: observationId, reason });
@@ -789,83 +814,62 @@ export function ProgressScreen() {
   }, []);
 
   if (error) return <section><p role="alert" className="error">{error}</p></section>;
-  if (!data) return <section><p>Đang tải Tiến độ &amp; Hồ sơ năng lực…</p></section>;
+  if (!data) return <section><p className="muted">Đang tải…</p></section>;
 
-  return <section>
-    <h2>Tiến độ &amp; Hồ sơ năng lực (02 §2, 06 §2.4)</h2>
-    <TrackingPanel />
-    <article className="card">
-      <p><b>Giới hạn suy luận (D-02):</b> {data.disclaimer}</p>
-      <p className="mono">Trạng thái chính sách: {data.policy_status}{data.policy ? ` · ${data.policy.id} ${data.policy.version} (duyệt ${data.policy.approved_at}, chưa kiểm định thực nghiệm)` : ''} · Báo điểm Band: {data.band_reporting_enabled ? 'Bật' : 'Tắt (chưa có bộ đối chứng D-05)'}</p>
-    </article>
+  const shown = data.competencies.filter((c) => showSynthetic || !c.all_synthetic);
+  const skills = [...new Set(shown.map((c) => c.skill))];
+  const withEvidence = shown.filter((c) => c.evidence_summary.observation_count > 0).length;
 
-      <label>Lý do yêu cầu xem xét lại <input value={reason} maxLength={2000} onChange={(e) => setReason(e.target.value)} /></label>
-      <p role="status">{complaintStatus}</p>
-      {data.competencies.map((c) => (
-      <article key={c.competency_id} className="card">
-          <h3>{c.title} {c.all_synthetic && <span className="tag">synthetic</span>}</h3>
-          <ul>{c.observations.map((o) => <li key={o.observation_id}>{o.outcome} <button disabled={!reason.trim()} onClick={() => void requestReview(o.observation_id)}>Yêu cầu xem xét lại</button></li>)}</ul>
-        <p>{c.description}</p>
-        <table>
-          <tbody>
-            <tr>
-              <th>1. Nhận định hiện tại</th>
-              <td>
-                {c.current_state_label} (<code>{c.decision ? c.decision.level : c.conclusion.status}</code>{c.conclusion.reason ? ` — ${c.conclusion.reason}` : ''})
-                {c.decision && c.decision.by_condition.length > 0 && (
-                  <ul>{c.decision.by_condition.map((k) => <li key={k.key}><span className="mono">{k.key}</span>: {k.level} · đạt {k.independent_met} / chưa đạt {k.independent_not_met}{k.needs_recheck ? ' · cần kiểm tra lại' : ''}</li>)}</ul>
-                )}
-                {c.decision && c.decision.rationale.length > 0 && <details><summary>Lý do</summary><ul>{c.decision.rationale.map((r) => <li key={r}>{r}</li>)}</ul></details>}
-              </td>
-            </tr>
-            <tr>
-              <th>2. Bằng chứng tính đến nay</th>
-              <td>
-                Tổng số quan sát (observations): <b>{c.evidence_summary.observation_count}</b> ·
-                Nguồn độc lập đạt (independent met): <b>{c.evidence_summary.independent_sources_met}</b> ·
-                Nguồn độc lập chưa đạt: <b>{c.evidence_summary.independent_sources_not_met}</b> ·
-                Đã loại trừ (thu hồi/thay thế): <b>{c.excluded_observations_count}</b>
-                {Object.keys(c.evidence_summary.sources_by_use).length > 0 && (
-                  <div className="mono">Phân loại theo mức hỗ trợ: {JSON.stringify(c.evidence_summary.sources_by_use)}</div>
-                )}
-              </td>
-            </tr>
-            <tr>
-              <th>3. Giả thuyết lỗi đang theo dõi</th>
-              <td>
-                {c.error_hypotheses.length === 0 ? 'Chưa có giả thuyết lỗi nào được ghi nhận.' : (
-                  <ul>
-                    {c.error_hypotheses.map((h) => (
-                      <li key={h.hypothesis_id}>
-                        <b>[{h.status}]</b> Biểu hiện: {h.symptom} → Giả thuyết: {h.hypothesis} (<i>{h.verification_note}</i>)
-                        {h.synthetic && <span className="tag">synthetic</span>}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </td>
-            </tr>
-            <tr>
-              <th>4. Lịch kiểm chứng tiếp theo</th>
-              <td>
-                Trạng thái: <code>{c.verification_schedule.status}</code>
-                {c.verification_schedule.tasks.length > 0 && (
-                  <ul>
-                    {c.verification_schedule.tasks.map((t) => (
-                      <li key={t.task_id}>
-                        {PURPOSE_LABELS[t.purpose]} — trạng thái <code>{t.state}</code> — hạn <span className="mono">{t.due_at}</span>
-                        {t.synthetic && <span className="tag">synthetic</span>}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </article>
-    ))}
-  </section>;
+  return <>
+    <section>
+      <h2>Tiến độ</h2>
+      <div className="actions">
+        <div className="stat"><span className="muted">Năng lực đang theo dõi</span><b>{shown.length}</b></div>
+        <div className="stat"><span className="muted">Đã có bằng chứng</span><b>{withEvidence}</b></div>
+        <div className="stat"><span className="muted">Báo điểm Band</span><b>{data.band_reporting_enabled ? 'Bật' : 'Tắt'}</b></div>
+      </div>
+      <details><summary className="muted">Cách đọc hồ sơ này (giới hạn suy luận)</summary>
+        <p className="muted">{data.disclaimer}</p>
+        <p className="muted">Chính sách: {data.policy_status}{data.policy ? ` · ${data.policy.id} ${data.policy.version} (duyệt ${data.policy.approved_at}, chưa kiểm định thực nghiệm)` : ''}.</p>
+      </details>
+    </section>
+
+    <section>
+      <h2>7 ngày gần đây</h2>
+      <TrackingPanel />
+    </section>
+
+    <section>
+      <div className="actions" style={{ justifyContent: 'space-between' }}>
+        <h2 style={{ margin: 0 }}>Hồ sơ năng lực</h2>
+        <label className="muted"><input type="checkbox" checked={showSynthetic} onChange={(e) => setShowSynthetic(e.target.checked)} /> Hiện năng lực thử nghiệm (synthetic)</label>
+      </div>
+      <div className="actions">
+        <label className="muted">Lý do khi yêu cầu xem xét lại một nhận định <input value={reason} maxLength={2000} onChange={(e) => setReason(e.target.value)} style={{ minWidth: 260 }} /></label>
+        <span role="status" className="muted">{complaintStatus}</span>
+      </div>
+      {skills.map((skill) => {
+        const ofSkill = shown.filter((c) => c.skill === skill);
+        const groups = [...new Set(ofSkill.map((c) => (c.all_synthetic ? 'Thử nghiệm (synthetic)' : criterionOf(c.competency_id))))];
+        return <div key={skill}>
+          <h3>{SKILL_LABEL[skill] ?? skill}</h3>
+          {groups.map((g) => <div key={g}>
+            <h4 className="muted">{g}</h4>
+            <ul className="item-list">{ofSkill.filter((c) => (c.all_synthetic ? 'Thử nghiệm (synthetic)' : criterionOf(c.competency_id)) === g).map((c) => {
+              const [label, tone] = stateChip(c);
+              return <li key={c.competency_id} style={{ display: 'block' }}>
+                <details>
+                  <summary><b>{c.title}</b> <span className={`chip ${tone}`}>{label}</span>
+                    {c.evidence_summary.observation_count > 0 && <span className="meta"> · {c.evidence_summary.independent_sources_met} đạt / {c.evidence_summary.independent_sources_not_met} chưa đạt</span>}</summary>
+                  <CompetencyDetail c={c} reason={reason} onReview={(id) => void requestReview(id)} />
+                </details>
+              </li>;
+            })}</ul>
+          </div>)}
+        </div>;
+      })}
+    </section>
+  </>;
 }
 
 export function SettingsScreen() {
@@ -882,7 +886,7 @@ export function SettingsScreen() {
   if (!data) return <section><p>Đang tải Cài đặt…</p></section>;
 
   return <section>
-    <h2>Cài đặt &amp; Trạng thái hệ thống (06 §2.5)</h2>
+    <h2>Cài đặt &amp; trạng thái hệ thống</h2>
     <GoalForm initial={data.goal} onSaved={() => load()} />
     <article className="card">
       <h3>Trạng thái AI thuê bao (chỉ đọc — quản lý chi tiết tại Builder &amp; QC)</h3>

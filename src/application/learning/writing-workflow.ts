@@ -353,7 +353,7 @@ export class LearningWorkflowService {
     const exposures = this.store.learning.exposures();
     // Paragraph tasks are kept for 7A transfer checks: showing them here would spend their novelty (E-50).
     const items = servableAiWritingItems(this.store, ['ai_authored', 'learner_owned']).filter((i) => i.task_scope === 'composite').map((i) => ({
-      item_id: i.id, item_version: i.version, title: i.origin === 'learner_owned' ? `${i.title} (đề của bạn)` : i.title, origin: i.origin, genre: i.genre_label, estimated_minutes: i.estimated_minutes, min_words: i.min_words,
+      item_id: i.id, item_version: i.version, skill: i.skill, title: i.origin === 'learner_owned' ? `${i.title} (đề của bạn)` : i.title, origin: i.origin, genre: i.genre_label, estimated_minutes: i.estimated_minutes, min_words: i.min_words,
       competencies: i.competencies.length, seen: exposures.some((e) => e.item_id === i.id),
     }));
     return {
@@ -1542,7 +1542,8 @@ export class LearningWorkflowService {
     const verificationStatusNow = excluded.some((o) => o.reason === 'REVOKED_DEPENDENCY') || statuses.includes('recheck') || decision?.needs_recheck ? 'needs_recheck'
       : statuses.includes('awaiting_opportunity') ? 'awaiting_opportunity' : statuses.includes('due') ? 'due' : 'not_due';
 
-    const allSynthetic = observationsWithMeta.every((o) => o.synthetic);
+    // E-56: no observation is not "synthetic": only a synthetic competency, or evidence that is all synthetic, is labelled so.
+    const allSynthetic = competencyId.startsWith('syn.') || (observationsWithMeta.length > 0 && observationsWithMeta.every((o) => o.synthetic));
     const label = decision
       ? `${decision.label} · Độ tin cậy: ${decision.confidence_label}${allSynthetic && observationsWithMeta.length > 0 ? ' (dữ liệu hiện có là synthetic, G0 không tính)' : ''}`
       : 'Chưa đủ kết luận (chưa có chính sách D-02 được duyệt)';

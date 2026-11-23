@@ -128,7 +128,6 @@ export function TrackingPanel() {
   if (!data) return <article className="card"><p>Đang tải theo dõi hằng ngày…</p></article>;
   const outcomes = (d: DayView) => ['met', 'not_met', 'inconclusive'].map((k) => d.evidence.observations[k as 'met'] ?? 0).join(' / ');
   return <article className="card">
-    <h3>Theo dõi 7 ngày (06A §9)</h3>
     <p className="mono">Số liệu tính lúc {new Date(data.as_of).toLocaleString('vi-VN', { hour12: false })} (giờ Việt Nam){data.goal ? ` · mục tiêu ${data.goal.daily_minutes} phút/ngày, ${data.goal.weekly_minutes} phút/tuần` : ''}</p>
     <table>
       <thead><tr><th>Ngày</th><th>Trạng thái</th><th>Thời gian (phút)</th><th>Vòng học: bắt đầu / nộp / sửa / nhiệm vụ xong</th><th>Nhận định: đạt / chưa đạt / chưa kết luận</th></tr></thead>

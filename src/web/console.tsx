@@ -107,20 +107,29 @@ function Runs({ onError }: { onError: (e: unknown) => void }) {
   return <div>
     <section className="card"><h3>Gateway AI thuê bao</h3><ul>{gateway.map((g) => <li key={g.provider}><b>{g.provider}</b>: {g.ready ? 'Sẵn sàng' : `Bị chặn (${g.error})`}
       {!g.ready && <span className="mono"> — {g.reasons.join(', ')}</span>}</li>)}</ul></section>
-    <table><thead><tr><th>Thời điểm</th><th>Loại</th><th>Phạm vi</th><th>Trạng thái</th><th>Lượt chạy</th><th>Ngữ cảnh</th><th>Lỗi</th></tr></thead><tbody>
+    <div className="table-wrap"><table><thead><tr><th>Thời điểm</th><th>Loại</th><th>Phạm vi</th><th>Trạng thái</th><th>Lượt chạy</th><th>Ngữ cảnh</th><th>Lỗi</th></tr></thead><tbody>
       {runs.map((j) => <tr key={j.job_id}><td>{j.created_at}</td><td>{j.task_type} ({j.role})</td><td>{j.scope}</td><td>{j.state}</td>
         <td>{j.runs.map((r) => `${r.provider}${r.cli_version ? ` ${r.cli_version}` : ''} ${r.state}${r.duration_ms !== null ? ` ${r.duration_ms}ms` : ''}`).join('; ')}</td>
-        <td className="mono">{j.input_hash.slice(0, 12)}… {j.context_bytes}B</td><td>{j.last_error}</td></tr>)}</tbody></table>
+        <td className="mono">{j.input_hash.slice(0, 12)}… {j.context_bytes}B</td><td>{j.last_error}</td></tr>)}</tbody></table></div>
   </div>;
 }
 
+type ConsoleTab = 'packages' | 'sources' | 'frameworks' | 'issues' | 'runs';
+// E-56: in the order of the work — sources → frameworks and prompts → packages → issues → runs.
+const CONSOLE_TABS: [ConsoleTab, string][] = [['sources', 'Nguồn'], ['frameworks', 'Khung năng lực & đề'], ['packages', 'Gói tri thức'], ['issues', 'Cần xử lý'], ['runs', 'Lần chạy & AI']];
+const readConsoleTab = (): ConsoleTab => { try { const v = localStorage.getItem('console.tab'); return CONSOLE_TABS.some(([k]) => k === v) ? v as ConsoleTab : 'frameworks'; } catch { return 'frameworks'; } };
+
 export function BuilderConsole() {
-  const [tab, setTab] = useState<'packages' | 'sources' | 'frameworks' | 'issues' | 'runs'>('packages');
+  const [tab, setTabState] = useState<ConsoleTab>(readConsoleTab);
   const [error, setError] = useState<string | null>(null);
+  const [openIssues, setOpenIssues] = useState<number | null>(null);
   const onError = useCallback((e: unknown) => setError(e instanceof Error ? e.message : String(e)), []);
+  useEffect(() => { get<{ reviews: unknown[] }>('/api/console/issues').then((d) => setOpenIssues(d.reviews.length)).catch(() => setOpenIssues(null)); }, [tab]);
+  const setTab = (t: ConsoleTab) => { setError(null); setTabState(t); try { localStorage.setItem('console.tab', t); } catch { /* per-viewer convenience only */ } };
   return <section className="console">
-    <nav className="tabs">{([['packages', 'Gói tri thức'], ['sources', 'Nguồn'], ['frameworks', 'Khung năng lực'], ['issues', 'Cần xử lý'], ['runs', 'Lần chạy']] as const).map(([k, label]) =>
-      <button key={k} className={tab === k ? 'active' : ''} onClick={() => { setError(null); setTab(k); }}>{label}</button>)}</nav>
+    <h2>Builder &amp; QC</h2>
+    <nav className="subtabs" role="tablist">{CONSOLE_TABS.map(([k, label]) =>
+      <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>{label}{k === 'issues' && openIssues ? <span className="chip warn">{openIssues}</span> : null}</button>)}</nav>
     {error && <p role="alert" className="error">{error}</p>}
     {tab === 'packages' && <><Search onError={onError} /><Packages onError={onError} /></>}
     {tab === 'sources' && <SourcesPanel onError={onError} />}
