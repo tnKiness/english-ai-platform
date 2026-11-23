@@ -2,7 +2,8 @@
 // proposes; these checks (and the learner) decide. A draft with any error cannot be approved.
 /** E-42 (D-05 C2) knowledge.v1 competency_framework_result: a DRAFT the application checks; the learner approves. */
 export interface FrameworkCompetency {
-  competency_id: string; criterion: 'task_response' | 'coherence_cohesion' | 'lexical_resource' | 'grammatical_range_accuracy';
+  competency_id: string; criterion: 'task_response' | 'coherence_cohesion' | 'lexical_resource' | 'grammatical_range_accuracy' | 'fluency_coherence'
+    | 'main_ideas' | 'detail' | 'opinion_attitude' | 'purpose' | 'development';
   title_vi: string; assessor_criterion: string; target_claim: string; evidence_required: string[]; evidence_conditions: string[];
   confounders: string[]; inference_limits: string[];
   edges: { type: 'component_of' | 'supports' | 'prerequisite' | 'transferable_to' | 'confusable_with'; target: string; basis: string | null }[];
@@ -21,12 +22,19 @@ export interface FrameworkReviewResult {
 }
 
 export interface FrameworkSourceText { source_ref: string; texts: string[] }
-export interface FrameworkRequirements { min_per_criterion: number; max_per_criterion: number; recommended_min: number; recommended_max: number }
+/**
+ * E-52: `criteria` (the official criteria this framework covers) and `id_prefix` (competency id namespace) default to
+ * Writing Task 2 (`wt2`, its four criteria); the Speaking text framework sets its own (`spk`, no Pronunciation).
+ */
+export interface FrameworkRequirements { min_per_criterion: number; max_per_criterion: number; recommended_min: number; recommended_max: number; criteria?: string[]; id_prefix?: string }
+export const WT2_CRITERIA = ['task_response', 'coherence_cohesion', 'lexical_resource', 'grammatical_range_accuracy'];
 export interface FrameworkFinding { code: string; severity: 'error' | 'warning'; target: string; detail: string }
 export interface FrameworkCheck { errors: number; warnings: number; findings: FrameworkFinding[] }
 
 export const CRITERION_PREFIX: Record<string, string> = {
-  task_response: 'tr', coherence_cohesion: 'cc', lexical_resource: 'lr', grammatical_range_accuracy: 'gra',
+  task_response: 'tr', coherence_cohesion: 'cc', lexical_resource: 'lr', grammatical_range_accuracy: 'gra', fluency_coherence: 'fc',
+  // E-54 Listening: the abilities the official format says the test assesses (no band descriptor table).
+  main_ideas: 'mi', detail: 'dt', opinion_attitude: 'oa', purpose: 'pu', development: 'dv',
 };
 
 /** Comparison form for quotes: case, quote marks, dashes, hyphen spacing and whitespace do not matter. */
@@ -42,12 +50,15 @@ export function checkFramework(fw: FrameworkResult, sources: readonly FrameworkS
   const add = (code: string, severity: 'error' | 'warning', target: string, detail: string) => findings.push({ code, severity, target, detail });
   const hay = new Map(sources.map((s) => [s.source_ref, s.texts.map(normalizeForQuote)]));
   const ids = new Set<string>();
+  const criteria = req.criteria ?? WT2_CRITERIA;
 
   for (const c of fw.competencies) {
     if (ids.has(c.competency_id)) add('FW_DUPLICATE_ID', 'error', c.competency_id, 'competency_id lặp lại');
     ids.add(c.competency_id);
-    const prefix = c.competency_id.split('.')[1];
+    const [ns, prefix] = c.competency_id.split('.');
     if (CRITERION_PREFIX[c.criterion] !== prefix) add('FW_CRITERION_PREFIX', 'error', c.competency_id, `Mã "${prefix}" không khớp tiêu chí ${c.criterion}`);
+    if (ns !== (req.id_prefix ?? 'wt2')) add('FW_ID_NAMESPACE', 'error', c.competency_id, `Mã phải bắt đầu bằng "${req.id_prefix ?? 'wt2'}."`);
+    if (!criteria.includes(c.criterion)) add('FW_CRITERION_OUT_OF_SCOPE', 'error', c.competency_id, `Tiêu chí ${c.criterion} không thuộc khung này (${criteria.join(', ')})`);
     for (const field of ['assessor_criterion', 'target_claim'] as const) {
       if (/\bband\s*\d/i.test(c[field])) add('FW_BAND_MAPPING', 'error', c.competency_id, `${field} nhắc tới mức Band; khung năng lực không được tự đặt ngưỡng Band`);
     }
@@ -65,7 +76,7 @@ export function checkFramework(fw: FrameworkResult, sources: readonly FrameworkS
       if (e.type === 'prerequisite' && !(e.basis ?? '').trim()) add('FW_PREREQUISITE_NO_BASIS', 'error', c.competency_id, 'Cạnh tiên quyết cần căn cứ từ nguồn');
     }
   }
-  for (const [criterion] of Object.entries(CRITERION_PREFIX)) {
+  for (const criterion of criteria) {
     const n = fw.competencies.filter((c) => c.criterion === criterion).length;
     if (n < req.min_per_criterion || n > req.max_per_criterion) add('FW_COVERAGE', 'error', criterion, `${n} năng lực; giới hạn ${req.min_per_criterion}–${req.max_per_criterion}`);
     else if (n < req.recommended_min || n > req.recommended_max) add('FW_COVERAGE', 'warning', criterion, `${n} năng lực; khuyến nghị ${req.recommended_min}–${req.recommended_max}`);

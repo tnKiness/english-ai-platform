@@ -2649,7 +2649,7 @@
             "properties": {
               "competency_id": {
                 "type": "string",
-                "pattern": "^wt2\\.(tr|cc|lr|gra)\\.[a-z][a-z0-9_]{1,40}$"
+                "pattern": "^(wt2\\.(tr|cc|lr|gra)|spk\\.(fc|lr|gra)|lis\\.(mi|dt|oa|pu|dv))\\.[a-z][a-z0-9_]{1,40}$"
               },
               "criterion": {
                 "type": "string",
@@ -2657,7 +2657,13 @@
                   "task_response",
                   "coherence_cohesion",
                   "lexical_resource",
-                  "grammatical_range_accuracy"
+                  "grammatical_range_accuracy",
+                  "fluency_coherence",
+                  "main_ideas",
+                  "detail",
+                  "opinion_attitude",
+                  "purpose",
+                  "development"
                 ]
               },
               "title_vi": {
@@ -2809,7 +2815,7 @@
             "properties": {
               "competency_id": {
                 "type": "string",
-                "pattern": "^wt2\\.(tr|cc|lr|gra)\\.[a-z][a-z0-9_]{1,40}$"
+                "pattern": "^(wt2\\.(tr|cc|lr|gra)|spk\\.(fc|lr|gra)|lis\\.(mi|dt|oa|pu|dv))\\.[a-z][a-z0-9_]{1,40}$"
               },
               "signal": {
                 "type": "string",
@@ -2989,7 +2995,10 @@
                   "discussion",
                   "advantages_disadvantages",
                   "problem_solution",
-                  "two_part"
+                  "two_part",
+                  "part1",
+                  "part2",
+                  "part3"
                 ]
               },
               "topic": {
@@ -3020,7 +3029,7 @@
                 "maxItems": 12,
                 "items": {
                   "type": "string",
-                  "pattern": "^wt2.(tr|cc|lr|gra).[a-z][a-z0-9_]{1,40}$"
+                  "pattern": "^(wt2\\.(tr|cc|lr|gra)|spk\\.(fc|lr|gra)|lis\\.(mi|dt|oa|pu|dv))\\.[a-z][a-z0-9_]{1,40}$"
                 }
               },
               "difficulty_estimate": {
@@ -3035,6 +3044,13 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 600
+              },
+              "task_scope": {
+                "type": "string",
+                "enum": [
+                  "essay",
+                  "paragraph"
+                ]
               }
             },
             "required": [
@@ -3144,6 +3160,241 @@
               "item_key",
               "verdict",
               "findings"
+            ]
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "job_id",
+        "context_manifest_id",
+        "synthetic",
+        "items",
+        "limitations"
+      ]
+    },
+    "listening_item_set_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1"
+        },
+        "job_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context_manifest_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "synthetic": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "item_key": {
+                "type": "string",
+                "pattern": "^[a-z0-9_]{1,24}$"
+              },
+              "part": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4
+              },
+              "topic": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "item_family": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{2,40}$"
+              },
+              "context": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 400
+              },
+              "speakers": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 3,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Z]$"
+                    },
+                    "role": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 60
+                    },
+                    "voice": {
+                      "type": "string",
+                      "enum": [
+                        "female",
+                        "male"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "role",
+                    "voice"
+                  ]
+                }
+              },
+              "script": {
+                "type": "array",
+                "minItems": 6,
+                "maxItems": 80,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "speaker": {
+                      "type": "string",
+                      "pattern": "^[A-Z]$"
+                    },
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 600
+                    }
+                  },
+                  "required": [
+                    "speaker",
+                    "text"
+                  ]
+                }
+              },
+              "questions": {
+                "type": "array",
+                "minItems": 5,
+                "maxItems": 10,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "question_id": {
+                      "type": "string",
+                      "pattern": "^q([1-9]|10)$"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "form_completion",
+                        "note_completion",
+                        "sentence_completion",
+                        "short_answer",
+                        "multiple_choice"
+                      ]
+                    },
+                    "prompt": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160
+                      },
+                      "maxItems": 5
+                    },
+                    "word_limit": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 3
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "answers": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 4,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      }
+                    },
+                    "evidence_quote": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    },
+                    "competencies": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 3,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^(wt2\\.(tr|cc|lr|gra)|spk\\.(fc|lr|gra)|lis\\.(mi|dt|oa|pu|dv))\\.[a-z][a-z0-9_]{1,40}$"
+                      }
+                    }
+                  },
+                  "required": [
+                    "question_id",
+                    "type",
+                    "prompt",
+                    "options",
+                    "word_limit",
+                    "answers",
+                    "evidence_quote",
+                    "competencies"
+                  ]
+                }
+              },
+              "difficulty_estimate": {
+                "type": "string",
+                "enum": [
+                  "lower",
+                  "middle",
+                  "upper"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 600
+              }
+            },
+            "required": [
+              "item_key",
+              "part",
+              "topic",
+              "item_family",
+              "context",
+              "speakers",
+              "script",
+              "questions",
+              "difficulty_estimate",
+              "rationale"
             ]
           }
         },

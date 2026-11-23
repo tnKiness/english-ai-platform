@@ -23,7 +23,7 @@ export function validateLearning(name: string, value: unknown): { ok: boolean; e
   const validate = ajv.getSchema(`${learningSchema.$id}#/$defs/${name}`);
   if (!validate) throw new Error(`Unknown learning contract: ${name}`);
   const ok = validate(value) === true;
-  return { ok, errors: ok ? [] : (validate.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message ?? 'invalid'}`) };
+  return { ok, errors: ok ? [] : (validate.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message ?? 'invalid'}${additionalProperty(e.params)}`) };
 }
 export function validateContract(name: string, value: unknown): boolean {
   const v2 = VERSIONED.has(name) && typeof value === 'object' && value !== null && (value as { schema_version?: unknown }).schema_version === '2';
@@ -34,10 +34,13 @@ export function validateContract(name: string, value: unknown): boolean {
 
 export const KNOWLEDGE_CONTRACTS = Object.keys(knowledgeSchema.$defs as Record<string, unknown>);
 
+/** E-54: name the extra field of an additionalProperties error (a schema key, never a content value). */
+const additionalProperty = (params: unknown) => { const p = (params as { additionalProperty?: unknown } | undefined)?.additionalProperty; return typeof p === 'string' ? ` (${p})` : ''; };
+
 /** Structural check only; returns readable error paths. Semantic QC (QC2–QC4) is never replaced by this. */
 export function validateKnowledge(name: string, value: unknown): { ok: boolean; errors: string[] } {
   const validate = ajv.getSchema(`${knowledgeSchema.$id}#/$defs/${name}`);
   if (!validate) throw new Error(`Unknown knowledge contract: ${name}`);
   const ok = validate(value) === true;
-  return { ok, errors: ok ? [] : (validate.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message ?? 'invalid'}`) };
+  return { ok, errors: ok ? [] : (validate.errors ?? []).map((e) => `${e.instancePath || '/'} ${e.message ?? 'invalid'}${additionalProperty(e.params)}`) };
 }

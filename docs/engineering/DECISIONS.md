@@ -89,7 +89,7 @@ Ngày lập: 19/10/2026. Các quy định engineering là bổ sung triển khai
 | D-04 | ĐÃ ĐẠT spike Windows runner/SQLite, backup phối hợp (P1-4), kiểm entrypoint native + sha256 và từ chối shim (P2-3); chưa xác minh với CLI thật và quyền file thực | Tích hợp thật P2 | Xử lý shim .cmd/.ps1 bằng entrypoint đã xác minh, quyền file thực |
 | D-05 | Chưa có gói nội dung, quyền sử dụng và đối chứng. Nguồn đề **đã chốt** (E-36): [D05_CONTENT_PROPOSAL](D05_CONTENT_PROPOSAL.md). Còn mở: provider AI thật (Codex hết hạn); D-06 cho Listening/phát âm; đo độ khớp chấm trên mẫu công khai trước khi báo Band | Phát hành gói học / báo Band | Nguồn được phép dùng, QC1–4 đúng hash, coverage manifest, bộ đối chứng riêng; thiếu phần nào chặn phần đó |
 | D-06 | Chưa chọn nguồn audio Listening (thu sẵn từ nguồn và/hoặc TTS cục bộ) và cách kiểm chứng audio. Phần ASR/chấm phát âm **đã bỏ** (E-43: nói và phát âm kiểm tra ngoài ứng dụng) | Listening thật | Audio gắn đúng transcript/đáp án, công cụ/phiên bản/tài nguyên ghi rõ; thiếu audio thì không phát hành đề Listening |
-| D-07 | Chính sách giữ log/context/media, hạn mức ổ đĩa. Đã có: xuất dữ liệu + báo cáo dung lượng (E-28); người dùng chốt chỉ tự dọn backup cũ (E-30) và sao lưu ngày + diễn tập tuần khi app chạy (E-32). Còn mở: ngưỡng/hành vi khi đầy ổ | Dùng dữ liệu cá nhân dài hạn | Cấu hình retention minh bạch, xử lý đầy ổ, export/backup/restore; không xóa lịch sử tự động khi chưa có chính sách |
+| D-07 | Chính sách giữ log/context/media, hạn mức ổ đĩa. Đã có: xuất dữ liệu + báo cáo dung lượng (E-28); người dùng chốt chỉ tự dọn backup cũ (E-30) và sao lưu ngày + diễn tập tuần khi app chạy (E-32). **Đã chốt (E-53):** cảnh báo < 5 GB, chặn tải mới/TTS < 2 GB, dọn bản sao nguồn không dùng bằng lệnh người dùng tự chạy | Dùng dữ liệu cá nhân dài hạn | Cấu hình retention minh bạch, xử lý đầy ổ, export/backup/restore; không xóa lịch sử tự động khi chưa có chính sách |
 
 Người thực hiện hạng mục chịu trách nhiệm thu bằng chứng; AI không tự đóng điểm mở bằng lời khẳng định. Điểm cần quyết định nghiệp vụ đưa cho chủ dự án, phần kỹ thuật xử lý trong quyền đã được giao.
 
@@ -512,3 +512,171 @@ ID / ngày / trạng thái (đề xuất, áp dụng kỹ thuật, người dùn
   - verify 2.1.329: `claude.ai (pro)`, prompt synthetic thoát 0, claude-opus-5-5 đạt, timeout/cancel đạt.
   - Các trường xác nhận (Claude Pro, `applies_to_cli`, envelope VERIFIED, error_patterns như bản 21/10/2026) được điền theo đồng ý của người dùng qua chat ("Nạp và chạy"). Nạp `var/ai/evidence-claude-3.json` → claude-code READY.
 - **Test:** `tests/unit/e45-claude-plugin-cache.test.ts` thêm 2 ca: danh sách đúng 4 plugin; `store/` chỉ nhận file trạng thái của plugin được phép, từ chối plugin lạ, thư mục con và `marketplaces/`.
+
+## E-49 — C3b phần 1: kho đề Writing Task 2 do AI soạn trong màn học (20/11/2026, người dùng "Làm C3b"/"tiếp tục triển khai"; quyết định triển khai, đảo ngược được)
+- **Đọc đề:** `src/application/learning/writing-catalog.ts` đọc metadata của đề `ai_authored` từ các đơn vị đã đóng băng:
+  - đề, dạng, chủ đề, họ đề, số từ tối thiểu, rubric, phiên bản khung;
+  - năng lực đo, lấy từ answer key qua reader `assessor`. Năng lực đo **không** gửi cho trình duyệt.
+  - Metadata không phụ thuộc trạng thái phát hành, nên lịch sử của đề đã thu hồi vẫn có nhãn. Đề có được cấp hay không do `servableItem` quyết định.
+- **LearningWorkflowService:**
+  - `itemMeta()` gộp đề synthetic và đề AI, có cờ `synthetic`. G0 dùng `meta.synthetic` (trước là "có trong danh sách synthetic"), cùng `isSyntheticEvidence` như cũ.
+  - `competencyDefs()` gồm năng lực synthetic và năng lực của khung đã duyệt; màn Tiến độ hiện cả năng lực của khung.
+  - Bối cảnh chấm của đề AI dùng tiêu chí người chấm (`assessor_criterion`) của đúng phiên bản khung mà đề được soạn theo; nếu không đọc được thì dùng khung đã duyệt.
+- **Phạm vi:** đề AI chỉ dùng cho `practice` ở chế độ `self_practice`/`exam`, và chỉ khi `aiMode = real`.
+  - FakeAdapter không được chấm nội dung thật: chẩn đoán synthetic gắn với năng lực synthetic, sẽ sai nghĩa.
+  - Rubric được ghim là rubric của gói đề.
+  - Tiếp xúc mức `prompt` ghi khi bắt đầu làm, như mọi đề.
+- **Năng lực trọng tâm của vòng lặp:**
+  - `writing_loop_states.competency_id` thay hằng `SYNTHETIC_COMPETENCY_ID` ở: kết quả hiển thị, tác động hỗ trợ của gợi ý, `integratedStep9`, kết quả dùng cho bước kế.
+  - Với đề AI, sau chẩn đoán thật đầu tiên, trọng tâm chuyển sang vấn đề ưu tiên đầu tiên có observation `not_met`. AI đề xuất vấn đề; observation quyết định.
+  - Với đề synthetic, hành vi không đổi.
+- **Chưa hỗ trợ với đề AI** (409 `AI_ITEM_LOOP_NOT_SUPPORTED`):
+  - Bước 6: concept check hiện so khớp từ khóa của bài synthetic;
+  - 7A: dùng đề 7A synthetic.
+  - `scheduleVerification` chỉ lập lịch cho năng lực `syn.`.
+  - Phần còn lại: 7A/7B/9 bằng đề AI chưa lộ (dùng `assessNovelty`), Bước 6 theo khung, màn duyệt mẫu N6, đề đoạn 7A.
+- **API/UI:**
+  - `GET /api/learning/writing-bank`: chỉ metadata, cờ `seen` theo tiếp xúc, đề chưa xem xếp trước.
+  - Thẻ *Kho đề Writing Task 2* ở Học hôm nay.
+- **Test:** `tests/integration/e49-writing-bank.test.ts` dùng adapter giả lập thay provider thật, qua learning worker, nên không chứng minh CLI thật. Các ca:
+  - kho không lộ đề; chặn ở chế độ synthetic và ngoài phạm vi luyện tập;
+  - đề hiện khi bắt đầu, không lộ năng lực đo;
+  - bối cảnh chấm dùng tiêu chí khung; chẩn đoán thật; trọng tâm chuyển sang năng lực chưa đạt;
+  - gợi ý không lộ câu mẫu; tác động hỗ trợ đúng năng lực;
+  - bằng chứng không synthetic, `composite`; Bước 6/7A bị chặn;
+  - thu hồi thì ngừng cấp, lịch sử giữ nhãn.
+
+## E-50 — Hoàn tất C3 với đề AI (đề đoạn 7A, Bước 6, 7A/7B/9, duyệt mẫu N6) và C5 (20/11/2026, người dùng "làm xong hết toàn bộ"; quyết định triển khai, đảo ngược được)
+- **Đề đoạn 7A (N5):**
+  - `wt2_item_set_result` thêm `task_scope` (`essay` | `paragraph`, không bắt buộc, mặc định essay); lệnh `author -- items --paragraph [--focus id,…]`.
+  - Kiểm tra xác định: đề đoạn nhắm **đúng một** năng lực (`PARAGRAPH_TARGET`); loại đề phải đúng loại đã yêu cầu (`TASK_SCOPE_MISMATCH`).
+  - Gói đề đoạn có `task_types` chứa `paragraph`, câu hỏi "Write one paragraph of at least 100 words." Catalog đọc thành breadth `short`, 15 phút.
+  - Chỉ dẫn rà soát nói rõ: yêu cầu viết một đoạn là vai trò của đề, không phải ép cấu trúc.
+- **Kho đề** chỉ hiện bài luận. Đề đoạn giữ chưa xem cho 7A, và không làm luyện tập được.
+- **Chọn đề kiểm chứng** (`pickVerificationItem`): đề AI đang cấp, đúng breadth (đoạn cho 7A, bài luận cho 7B/9), có đo năng lực đó, **mới** theo `assessNovelty` với mọi tiếp xúc (kể cả tiếp xúc ở builder), chưa gắn vào nhiệm vụ đang mở; thứ tự xác định.
+  - Không có đề: 7A báo `NO_ELIGIBLE_7A_TASK`; 7B/9 không xếp lịch. Cả hai mở review `coverage_gap` (target `competency`, mỗi ngày học một mục) kèm lệnh soạn bù.
+  - Không bao giờ thay bằng đề synthetic hay đề đã xem.
+  - Nhiệm vụ 7B/9 của năng lực khung có `synthetic = 0`; `startAttempt` cho đề AI nhận purpose 7B/9 khi có `task_id` (không ở chế độ guided).
+- **Bước 6 với đề AI:**
+  - Bài học là giải thích nấc 3 đã qua kiểm tra tiết lộ của chẩn đoán thật; hiện bài học thì ghi tiếp xúc `explanation`.
+  - Câu trả lời tự do **không** chấm bằng so khớp chữ (04: so khớp không công nhận hiểu). Người học trả lời, nhận ý chính một lần trong phản hồi đó (không lưu, không gửi trước), rồi tự đánh giá (`self_check`).
+  - Bước 6 không tạo bằng chứng, chỉ mở 7A; 7A (đề mới, không gợi ý) mới là kiểm chứng.
+- **Duyệt mẫu ngẫu nhiên N6:**
+  - Migration `0017_item_sample_reviews`: mỗi đề rút một lần; quyết định một lần; trigger chặn sửa/xóa.
+  - `drawSamples` ghi tiếp xúc `prompt` (surface builder) trong cùng transaction trước khi trả nguyên văn.
+  - `decideSample('revoke')` cần ghi chú và gọi `BuilderPipeline.revoke`.
+  - Có tab UI và 3 route `/api/console/item-samples*`.
+- **C5 (N8):**
+  - `coverage()` báo hai ô, đề đoạn và bài luận: số đề chưa xem, số họ đề, năng lực có `coverage_gap` mở. Ngưỡng ở `coverage` của chính sách: 3 đề / 2 họ / bổ sung 5.
+  - `replenish()` soạn một lô cho mỗi ô thiếu (ô có năng lực thiếu đề kiểm chứng trước, `focus` theo các năng lực đó). Lệnh kiểm trần N8 trước mỗi lô và trả lý do bỏ qua thay vì ném lỗi.
+  - CLI `author -- coverage | replenish`.
+  - Worker `--learning --replenish [--replenish-every-min 30]`: `runWorkerLoop` thêm `onIdle`, chỉ chạy khi hàng đợi rảnh, lỗi của hook không dừng worker.
+  - Phần "Ô đang có nhiệm vụ đến hạn được ưu tiên" được hiểu là: năng lực có review thiếu đề kiểm chứng đang mở.
+- **Test:**
+  - `tests/integration/e50-ai-verification-chain.test.ts` (5 ca): kiểm tra đề đoạn; chuỗi luyện tập → Bước 6 → 7A đề đoạn → 7B trên bài luận chưa xem; thiếu đề → gap → replenish có focus → 7A chạy được; trần N8 và không có khung; duyệt mẫu.
+  - `e49` cập nhật cho Bước 6 mới.
+  - Adapter giả lập, không gọi AI thật.
+
+## E-51 — C4: nhập đề Writing Task 2 của người học (20/11/2026, người dùng "Làm C4 và phần còn lại"; căn cứ N7 đã đồng ý ở E-36; quyết định triển khai, đảo ngược được)
+- **Loại dữ liệu mới** `learner_owned_content`:
+  - Migration `0018_learner_owned_consent` dựng lại `ai_data_consents` (giữ mọi dòng) để mở rộng CHECK.
+  - Thêm vào `DATA_CLASSES` và `USER_APPROVED_DATA_CLASSES`, vì N7 khuyến nghị "có gửi đề cho AI" và người dùng đã đồng ý ở E-36.
+  - Mỗi provider vẫn cần cấp riêng (mặc định từ chối). Lệnh `consent … grant` là việc của người dùng; ứng dụng không tự cấp.
+  - `dataClassesFor`: nội dung `learner_owned` → `learner_owned_content`, không còn mượn `learner_submission` (thay cách tạm của E-41). Bài làm của người học vẫn thêm `learner_submission`.
+  - `gatewayAuthoringExecutor` nhận danh sách loại dữ liệu.
+- **Nhập đề** (`LearnerItemService.importPrompt`, `POST /api/learning/own-items`): đồng bộ, **không gọi AI**.
+  - Chỉ Writing Task 2. Task 1/GT Task 1/Speaking trả `TASK_NOT_SUPPORTED`, vì chưa có khung để chấm.
+  - Bắt buộc xác nhận quyền; tối đa 2.000 ký tự, tối thiểu 15 từ; trùng gần với đề đã nhập thì từ chối. Cùng `request_key` trả cùng đề.
+  - Ghi một bản ghi Source Registry riêng cho mỗi đề: origin `teaching`, quyền `determined`, cho lưu/xử lý AI/hiển thị; căn cứ là lời khai của người học kèm thời điểm.
+  - Đóng gói `learner_owned` như đề AI (item, khóa ẩn, rubric từ khung đã duyệt). Năng lực đo là **mọi** năng lực của khung: bài luận đầy đủ cho cơ hội thể hiện từng năng lực, và người chấm trả `opportunity: absent` khi đề không cho cơ hội.
+  - Vai trò sử dụng: chỉ `practice`.
+  - **Tiếp xúc:** luôn ghi `prompt` (người học đã gõ đề); khai "đã xem bài mẫu/đáp án" thì ghi thêm `sample_or_variant` để quy tắc tính mới loại kết quả khỏi vận dụng độc lập (N7).
+- **Rà soát** (`reviewPending`): một lượt `content.item_review` cho mọi đề đang chờ, trên đúng nội dung đã đóng băng, dùng loại dữ liệu `learner_owned_content`.
+  - Payload ghi chú nguồn gốc; mọi phát hiện `originality` bị bỏ qua, vì đề của người học thường là đề đã xuất bản. Chỉ dẫn rà soát thêm dòng "làm theo DATA.context.note".
+  - QC2/QC3/QC4 ghi như E-47; đạt thì phát hành (không cần người duyệt thêm: chính người học đưa đề vào).
+  - Lượt rà soát không chạy trong request web. Worker `--learning` chạy nó khi rảnh (2 phút/lần), hoặc dùng CLI `author -- own-review`. Có trần riêng mỗi ngày (cùng con số N8, đếm riêng `target_id = learner-items`).
+- **Phục vụ:**
+  - Kho đề hiện đề `learner_owned` với nhãn "(đề của bạn)". `writing-catalog` nhận cả hai nguồn gốc.
+  - Chọn đề kiểm chứng và độ phủ N8 chỉ dùng `ai_authored`.
+- **UI:** mục *Thêm đề Writing Task 2 của bạn* ở Học hôm nay (form và danh sách trạng thái). CLI `author -- own-list | own-review`.
+- **Chưa làm:** Task 1 Academic (ảnh biểu đồ, bảng số liệu cho QC1), GT Task 1, Speaking; AI đề xuất dạng đề thay người học chọn (hiện AI chỉ kiểm dạng người học chọn).
+- **Test:** `tests/integration/e51-learner-items.test.ts` (4 ca). `e41` và `p2-e11` cập nhật cho loại dữ liệu mới.
+
+## E-52 — Speaking dạng văn bản: khung năng lực và đề Part 1–3 dùng chung đường Writing (20/11/2026, người dùng "Làm C4 và phần còn lại"; theo E-43; quyết định triển khai, đảo ngược được)
+- **Khung:**
+  - `policies/authoring/speaking-framework.v1.json` (`ielts-speaking-text`). Nguồn: band descriptors Speaking, key assessment criteria Speaking, trang định dạng Speaking; cả ba đã duyệt ở tab Nguồn.
+  - `requirements.criteria` = fluency_coherence, lexical_resource, grammatical_range_accuracy; `id_prefix` = `spk`; `excluded` = phát âm và đặc điểm khi nói.
+  - Bảng band descriptors bỏ cột Pronunciation (`band_table.exclude_criteria`). Kiểm thật: 28 ô (3 tiêu chí × 9 Band, cộng Band 0).
+- **Tổng quát hóa:**
+  - `FrameworkRequirements` thêm `criteria`/`id_prefix`, mặc định giữ nguyên Writing Task 2. `checkFramework` báo `FW_ID_NAMESPACE`, `FW_CRITERION_OUT_OF_SCOPE`.
+  - Hợp đồng nhận mã `spk.(fc|lr|gra).…` và tiêu chí `fluency_coherence`, ở cả `competencies` và `observation_guide`.
+  - Chỉ dẫn soạn khung đọc tác vụ, tiêu chí và tiền tố từ `DATA.context`, không gắn cứng Writing Task 2.
+  - CLI `--skill speaking`; API `?skill=`; tab Khung năng lực có bộ chọn kỹ năng.
+- **Đề Speaking:**
+  - `policies/authoring/speaking-items.v1.json`: `task_type` `speaking_text`, mã đề `spk-ai-…`, dạng `part1|part2|part3`.
+  - Part 1 là phạm vi "paragraph" (ngắn, nhắm một năng lực, dùng cho 7A); Part 2/3 là bài trả lời đầy đủ (luyện tập, 7B/9).
+  - Hướng dẫn trả lời: "Answer in writing as you would speak (at least N words)".
+  - Chỉ dẫn soạn/rà soát có quy tắc riêng cho Speaking: kiểm `genre_match` theo dạng Part, chấp nhận văn nói.
+  - Kho đề, catalog và workflow nhận `speaking_text`. Chấm dùng năng lực `spk.` của khung Speaking (đúng phiên bản), `task.skill = speaking_text`; chỉ dẫn chấm nói rõ "không chấm phát âm, tốc độ, ngập ngừng".
+  - Bằng chứng có modality `speaking`. Hồ sơ hiện cả năng lực Speaking.
+  - Worker `--replenish` bổ sung kho đề cho từng kỹ năng có khung đã duyệt.
+- **Chẩn đoán lỗi hợp đồng:** khi kết quả AI vi phạm hợp đồng, executor soạn nội dung giờ ghi tối đa 5 lỗi kiểm tra (đường dẫn trường và thông báo, không chứa giá trị) vào `authoring_runs.error`. Nhờ đó tìm ra mẫu mã `observation_guide` còn gắn cứng `wt2`.
+- **Test:** `tests/integration/e52-speaking-text.test.ts` (2 ca). Adapter giả lập, không gọi AI thật.
+
+## E-53 — D-07: ổ đĩa sắp đầy (20/11/2026, **người dùng chốt** "Cảnh báo + dọn bản sao nguồn")
+- **Ngưỡng** (`src/infrastructure/files/disk-guard.ts`, theo dung lượng trống của ổ chứa `var/`):
+  - dưới **5 GB**: cảnh báo ở Học hôm nay (`GET /api/learning/disk`), ở `sources -- status` và trong báo cáo dung lượng;
+  - dưới **2 GB**: chặn tải mới. Lượt quét dừng trước lần tải kế tiếp và giữ hàng đợi; `tts -- say` từ chối tạo audio mới (mã `DISK_LOW`). Viết, lưu nháp, nộp bài và chấm vẫn chạy.
+- **Không bao giờ tự xóa.** Lệnh `npm.cmd run sources -- prune-copies` do người dùng tự chạy: mặc định chỉ liệt kê, có `--apply` mới xóa.
+  - Chỉ xóa bản sao nguồn có thể tải lại mà không ai dùng: file của trang đã **loại** và file không còn dòng nào trỏ tới (gồm `.txt/.layout.json/.rules.json` đi kèm PDF).
+  - Bản sao dùng chung nội dung với một trang đã duyệt hoặc đang chờ thì giữ.
+  - Không đụng nguồn đã duyệt (khung năng lực trích dẫn chúng), bài làm, audio của người học, backup, lịch sử. Dòng `source_candidates` của trang đã loại vẫn giữ để không bị quét lại.
+- **Số liệu thật lúc chốt** (chạy thử, chưa xóa): 3.902 file / 423,7 MB của trang đã loại; ổ còn 60,3 GB (mức ok).
+- **Test:** `tests/integration/e53-disk-guard.test.ts` (3 ca: ngưỡng, crawler dừng khi ở mức chặn, phạm vi dọn).
+
+## E-54 — Listening: khung, Part do AI soạn, audio Piper, QC4 giải mù trên transcript, màn làm bài (23/11/2026, người dùng "Làm tiếp"; theo N1/N5/N6/N8 và E-44; quyết định triển khai, đảo ngược được)
+- **Khung** `policies/authoring/listening-framework.v1.json` (`ielts-listening`, mã `lis.`):
+  - Năm tiêu chí lấy từ những gì trang định dạng đề chính thức nói bài thi đánh giá: `main_ideas`, `detail`, `opinion_attitude`, `purpose`, `development`.
+  - Không có bảng band descriptors (Listening chấm theo số câu đúng): `band_table` trong chính sách khung nay không bắt buộc, rubric chính thức rỗng.
+  - Nguồn: hai trang định dạng Listening (Academic, GT) đã duyệt.
+- **Hợp đồng và task type:**
+  - `listening_item_set_result`: Part 1–4, bối cảnh, người nói (A–C, nữ/nam), kịch bản theo dòng, 5–10 câu hỏi. Dạng câu hỏi: điền form/ghi chú/câu, trả lời ngắn có giới hạn 1–3 từ, trắc nghiệm 3–4 lựa chọn. Mỗi câu kèm các dạng đáp án chấp nhận, câu trích bằng chứng và năng lực.
+  - Task `content.listening_author` và `content.listening_solve` (kết quả `blind_solve_result`). Migration `0019_listening` dựng lại `authoring_runs`, thêm `listening_sessions` và `listening_results` (bất biến).
+- **Kiểm tra xác định** (`domain/knowledge/listening-checks.ts`), trước khi gọi TTS:
+  - câu trích có nguyên văn trong kịch bản; đáp án điền từ được nói nguyên văn và trong giới hạn từ; câu hỏi không chứa đáp án;
+  - khóa trắc nghiệm là đúng một lựa chọn; id câu hỏi q1..qn theo thứ tự; người nói khai báo đủ;
+  - độ dài kịch bản (cảnh báo dưới 250 hoặc trên 900 từ, lỗi dưới 150); trùng gần (transcript).
+- **Audio:**
+  - Mỗi dòng kịch bản đọc bằng Piper cục bộ, giọng theo vai: nữ/nam theo danh sách trong chính sách và những giọng đã cài, khác nhau khi có thể.
+  - `infrastructure/audio/wav.ts` ghép các đoạn PCM, chèn khoảng lặng, từ chối các đoạn khác định dạng. Lưu vào kho media.
+  - Kiểm tra ổ đĩa (D-07) và kiểm tra có giọng TTS chạy **trước** lượt gọi AI.
+- **Gói:**
+  - `task_item` có `stimulus.media` là audio và `stimulus.text` là transcript (gồm dòng vai trò người nói). Transcript là căn cứ của đáp án và của QC4.
+  - Khóa đáp án chỉ cho verifier/assessor, `measurement_targets` là hợp các năng lực.
+  - Rubric gồm hướng dẫn quan sát của khung. Vai trò: luyện tập, kiểm chứng.
+- **QC:**
+  - **QC4** = lượt `content.listening_solve` chỉ nhận transcript, hướng dẫn và câu hỏi (không khóa, không câu trích). App so từng câu với khóa (`compareBlind`, không phân biệt hoa/thường, dấu câu cuối); có câu sai hoặc AI báo mơ hồ thì FAIL.
+  - **QC2/QC3** = một lượt `content.item_review` có khóa, với ghi chú riêng cho Listening: bỏ qua `originality` và `no_forced_structure`, vì giới hạn số từ là định dạng IELTS.
+  - Hai lượt phải cùng từ provider CLI thật, nếu không thì `synthetic_fake`. Đạt thì tự phát hành (N6). Mỗi lô 3 lượt gọi, trần 10/ngày đếm riêng (`lis-ai-items`).
+- **Màn học** (`ListeningWorkflow`, `web/listening.tsx`), chỉ cho gói `ai_authored` của Listening đang phát hành:
+  - Bắt đầu thì ghi tiếp xúc `prompt`; người học nhận bối cảnh, câu hỏi và audio, **không** có transcript hay khóa.
+  - Nộp thì chấm xác định, mỗi lượt một lần; ghi tiếp xúc `answer`/`explanation` trước khi trả transcript, khóa và câu trích.
+  - Như Reading (03 §3): chỉ ghi đúng/sai từng câu, **không** tạo observation hay kết luận năng lực Listening; không báo Band.
+  - Chế độ thi: trình phát cho nghe một lần, không tua. Server chỉ đếm số lần tải audio, vì trình duyệt cần tải lại khi tua/đệm.
+- **Chưa làm:** dạng câu hỏi bản đồ/sơ đồ và nối; bổ sung tự động kho Listening (C5); kết luận năng lực từ kết quả Listening (cần chính sách riêng); duyệt mẫu N6 cho Listening.
+- **Test:** `tests/integration/e54-listening.test.ts` (6 ca). TTS giả và executor giả; không gọi AI hay Piper thật.
+
+## E-55 — C6: đối chiếu định tính với bài mẫu chính thức có điểm (23/11/2026, **người dùng chốt** "Nhập mẫu, đo định tính")
+- **Nguồn:** hai PDF "example responses … with band scores and examiner comments" (Academic, General Training) đã duyệt, khai trong `policies/calibration-samples.v1.json`.
+- **Tách bài** (`domain/knowledge/calibration.ts`): xác định, không gọi AI, mọi trường là bản sao nguyên văn của văn bản đã lưu. Mẫu nhận dạng: tiêu đề "Sample … Writing Part N" / "… Writing Sample Task N", nhãn bài, bài làm, "Examiner comment", "Band X", nhận xét (kết thúc ở dấu trang).
+  - Thật: **6 bài**. Academic T1 Band 6 và 4; Academic T2 Band 5.5 và 7.5; GT T1 Band 5.5; GT T2 Band 5. Tức **3 bài Task 2**.
+- **Chạy** (`calibrate -- run`): mỗi bài Task 2 một lượt `writing.assess` qua gateway, dữ liệu `knowledge_content` (tài liệu công khai, không phải dữ liệu người học), với năng lực của khung Writing đã duyệt.
+  - Người chấm **không** nhận Band hay nhận xét của giám khảo.
+  - Đề bài không có trong nguồn, nên bối cảnh chấm ghi rõ điều đó và dặn trả "inconclusive" khi bài làm không tự thể hiện đủ.
+  - Bài Task 1 lưu nhưng không chấm (chưa có khung Task 1).
+  - Lượt gọi ghi trong tài liệu kết quả (provider, model, hash đầu vào/đầu ra), không ghi vào `authoring_runs` vì đây không phải lượt soạn nội dung.
+- **Báo cáo:** JSON (`knowledge/calibration-run/<run>`) và Markdown trong `var/reports/`. Mỗi bài: Band và nhận xét của giám khảo, số năng lực đạt/chưa đạt/chưa đủ kết luận theo tiêu chí, lý do chưa đạt, lỗi trọng tâm.
+  - **Không** có ngưỡng ánh xạ Band ↔ kết quả, không độ lệch số, không ước lượng Band; báo Band vẫn tắt. Không đăng ký thành bộ đối chứng P4 (cổng failover), vì không có kết quả kỳ vọng theo năng lực.
+- **Còn mở (cần chính sách):** đo định lượng và báo Band. Cần ≥ 20–30 bài Task 2 có điểm (N9) và một quy tắc ánh xạ do người dùng chốt.
+- **Test:** `tests/integration/e55-calibration.test.ts` (3 ca: tách, chỉ chấm Task 2 không lộ Band, chặn khi chưa có khung).
+

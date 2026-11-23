@@ -16,11 +16,11 @@ describe('P1-1 migrations', () => {
   it('applies versioned migrations once and reopens without change', async () => {
     const t = tempDir(); cleanups.push(t.cleanup);
     const db = await openDatabase(join(t.dir, 'a.db'));
-    expect(db.prepare('SELECT version, name FROM schema_migrations').all()).toEqual([{ version: 1, name: 'core' }, { version: 2, name: 'builder_qc' }, { version: 3, name: 'provider_agy' }, { version: 4, name: 'learning_p3' }, { version: 5, name: 'reading' }, { version: 6, name: 'audio_samples' }, { version: 7, name: 'p4_resilience' }, { version: 8, name: 'provider_model_preferences' }, { version: 9, name: 'runtime_canary' }, { version: 10, name: 'daily_tracking' }, { version: 11, name: 'knowledge_search' }, { version: 12, name: 'competency_policy' }, { version: 13, name: 'source_candidates' }, { version: 14, name: 'content_origin' }, { version: 15, name: 'competency_frameworks' }, { version: 16, name: 'item_authoring_runs' }]);
+    expect(db.prepare('SELECT version, name FROM schema_migrations').all()).toEqual([{ version: 1, name: 'core' }, { version: 2, name: 'builder_qc' }, { version: 3, name: 'provider_agy' }, { version: 4, name: 'learning_p3' }, { version: 5, name: 'reading' }, { version: 6, name: 'audio_samples' }, { version: 7, name: 'p4_resilience' }, { version: 8, name: 'provider_model_preferences' }, { version: 9, name: 'runtime_canary' }, { version: 10, name: 'daily_tracking' }, { version: 11, name: 'knowledge_search' }, { version: 12, name: 'competency_policy' }, { version: 13, name: 'source_candidates' }, { version: 14, name: 'content_origin' }, { version: 15, name: 'competency_frameworks' }, { version: 16, name: 'item_authoring_runs' }, { version: 17, name: 'item_sample_reviews' }, { version: 18, name: 'learner_owned_consent' }, { version: 19, name: 'listening' }]);
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
     db.close();
     const again = await openDatabase(join(t.dir, 'a.db'));
-    expect((again.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get() as { n: number }).n).toBe(16);
+    expect((again.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get() as { n: number }).n).toBe(19);
     again.close();
   });
 

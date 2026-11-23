@@ -25,7 +25,8 @@ describe('E-41 content origin', () => {
   });
 
   it('imported learner material needs the learner_submission consent, not only knowledge_content', () => {
-    expect(dataClassesFor({ role: 'assessor', scope: 'dry_run', content_origin: 'learner_owned' })).toEqual(expect.arrayContaining(['knowledge_content', 'learner_submission']));
+    expect(dataClassesFor({ role: 'assessor', scope: 'dry_run', content_origin: 'learner_owned' })).toEqual(['learner_owned_content']); // E-51: its own consent class
+    expect(dataClassesFor({ role: 'assessor', scope: 'learner', content_origin: 'learner_owned' })).toEqual(['learner_owned_content', 'learner_submission']);
     expect(dataClassesFor({ role: 'assessor', scope: 'dry_run', content_origin: 'ai_authored' })).toEqual(['knowledge_content']);
   });
 

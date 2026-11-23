@@ -109,6 +109,8 @@ interface WorkspaceData {
     step6_branch: string | null;
     step6_completed: boolean;
     step6_lesson: { title: string; explanation: string; contrast_examples: string[]; concept_question: string } | null;
+    step6_expected?: string | null;
+    step6_self_check?: boolean;
     linked_7a_attempt_id: string | null;
     synthetic: boolean;
   } | null;
@@ -272,6 +274,7 @@ export function WorkspaceScreen({ attemptId, onSwitchAttempt, onBack }: { attemp
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [conceptAnswer, setConceptAnswer] = useState('');
+  const [expected, setExpected] = useState<string | null>(null);
   const [inputSupportOpened, setInputSupportOpened] = useState<{ outline_suggestions: string[]; vocabulary_frame: string[] } | null>(null);
   useStudyHeartbeat('workspace', 'writing', attemptId);
 
@@ -507,11 +510,21 @@ export function WorkspaceScreen({ attemptId, onSwitchAttempt, onBack }: { attemp
                     <button disabled={!conceptAnswer.trim()} onClick={() => post<WorkspaceData>(
                       `/api/learning/attempts/${encodeURIComponent(attemptId)}/step6/complete`,
                       { concept_check_answer: conceptAnswer },
-                    ).then(setData).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}>
-                      Xác nhận hiểu &amp; Hoàn tất Bước 6
+                    ).then((v) => { setData(v); if (v.loop?.step6_expected) setExpected(v.loop.step6_expected); }).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}>
+                      {data.loop.step6_self_check ? 'Trả lời rồi xem ý chính để tự đối chiếu' : 'Xác nhận hiểu & Hoàn tất Bước 6'}
                     </button>
                   </div>
-                  {data.loop.concept_check_passed === false && <p className="FAIL">Câu trả lời chưa nêu đúng trọng tâm (mâu thuẫn lập trường / nhượng bộ). Hãy thử lại.</p>}
+                  {data.loop.step6_self_check && expected && !data.loop.step6_completed && <div className="card">
+                    <p><b>Ý chính:</b> {expected}</p>
+                    <p>So với câu trả lời của bạn: đã nêu được ý chính chưa? (Bước này không tính vào hồ sơ; bài 7A mới là bước kiểm chứng.)</p>
+                    <div className="actions">
+                      {[true, false].map((ok) => <button key={String(ok)} onClick={() => post<WorkspaceData>(
+                        `/api/learning/attempts/${encodeURIComponent(attemptId)}/step6/complete`,
+                        { concept_check_answer: conceptAnswer, self_check: ok },
+                      ).then(setData).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))}>{ok ? 'Đã nêu được' : 'Chưa, đọc lại giải thích'}</button>)}
+                    </div>
+                  </div>}
+                  {data.loop.concept_check_passed === false && <p className="FAIL">{data.loop.step6_self_check ? 'Đọc lại phần giải thích rồi trả lời lại.' : 'Câu trả lời chưa nêu đúng trọng tâm (mâu thuẫn lập trường / nhượng bộ). Hãy thử lại.'}</p>}
                   {data.loop.step6_completed && (
                     <div className="actions">
                       <span className="PASS">✓ Đã hoàn tất Bước 6. Sẵn sàng chuyển sang Bước 7A (kiểm chứng chuyển giao).</span>
@@ -565,6 +578,84 @@ function ReplanPanel({ onChanged }: { onChanged: () => void }) {
   </article>;
 }
 
+interface WritingBank { ai_mode: string; available: boolean; note: string; items: { item_id: string; item_version: string; title: string; genre: string; estimated_minutes: number; min_words: number; competencies: number; seen: boolean }[] }
+
+/** E-53 (D-07): warn when the data disk runs low; nothing is deleted automatically. */
+function DiskBanner() {
+  const [d, setD] = useState<{ level: string; message: string | null } | null>(null);
+  useEffect(() => { get<{ level: string; message: string | null }>('/api/learning/disk').then(setD).catch(() => setD(null)); }, []);
+  if (!d?.message) return null;
+  return <p role="alert" className={d.level === 'block' ? 'error' : 'FAIL'}>{d.message}</p>;
+}
+
+interface OwnItem { item_id: string; created_at: string; genre: string; topic: string; exposure: string; state: 'awaiting_review' | 'released' | 'qc_failed' | 'withdrawn'; review_findings: { check: string; severity: string; issue: string }[] }
+const OWN_STATE: Record<OwnItem['state'], string> = { awaiting_review: 'Chờ AI rà soát (worker --learning)', released: 'Đã vào kho đề', qc_failed: 'Không đạt kiểm tra', withdrawn: 'Đã ngừng' };
+
+/** E-51 (D-05 C4, N7): import a Writing Task 2 prompt you own; it joins the bank after QC as practice-only. */
+function OwnItemsPanel({ onError, onChanged }: { onError: (e: unknown) => void; onChanged: () => void }) {
+  const [items, setItems] = useState<OwnItem[]>([]);
+  const [form, setForm] = useState({ prompt: '', genre: 'opinion', test_type: 'both', topic: '', exposure: 'never_done', source_note: '', rights_confirmed: false });
+  const load = useCallback(() => { get<{ items: OwnItem[] }>('/api/learning/own-items').then((d) => setItems(d.items)).catch(onError); }, [onError]);
+  useEffect(load, [load]);
+  const set = (k: keyof typeof form, v: string | boolean) => setForm({ ...form, [k]: v });
+  return <article className="card">
+    <details>
+      <summary><b>Thêm đề Writing Task 2 của bạn</b> ({items.length} đề đã nhập)</summary>
+      <p>Đề bạn sở hữu (sách, lớp học…) chỉ lưu trên máy này để luyện tập; không vào Git hay bản xuất công khai. Đề đã nhập là đề bạn đã thấy, nên chỉ dùng để luyện, không dùng làm bài kiểm chứng. Một lượt AI (cần đồng ý loại dữ liệu <code>learner_owned_content</code>) kiểm tra độ rõ và đúng dạng trước khi đề vào kho.</p>
+      <textarea rows={5} style={{ width: '100%' }} placeholder="Dán nguyên văn đề Task 2…" value={form.prompt} onChange={(e) => set('prompt', e.target.value)} />
+      <div className="actions">
+        <label>Dạng: <select value={form.genre} onChange={(e) => set('genre', e.target.value)}>
+          <option value="opinion">Ý kiến (agree/disagree)</option><option value="discussion">Thảo luận hai quan điểm</option>
+          <option value="advantages_disadvantages">Lợi / hại</option><option value="problem_solution">Vấn đề / giải pháp</option><option value="two_part">Hai câu hỏi</option>
+        </select></label>
+        <label>Module: <select value={form.test_type} onChange={(e) => set('test_type', e.target.value)}><option value="both">Cả hai</option><option value="academic">Academic</option><option value="general_training">General Training</option></select></label>
+        <label>Đã tiếp xúc: <select value={form.exposure} onChange={(e) => set('exposure', e.target.value)}>
+          <option value="never_done">Chưa từng làm</option><option value="done">Đã làm</option><option value="seen_sample">Đã xem bài mẫu / đáp án</option>
+        </select></label>
+      </div>
+      <div className="actions">
+        <input placeholder="Chủ đề ngắn (tùy chọn)" value={form.topic} onChange={(e) => set('topic', e.target.value)} />
+        <input style={{ flex: 1 }} placeholder="Nguồn (ví dụ: sách X, trang Y — tùy chọn)" value={form.source_note} onChange={(e) => set('source_note', e.target.value)} />
+      </div>
+      <label><input type="checkbox" checked={form.rights_confirmed} onChange={(e) => set('rights_confirmed', e.target.checked)} /> Tôi sở hữu tài liệu này và chỉ dùng cá nhân.</label>
+      <div className="actions"><button disabled={!form.prompt.trim() || !form.rights_confirmed} onClick={() => {
+        post<OwnItem>('/api/learning/own-items', { request_key: requestId(), task: 'writing_task2', ...form })
+          .then(() => { setForm({ ...form, prompt: '', topic: '', source_note: '' }); load(); onChanged(); }).catch(onError);
+      }}>Nhập đề</button></div>
+      {items.length > 0 && <ul>{items.map((i) => <li key={i.item_id}>
+        <b>{i.topic}</b> · {i.genre} · {OWN_STATE[i.state]}{i.review_findings.length ? ` — ${i.review_findings.map((f) => `${f.severity === 'error' ? 'Lỗi' : 'Lưu ý'}: ${f.issue}`).join('; ')}` : ''}
+      </li>)}</ul>}
+    </details>
+  </article>;
+}
+
+/** E-49 (D-05 C3b): practice on released AI-authored Writing Task 2 prompts. The prompt appears only after starting. */
+function WritingBankPanel({ onOpenAttempt, onError }: { onOpenAttempt: (attemptId: string) => void; onError: (e: unknown) => void }) {
+  const [bank, setBank] = useState<WritingBank | null>(null);
+  const [mode, setMode] = useState<Mode>('self_practice');
+  useEffect(() => { get<WritingBank>('/api/learning/writing-bank').then(setBank).catch(onError); }, [onError]);
+  if (!bank || bank.items.length === 0) return null;
+  return <article className="card">
+    <h3>Kho đề Writing Task 2 (AI soạn theo khung đã duyệt)</h3>
+    <p>{bank.note}</p>
+    {bank.available && <label>Chế độ:{' '}
+      <select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+        <option value="self_practice">Tự luyện (Self-practice)</option>
+        <option value="exam">Mô phỏng thi (Exam)</option>
+      </select>
+    </label>}
+    <ul>
+      {bank.items.map((i) => <li key={i.item_id}>
+        <b>{i.title}</b> — {i.genre} · {i.estimated_minutes} phút · tối thiểu {i.min_words} từ · {i.competencies} năng lực được chấm{i.seen ? ' · đã xem' : ''}{' '}
+        {bank.available && <button onClick={() => {
+          post<WorkspaceData>('/api/learning/attempts', { request_key: requestId(), item_id: i.item_id, item_version: i.item_version, mode, purpose: 'practice' })
+            .then((w) => onOpenAttempt(w.attempt.attempt_id)).catch(onError);
+        }}>Làm đề này</button>}
+      </li>)}
+    </ul>
+  </article>;
+}
+
 export function TodayScreen({ onOpenAttempt }: { onOpenAttempt: (attemptId: string) => void }) {
   const [data, setData] = useState<TodayData | null>(null);
   const [minutesInput, setMinutesInput] = useState<string>('');
@@ -581,6 +672,8 @@ export function TodayScreen({ onOpenAttempt }: { onOpenAttempt: (attemptId: stri
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  const onBankError = useCallback((e: unknown) => setError(e instanceof Error ? e.message : String(e)), []);
+  const [bankKey, setBankKey] = useState(0);
 
   if (error) return <section><p role="alert" className="error">{error}</p></section>;
   if (!data) return <section><p>Đang tải nhiệm vụ Học hôm nay…</p></section>;
@@ -612,6 +705,10 @@ export function TodayScreen({ onOpenAttempt }: { onOpenAttempt: (attemptId: stri
     </article>
 
     <ReplanPanel onChanged={() => load()} />
+
+    <DiskBanner />
+    <WritingBankPanel key={bankKey} onOpenAttempt={onOpenAttempt} onError={onBankError} />
+    <OwnItemsPanel onError={onBankError} onChanged={() => setBankKey((k) => k + 1)} />
 
     {data.in_progress.length > 0 && (
       <article className="card">

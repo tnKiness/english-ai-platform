@@ -9,6 +9,9 @@
   "min_prompt_words": 25,
   "essay_min_words": 250,
   "recommended_minutes": 40,
+  "paragraph_min_words": 100,
+  "paragraph_minutes": 15,
+  "coverage": { "min_unseen": 3, "min_families": 2, "replenish_count": 5 },
   "genres": ["opinion", "discussion", "advantages_disadvantages", "problem_solution", "two_part"],
   "usage_purposes": ["practice", "independent_verification"]
 }

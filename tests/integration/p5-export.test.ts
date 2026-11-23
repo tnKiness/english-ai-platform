@@ -93,7 +93,7 @@ it('storage report and HTTP routes are read-only and session/CSRF protected', as
   expect(u.areas.database).toBeGreaterThan(0);
   expect(u.areas.media).toBeGreaterThan(0);
   expect(u.disk.free_bytes).toBeGreaterThan(0);
-  expect(u.retention.policy).toBe('none');
+  expect(u.retention.policy).toBe('warn_block_manual_prune'); // E-53 (D-07): never deletes automatically
   expect((await app!.inject({ url: '/api/learning/storage', headers: { host: HOST } })).statusCode).toBe(401);
   expect((await app!.inject({ url: '/api/learning/storage', headers: { host: HOST, cookie: headers.cookie } })).json().total_bytes).toBeGreaterThan(0);
   const noCsrf = await app!.inject({ method: 'POST', url: '/api/learning/export', headers: { host: HOST, origin: ORIGIN, cookie: headers.cookie }, payload: {} });

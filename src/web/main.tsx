@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BuilderConsole } from './console.js';
 import { ReadingScreen } from './reading.js';
+import { ListeningScreen } from './listening.js';
 import { AudioScreen } from './audio.js';
 import { ProgressScreen, SettingsScreen, TodayScreen, WorkspaceScreen } from './learning.js';
 import './style.css';
@@ -29,7 +30,7 @@ function App() {
     {activeAttemptId ? (
       <WorkspaceScreen attemptId={activeAttemptId} onSwitchAttempt={setActiveAttemptId} onBack={() => setActiveAttemptId(null)} />
     ) : view === 'today' ? (
-      <><TodayScreen onOpenAttempt={setActiveAttemptId} /><ReadingScreen /><AudioScreen /></>
+      <><TodayScreen onOpenAttempt={setActiveAttemptId} /><ReadingScreen /><ListeningScreen /><AudioScreen /></>
     ) : view === 'progress' ? (
       <ProgressScreen />
     ) : view === 'settings' ? (

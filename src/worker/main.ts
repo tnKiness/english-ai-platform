@@ -7,12 +7,18 @@
 import { dataClassesFor, type CliProvider } from '../application/ai/subscription-guard.js';
 import { ComplaintService } from '../application/learning/complaints.js';
 import { LearningWorkflowService } from '../application/learning/writing-workflow.js';
+import { FrameworkAuthoringService } from '../application/authoring/framework-authoring.js';
+import { ItemAuthoringService } from '../application/authoring/item-authoring.js';
+import { LearnerItemService } from '../application/authoring/learner-items.js';
+import { resolve } from 'node:path';
+import { FRAMEWORK_POLICY_FILES, ITEM_POLICY_FILES, loadFrameworkPolicy, loadItemPolicy } from '../infrastructure/authoring/framework-sources.js';
+import { gatewayAuthoringExecutor } from '../infrastructure/authoring/gateway-executor.js';
 import { FakeAdapter } from '../infrastructure/ai/fake-adapter.js';
 import { gatewayFor } from '../infrastructure/ai/gateway/compose.js';
 import { GatewayAdapter } from '../infrastructure/ai/gateway/gateway.js';
 import { dataPaths } from '../infrastructure/files/paths.js';
 import { ConsoleQueries } from '../infrastructure/sqlite/console-queries.js';
-import { openStore } from '../infrastructure/sqlite/store.js';
+import { builderPipeline, openStore } from '../infrastructure/sqlite/store.js';
 import { DEFAULT_QUOTA_RECHECK_MS, quotaWaitable, runWorkerLoop, waitForProvider, type WorkerDeps } from './worker.js';
 
 const args = process.argv.slice(2);
@@ -79,7 +85,47 @@ try {
     const { processNextJob } = await import('./worker.js');
     console.log(JSON.stringify(await processNextJob(deps)));
   } else {
-    await runWorkerLoop({ ...deps, pollMs: Number(option('--poll-ms') ?? 2000), quotaRecheckMs: option('--quota-recheck-ms') ? Number(option('--quota-recheck-ms')) : undefined, signal: controller.signal });
+    // E-50 (C5, N8): --replenish keeps the AI prompt bank above the N8 thresholds, only while the queue is idle,
+    // at most once per --replenish-every-min (default 30) and within the daily cap of item authoring calls.
+    const idleTasks: (() => Promise<void>)[] = [];
+    if (flag('--learning') && ready.length > 0) {
+      // E-51 (C4): review prompts the learner imported, while idle, with the learner_owned_content consent class.
+      const frameworks = new FrameworkAuthoringService(store, loadFrameworkPolicy(), () => ({ sources: [], haystacks: [], missing: [] }));
+      const own = new LearnerItemService(store, builderPipeline(store), () => frameworks.approved(), loadItemPolicy());
+      const ownExecutor = gatewayAuthoringExecutor(store, undefined, ['learner_owned_content']);
+      let nextOwn = 0;
+      idleTasks.push(async () => {
+        if (Date.now() < nextOwn) return;
+        nextOwn = Date.now() + 2 * 60_000;
+        try {
+          const r = await own.reviewPending(ownExecutor);
+          if (r.run_id) console.log(`Rà soát đề bạn nhập (C4): ${r.reviewed} đề, vào kho ${r.released}.`);
+        } catch (e) { console.log(`Rà soát đề bạn nhập (C4) chưa chạy: ${e instanceof Error ? e.message : String(e)}`); }
+      });
+    }
+    if (flag('--replenish')) {
+      if (!flag('--learning') || ready.length === 0) throw new Error('--replenish cần --learning và một provider đã xác minh');
+      // E-52: one item bank per skill (Writing Task 2, Speaking text), each with its approved framework.
+      const banks = Object.entries(ITEM_POLICY_FILES).map(([skill, file]) => {
+        const fw = new FrameworkAuthoringService(store, loadFrameworkPolicy(resolve(FRAMEWORK_POLICY_FILES[skill]!)), () => ({ sources: [], haystacks: [], missing: [] }));
+        return { skill, items: new ItemAuthoringService(store, builderPipeline(store), () => fw.approved(), loadItemPolicy(resolve(file))) };
+      });
+      const executor = gatewayAuthoringExecutor(store);
+      const everyMs = Number(option('--replenish-every-min') ?? 30) * 60_000;
+      let next = 0;
+      idleTasks.push(async () => {
+        if (Date.now() < next) return;
+        next = Date.now() + everyMs;
+        for (const b of banks) {
+          const r = await b.items.replenish(executor);
+          if (r.ran.length || (r.skipped.length && !r.skipped.includes('FRAMEWORK_NOT_APPROVED'))) {
+            console.log(`Bổ sung kho đề ${b.skill} (C5): ${r.ran.map((x) => `${x.task_scope} lô ${x.batch_id.slice(0, 8)} phát hành ${x.released}`).join('; ') || 'không chạy'}${r.skipped.length ? ` · bỏ qua: ${r.skipped.join(', ')}` : ''}`);
+          }
+        }
+      });
+      console.log('Chế độ --replenish: tự bổ sung kho đề khi worker rảnh (N8).');
+    }
+    await runWorkerLoop({ ...deps, pollMs: Number(option('--poll-ms') ?? 2000), quotaRecheckMs: option('--quota-recheck-ms') ? Number(option('--quota-recheck-ms')) : undefined, signal: controller.signal, onIdle: idleTasks.length ? async () => { for (const t of idleTasks) await t(); } : undefined });
   }
 } catch (error) {
   if (!(error instanceof Error && error.message === 'GATEWAY_BLOCKED')) { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; }

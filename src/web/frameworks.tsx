@@ -29,11 +29,42 @@ interface BatchDetail {
   items: ItemStatus[]; reviews: { run_id: string; provider: string; result: { items: { item_key: string; verdict: string; findings: { check: string; severity: string; issue: string }[] }[] } }[];
   calls_today: number; daily_cap: number;
 }
+interface Sample { sample_id: string; item_id: string; package_id: string; drawn_at: string; decision: 'keep' | 'revoke' | null; note: string | null; task_scope: string; genre: string; topic: string; prompt: string; instruction: string; release_state: string | null }
+
+/** E-50 (D-05 N6): random sample review of automatically released prompts. Drawing = seeing the prompt (exposure). */
+function SamplesPanel({ onError, q }: { onError: (e: unknown) => void; q: string }) {
+  const [samples, setSamples] = useState<Sample[]>([]);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const load = useCallback(() => { get<{ samples: Sample[] }>(`/api/console/item-samples${q}`).then((d) => setSamples(d.samples)).catch(onError); }, [onError, q]);
+  useEffect(load, [load]);
+  const decide = (id: string, decision: 'keep' | 'revoke') => post<Sample>(`/api/console/item-samples/${encodeURIComponent(id)}/decision${q}`, { decision, note: notes[id] ?? '' }).then(load).catch(onError);
+  return <section className="card">
+    <h3>Duyệt mẫu ngẫu nhiên đề đã tự phát hành (N6)</h3>
+    <p>Rút ngẫu nhiên đề chưa từng được rút để đọc và quyết định giữ hay thu hồi. Rút đề nghĩa là bạn <b>đã xem đề</b>: lần xem được ghi tiếp xúc, và đề đó không còn được dùng làm bài kiểm chứng độc lập cho bạn.</p>
+    <button onClick={() => { post<{ samples: Sample[] }>(`/api/console/item-samples/draw${q}`, { count: 2 }).then(load).catch(onError); }}>Rút 2 đề</button>
+    {samples.length === 0 ? <p>Chưa rút mẫu nào.</p> : samples.map((x) => <div className="card" key={x.sample_id}>
+      <p><b>{GENRE[x.genre] ?? x.genre}</b>{x.task_scope === 'paragraph' ? ' · đề đoạn (7A)' : ''} · {x.topic} · <span className="mono">{x.package_id}</span> · {RELEASE[x.release_state ?? ''] ?? x.release_state}</p>
+      <p>{x.prompt}</p>
+      <p><i>{x.instruction}</i></p>
+      {x.decision ? <p>Đã quyết định: <b>{x.decision === 'keep' ? 'giữ' : 'thu hồi'}</b>{x.note ? ` — ${x.note}` : ''}</p> : <div className="actions">
+        <input style={{ flex: 1 }} placeholder="Ghi chú (bắt buộc khi thu hồi)" value={notes[x.sample_id] ?? ''} onChange={(e) => setNotes({ ...notes, [x.sample_id]: e.target.value })} />
+        <button onClick={() => { void decide(x.sample_id, 'keep'); }}>Giữ</button>
+        <button onClick={() => { void decide(x.sample_id, 'revoke'); }}>Thu hồi</button>
+      </div>}
+    </div>)}
+  </section>;
+}
+
 const GENRE: Record<string, string> = { opinion: 'Ý kiến', discussion: 'Thảo luận hai quan điểm', advantages_disadvantages: 'Lợi/hại', problem_solution: 'Vấn đề/giải pháp', two_part: 'Hai câu hỏi' };
 const RELEASE: Record<string, string> = { active: 'Đã phát hành', draft: 'Chưa đạt QC (nháp)', suspended: 'Tạm ngừng', retired: 'Đã ngừng' };
 
 const STATE: Record<string, string> = { DRAFT: 'Bản nháp', APPROVED: 'Đã duyệt', REJECTED: 'Đã loại', SUPERSEDED: 'Đã thay thế' };
-const CRITERIA: [string, string][] = [['task_response', 'Task Response'], ['coherence_cohesion', 'Coherence & Cohesion'], ['lexical_resource', 'Lexical Resource'], ['grammatical_range_accuracy', 'Grammatical Range & Accuracy']];
+const CRITERIA_BY_SKILL: Record<string, [string, string][]> = {
+  writing: [['task_response', 'Task Response'], ['coherence_cohesion', 'Coherence & Cohesion'], ['lexical_resource', 'Lexical Resource'], ['grammatical_range_accuracy', 'Grammatical Range & Accuracy']],
+  speaking: [['fluency_coherence', 'Fluency & Coherence (phần thể hiện trên văn bản)'], ['lexical_resource', 'Lexical Resource'], ['grammatical_range_accuracy', 'Grammatical Range & Accuracy']],
+  listening: [['main_ideas', 'Ý chính'], ['detail', 'Thông tin chi tiết'], ['opinion_attitude', 'Quan điểm, thái độ'], ['purpose', 'Mục đích phát ngôn'], ['development', 'Theo dõi phát triển ý']],
+};
+const SKILL_LABEL: Record<string, string> = { writing: 'Writing Task 2', speaking: 'Speaking (dạng văn bản, E-43)', listening: 'Listening (E-54)' };
 const EDGE: Record<string, string> = { component_of: 'thành phần của', supports: 'hỗ trợ cho', prerequisite: 'tiên quyết của', transferable_to: 'chuyển giao sang', confusable_with: 'dễ nhầm với' };
 
 const List = ({ title, items }: { title: string; items: string[] }) => items.length === 0 ? null : <><b>{title}</b><ul>{items.map((x, i) => <li key={i}>{x}</li>)}</ul></>;
@@ -46,29 +77,34 @@ export function FrameworksPanel({ onError }: { onError: (e: unknown) => void }) 
   const [detail, setDetail] = useState<Detail | null>(null);
   const [note, setNote] = useState('');
   const [status, setStatus] = useState('');
+  const [skill, setSkill] = useState('writing');
+  const q = `?skill=${encodeURIComponent(skill)}`;
+  const CRITERIA = CRITERIA_BY_SKILL[skill] ?? CRITERIA_BY_SKILL.writing!;
   const [batches, setBatches] = useState<{ batches: Batch[]; calls_today: number }>({ batches: [], calls_today: 0 });
   const [batch, setBatch] = useState<BatchDetail | null>(null);
 
   const load = useCallback(() => {
-    get<{ rows: Row[]; runs: Run[] }>('/api/console/frameworks').then((d) => { setRows(d.rows); setRuns(d.runs); }).catch(onError);
-    get<{ batches: Batch[]; calls_today: number }>('/api/console/item-batches').then(setBatches).catch(onError);
-  }, [onError]);
+    get<{ rows: Row[]; runs: Run[] }>(`/api/console/frameworks${q}`).then((d) => { setRows(d.rows); setRuns(d.runs); }).catch(onError);
+    // E-54: Listening parts have their own batches (no N6 sample panel yet).
+    get<{ batches: Batch[]; calls_today: number }>(skill === 'listening' ? '/api/console/listening-batches' : `/api/console/item-batches${q}`).then(setBatches).catch(onError);
+  }, [onError, q]);
   useEffect(load, [load]);
-  const open = (version: string) => get<Detail>(`/api/console/frameworks/${encodeURIComponent(version)}`).then((d) => { setDetail(d); setNote(''); setStatus(''); }).catch(onError);
+  const open = (version: string) => get<Detail>(`/api/console/frameworks/${encodeURIComponent(version)}${q}`).then((d) => { setDetail(d); setNote(''); setStatus(''); }).catch(onError);
   const decide = (decision: 'approve' | 'reject') => {
     if (!detail) return;
-    post<Row>(`/api/console/frameworks/${encodeURIComponent(detail.row.version)}/decision`, { decision, note })
+    post<Row>(`/api/console/frameworks/${encodeURIComponent(detail.row.version)}/decision${q}`, { decision, note })
       .then((r) => { setStatus(`${r.version}: ${STATE[r.state] ?? r.state}.`); load(); return open(r.version); }).catch(onError);
   };
 
-  const openBatch = (id: string) => get<BatchDetail>(`/api/console/item-batches/${encodeURIComponent(id)}`).then(setBatch).catch(onError);
+  const openBatch = (id: string) => get<BatchDetail>(`/api/console/item-batches/${encodeURIComponent(id)}${q}`).then(setBatch).catch(onError);
   const doc = detail?.document;
   const sourceUrl = (ref: string) => doc?.sources.find((s) => s.source_ref === ref);
   return <div>
     <section className="card">
-      <h3>Khung năng lực Writing Task 2 (D-05 C2)</h3>
+      <div className="actions"><h3>Khung năng lực {SKILL_LABEL[skill] ?? skill} (D-05 C2)</h3>
+        <select value={skill} onChange={(e) => { setSkill(e.target.value); setDetail(null); }}>{Object.entries(SKILL_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
       <p>AI soạn danh mục năng lực và rubric từ các nguồn bạn đã duyệt; một lượt AI khác rà soát độc lập; ứng dụng kiểm tra tự động (mỗi trích dẫn phải có nguyên văn trong nguồn). Bạn đọc và quyết định. Chạy AI bằng:</p>
-      <pre className="mono">npm.cmd run author -- framework</pre>
+      <pre className="mono">npm.cmd run author -- framework{skill === 'writing' ? '' : ` --skill ${skill}`}</pre>
       <p>Phần "chuẩn gốc" của rubric (mô tả từng Band) được chép từ bảng band descriptors chính thức, không do AI viết. Khung không đặt ngưỡng Band; báo Band vẫn tắt (N9).</p>
       {rows.length === 0 ? <p>Chưa có bản nháp nào.</p> : <table><thead><tr><th>Phiên bản</th><th>Trạng thái</th><th>Kiểm tra tự động</th><th>AI rà soát</th><th>Tạo lúc</th><th></th></tr></thead><tbody>
         {rows.map((r) => <tr key={r.version}><td className="mono">{r.version}</td><td>{STATE[r.state] ?? r.state}</td><td>{r.check_errors} lỗi · {r.check_warnings} cảnh báo</td>
@@ -79,15 +115,17 @@ export function FrameworksPanel({ onError }: { onError: (e: unknown) => void }) 
     </section>
 
     <section className="card">
-      <h3>Đề Writing Task 2 do AI soạn (D-05 C3)</h3>
+      <h3>Đề {SKILL_LABEL[skill] ?? skill} do AI soạn (D-05 C3)</h3>
       <p>AI soạn đề theo khung <b>đã duyệt</b>; ứng dụng kiểm tra (năng lực có trong khung, không ép cấu trúc, không gợi ý sẵn, không trùng gần với đề đã có), đóng gói, chạy QC1–3; một lượt AI khác rà soát (QC2/QC3 ngữ nghĩa và QC4). Đề đạt đủ QC1–QC4 được <b>tự phát hành</b> cho luyện tập và kiểm chứng (N6). Thu hồi ở tab Gói tri thức. Chạy:</p>
-      <pre className="mono">npm.cmd run author -- items</pre>
+      <pre className="mono">{skill === 'listening' ? 'npm.cmd run author -- listening' : `npm.cmd run author -- items${skill === 'writing' ? '' : ` --skill ${skill}`}`}</pre>
       <p>Lượt gọi AI sinh đề hôm nay: {batches.calls_today} (trần theo N8). Độ khó chỉ là <i>ước tính</i>.</p>
       {batches.batches.length === 0 ? <p>Chưa có lô đề nào.</p> : <table><thead><tr><th>Lô</th><th>Khung</th><th>Đề</th><th>Phát hành</th><th>Nháp</th><th>Bị loại</th><th>Tạo lúc</th><th></th></tr></thead><tbody>
         {batches.batches.map((b) => <tr key={b.batch_id}><td className="mono">{b.batch_id.slice(0, 8)}</td><td>{b.framework_version}</td><td>{b.items}</td><td>{b.active}</td><td>{b.draft}</td><td>{b.rejected}</td>
-          <td>{new Date(b.created_at).toLocaleString('vi-VN')}</td><td><button onClick={() => { void openBatch(b.batch_id); }}>Xem</button></td></tr>)}
+          <td>{new Date(b.created_at).toLocaleString('vi-VN')}</td><td>{skill !== 'listening' && <button onClick={() => { void openBatch(b.batch_id); }}>Xem</button>}</td></tr>)}
       </tbody></table>}
     </section>
+
+    {skill !== 'listening' && <SamplesPanel key={q} onError={onError} q={q} />}
 
     {batch && <section className="card">
       <div className="actions"><h3>Lô {batch.batch.batch_id.slice(0, 8)} — khung {batch.batch.framework.version} · {batch.batch.author.provider}{batch.batch.author.model ? ` (${batch.batch.author.model})` : ''}</h3><button onClick={() => setBatch(null)}>Đóng</button></div>

@@ -29,6 +29,10 @@ npm.cmd run sources -- crawl       # quét trang nguồn IELTS (miền cho phép
 npm.cmd run tts -- status          # TTS cục bộ (Piper, offline) cho audio Listening; `say "văn bản"` ghi WAV vào kho media
 npm.cmd run author -- framework    # AI soạn khung năng lực Writing Task 2 từ nguồn đã duyệt; duyệt ở Builder & QC → Khung năng lực
 npm.cmd run author -- items        # AI soạn đề Writing Task 2 theo khung đã duyệt; đề đạt QC1–QC4 tự phát hành (C3)
+npm.cmd run author -- coverage     # độ phủ kho đề theo N8 (không gọi AI); `replenish` soạn phần thiếu (C5)
+npm.cmd run author -- listening    # AI soạn Part Listening, Piper đọc thành audio, giải mù trên transcript trước khi phát hành
+npm.cmd run calibrate -- run       # đối chiếu định tính cách AI chấm với bài mẫu có điểm của giám khảo (C6, không tính Band)
+npm.cmd run worker -- --learning --replenish   # chấm bài và tự bổ sung kho đề khi hàng đợi rảnh
 ```
 
 ## Kiểm tra

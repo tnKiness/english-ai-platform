@@ -954,3 +954,131 @@ P0–P3 đã hoàn tất phần code và nghiệm thu trên gói synthetic (D-01
   - `progressView` dùng `competencyDefs()`.
   - API `GET /api/learning/writing-bank` (chỉ metadata, có cờ đã xem) và thẻ kho đề trong TodayScreen.
   - Test e49, rồi cập nhật hướng dẫn, DECISIONS E-49 và D05.
+
+### 20/11/2026 — C3b phần 1 xong: kho đề Writing Task 2 do AI soạn trong màn học (E-49)
+- **Đã làm:**
+  - `writing-catalog.ts`;
+  - `LearningWorkflowService`: `itemMeta`, `competencyDefs`, `loopCompetency`, `retargetLoop`, `writingBank`, chặn Bước 6/7A với đề AI;
+  - API `GET /api/learning/writing-bank`; thẻ *Kho đề Writing Task 2* ở Học hôm nay;
+  - hướng dẫn §4.2, DECISIONS E-49, D05.
+- **Kiểm tra:**
+  - `tests/integration/e49-writing-bank.test.ts`: 1 ca đầu–cuối, adapter giả lập qua learning worker.
+  - `npm.cmd run check`: 366/366 test (51 file), build OK.
+  - DB thật (đọc, không ghi): kho thấy 3 đề đã phát hành, mỗi đề 12 năng lực đo, chưa xem; màn Tiến độ có 23 năng lực (3 synthetic + 20 của khung v3).
+- **Chưa kiểm:** chưa làm bài thật với provider thật qua giao diện. Cần chạy `STUDY_ENGLISH_LEARNING_AI=real` với dev:server và `npm.cmd run worker -- --learning`.
+- **Còn lại của C3:**
+  - Bước 6 với đề AI (concept check theo khung);
+  - 7A/7B/9 bằng đề AI chưa lộ;
+  - màn duyệt mẫu ngẫu nhiên N6;
+  - đề đoạn ngắn 7A;
+  - C5: tự bổ sung đề theo ngưỡng N8.
+
+### 20/11/2026 — Hoàn tất C3 với đề AI và C5 (E-50)
+- **Nguồn:** người dùng "làm xong hết toàn bộ đã, rồi sẽ bắt đầu tối ưu giao diện, rồi mới đến bước tôi làm test đề".
+- **Đã làm:**
+  - **Đề đoạn 7A** (`items --paragraph [--focus]`): nhắm đúng một năng lực. Kho đề chỉ hiện bài luận; đề đoạn giữ chưa xem cho 7A.
+  - **Bước 6 với đề AI:** giải thích nấc 3 của chẩn đoán thật; người học tự đối chiếu với ý chính, không so khớp chữ.
+  - **7A/7B/9 bằng đề AI chưa xem** đo đúng năng lực. Hết đề thì mở review `coverage_gap` kèm lệnh soạn bù.
+  - **Duyệt mẫu ngẫu nhiên N6:** migration `0017_item_sample_reviews`, 3 route, mục UI. Rút đề thì ghi tiếp xúc trước; thu hồi đi qua pipeline.
+  - **C5:** `author -- coverage | replenish`; worker `--learning --replenish` (hook `onIdle`).
+  - Tài liệu: DECISIONS E-50, D05, hướng dẫn §4.2/§4.3/§6, hai README.
+- **Kiểm tra:**
+  - `e50-ai-verification-chain` 5/5; `e49` cập nhật.
+  - `npm.cmd run check`: 371/371 test (52 file), build OK.
+  - DB thật lên bản 17.
+- **Chạy thật** `npm.cmd run author -- replenish` (claude-code; soạn 25 giây, rà soát 22 giây): ô đề đoạn thiếu (0/3), nên soạn một lô 5 đề đoạn.
+  - **4 đề phát hành**: opinion, discussion, advantages_disadvantages, problem_solution.
+  - **1 đề giữ nháp:** QC4 FAIL `genre_match`. Đề khai `two_part` nhưng chỉ có một câu hỏi; lượt rà soát độc lập bắt được lỗi.
+  - Cảnh báo (không chặn): 2 × chủ đề phổ biến; 1 × đề gợi sẵn nguyên nhân (`no_model_answer_or_ideas`); 1 × cụm từ "goes off" có thể khó hiểu.
+  - Độ phủ sau khi chạy: đề đoạn 4 chưa xem / 4 họ; bài luận 3 / 3 họ. Cả hai ô **đủ** theo N8.
+  - Hôm nay đã dùng 5/10 lượt gọi AI sinh đề.
+- **Chưa kiểm:** chưa có ai làm bài thật với provider thật qua giao diện (người dùng sẽ thử sau bước tối ưu giao diện). Test chuỗi kiểm chứng dùng adapter giả lập.
+- **Còn lại theo kế hoạch D-05:**
+  - C4: nhập đề của người dùng (`learner_owned_content`);
+  - C6: bộ đối chứng, nhập bài có điểm;
+  - đề Listening (kịch bản, audio Piper, QC4) và màn Listening;
+  - khung Speaking dạng văn bản;
+  - D-07.
+  - Sau đó tối ưu giao diện theo yêu cầu người dùng.
+
+### 20/11/2026 — C4 nhập đề của người học (E-51) và Speaking dạng văn bản (E-52)
+- **Nguồn:** người dùng "Làm C4 và phần còn lại".
+- **C4 — đã làm:**
+  - Loại dữ liệu `learner_owned_content` (migration `0018_learner_owned_consent`);
+  - `LearnerItemService`: nhập đề Writing Task 2 không gọi AI. Có khai quyền, ghi Source Registry, đóng gói `learner_owned`, QC1–3, ghi tiếp xúc `prompt` (và `sample_or_variant` nếu khai đã xem bài mẫu).
+  - Rà soát AI do worker `--learning` chạy khi rảnh, hoặc `author -- own-review`; bỏ qua `originality`.
+  - Đề vào kho với nhãn "(đề của bạn)", chỉ dùng luyện tập.
+  - API `/api/learning/own-items`; mục UI ở Học hôm nay.
+- **Speaking — đã làm:**
+  - Khung `ielts-speaking-text` (3 tiêu chí, `spk.`, bỏ Pronunciation);
+  - đề Part 1–3 qua đường soạn đề chung (`--skill speaking`); kho đề và chấm theo khung Speaking với `task.skill = speaking_text`;
+  - executor ghi chi tiết lỗi hợp đồng.
+- **Kiểm tra:**
+  - `e51` 4/4, `e52` 2/2.
+  - `npm.cmd run check`: 377/377 test (54 file), build OK.
+- **Chạy thật khung Speaking:**
+  - Hai lần đầu `INVALID_SCHEMA`. Chi tiết lỗi mới cho thấy mẫu mã `observation_guide` trong hợp đồng còn gắn `wt2`; đã sửa.
+  - Lần ba: **v1** 16 năng lực, kiểm tra tự động 0 lỗi / 1 cảnh báo (GRA 6 năng lực).
+  - Rà soát: **cần sửa, 2 lỗi / 7 cảnh báo**. `spk.lr.paraphrase` mở rộng định nghĩa paraphrase quá nguồn; `spk.gra.error_density` cài ngầm ngưỡng mật độ lỗi kiểu Band.
+  - Đang soạn lại v2 theo góp ý.
+- **Việc của người dùng:**
+  - cấp `npm.cmd run ai -- consent claude-code learner_owned_content grant` để rà soát/chấm đề tự nhập;
+  - duyệt khung Speaking khi có bản đạt.
+
+### 20/11/2026 — Khung Speaking v2 đạt rà soát; D-07 chốt và triển khai (E-53)
+- **Khung Speaking:** `author -- framework --skill speaking --revise v1` cho ra **v2**: 15 năng lực, kiểm tra tự động 0 lỗi / 0 cảnh báo, AI rà soát **đạt** (0 lỗi, 6 cảnh báo). Chờ người dùng duyệt ở tab Khung năng lực (chọn Speaking). Sau đó mới soạn đề Speaking thật (`author -- items --skill speaking`).
+- **D-07** (người dùng chốt "Cảnh báo + dọn bản sao nguồn"):
+  - cảnh báo khi còn dưới 5 GB;
+  - dưới 2 GB thì chặn tải nguồn/audio mới và TTS (crawler dừng, giữ hàng đợi);
+  - `sources -- prune-copies [--apply]` do người dùng tự chạy, chỉ xóa bản sao của trang đã loại và file mồ côi; không bao giờ tự xóa;
+  - thanh cảnh báo ở Học hôm nay; `GET /api/learning/disk`.
+  - Chạy thử thật (không xóa): 3.902 file / 423,7 MB có thể dọn; ổ còn 60,3 GB.
+- **Kiểm tra:** `e53-disk-guard` 3/3; `p5-export` cập nhật; `npm.cmd run check`: 380/380 test (55 file), build OK.
+- **Còn lại:**
+  - **Listening:** cần khung năng lực Listening (không có band descriptors như Writing/Speaking; chấm theo số câu đúng), đề soạn bằng AI (kịch bản + câu hỏi + đáp án), audio Piper, QC4 giải mù trên transcript, màn làm bài và chấm.
+  - **C6:** bộ đối chứng từ bài mẫu có điểm và nhận xét giám khảo trong các PDF chính thức đã duyệt; đo độ lệch chấm. Báo Band vẫn tắt cho tới khi đủ.
+
+### 23/11/2026 — Listening (E-54), C6 đối chiếu định tính (E-55)
+- **Listening — đã làm:**
+  - Khung `ielts-listening` (`lis.`, 5 tiêu chí theo trang định dạng chính thức, không có bảng band). Đã thêm 6 trang hướng dẫn dạng câu hỏi của IDP làm nguồn, vì hai trang định dạng chỉ mô tả thủ tục.
+  - Hợp đồng `listening_item_set_result`; task `content.listening_author` và `content.listening_solve`; migration `0019_listening`.
+  - Kiểm tra xác định trên transcript; ghép WAV; `ListeningAuthoringService`:
+    - Piper đọc từng dòng theo vai;
+    - gói có `stimulus.text` = transcript và `stimulus.media` = audio;
+    - QC4 = giải mù trên transcript so với khóa; QC2/QC3 = rà soát; tự phát hành.
+  - `ListeningWorkflow` và màn `web/listening.tsx`: transcript và khóa chỉ đến trình duyệt sau khi nộp; chấm xác định; không kết luận năng lực.
+  - CLI `author -- listening | listening-review | listening-list`; API `/api/learning/listening*`, `/api/console/listening-batches`.
+- **Sửa lỗi:** `author -- framework --skill listening` lỗi `paths[0] undefined`, vì CLI luôn nạp chính sách đề theo `--skill` mà Listening dùng chính sách riêng. Đã sửa bằng cách dùng chính sách Writing khi không có. Không có test tự động cho dòng CLI này.
+- **Khung Listening chạy thật:**
+  - v1: 11 năng lực, rà soát 3 lỗi. v2: 6 lỗi; câu trích từ hai trang định dạng chỉ là mô tả thủ tục.
+  - v3 (sau khi thêm nguồn IDP): 15 năng lực, kiểm tra 0/0, rà soát 1 lỗi (một câu trích không hỗ trợ "mục đích phát ngôn").
+  - Đang soạn lại v4.
+- **C6** (người dùng chốt "Nhập mẫu, đo định tính"):
+  - Tách xác định 6 bài mẫu chính thức (3 Task 2); `calibrate -- samples | run`.
+  - Chạy thật 3 lượt `writing.assess` với khung Writing v3. Đạt/chưa đạt/chưa đủ kết luận theo TR · CC · LR · GRA:
+    - GT T2 (giám khảo Band 5): 0/3/0 · 0/4/0 · 0/3/0 · 0/2/0;
+    - Academic T2 (Band 5.5): 2/2/1 · 3/0/0 · 0/2/0 · 2/0/0;
+    - Academic T2 (Band 7.5): 2/1/1 · 3/0/0 · 3/0/0 · 2/0/0.
+  - Cùng chiều với điểm giám khảo về mặt định tính; không có ngưỡng, không ước lượng Band, báo Band vẫn tắt.
+  - Báo cáo: `var/reports/calibration-2026-11-23T02-50-03-721Z.md`.
+- **Kiểm tra:**
+  - `e54-listening` 6/6, `e55-calibration` 3/3.
+  - `npm.cmd run check`: 389/389 test (57 file), build OK. DB thật lên bản 19.
+- **Còn mở:**
+  - người dùng duyệt khung Speaking v2 và khung Listening (khi có bản đạt), rồi soạn đề thật;
+  - đo định lượng/báo Band cần 20–30 bài Task 2 có điểm và chính sách ánh xạ;
+  - Listening: dạng bản đồ/sơ đồ/nối, bổ sung tự động kho Listening, duyệt mẫu N6 cho Listening.
+- **Khung Listening v4** (soạn lại từ v3): rà soát **đạt**, 0 lỗi / 7 cảnh báo. Kiểm tra tự động có cảnh báo `FW_COVERAGE development` (5 năng lực; khuyến nghị 2–4). Chờ người dùng duyệt.
+
+### 23/11/2026 — Duyệt khung Speaking v2 / Listening v4; soạn đề Speaking và Listening thật
+- **Duyệt:** Console không chạy (cổng 4317/5173 trống), nên lượt duyệt không tới ứng dụng. Theo lựa chọn của người dùng ("Ghi duyệt cả hai"), ghi `APPROVED` qua `FrameworkAuthoringService.decide` (vẫn kiểm đủ điều kiện), có ghi chú xác nhận qua chat: `ielts-speaking-text v2`, `ielts-listening v4`. Script tạm trong `var/` đã xóa.
+- **Speaking**, `author -- items --skill speaking`:
+  - Part 2/3, 3 đề: **2 phát hành** ("Repairing something yourself", "Public spaces in cities"); 1 đề Part 2 ("Advice from an older relative") giữ nháp vì QC4 FAIL.
+  - Part 1 (`--paragraph`), 2 đề: **2 phát hành**.
+- **Listening**, `author -- listening --count 2`:
+  - Hai lần đầu `INVALID_SCHEMA` (AI thêm trường thừa ở cấp Part). Đã sửa: thông báo lỗi hợp đồng giờ ghi tên trường thừa, chỉ tên khóa của schema, không giá trị.
+  - Lần ba: **2/2 Part phát hành**: Part 1 "Booking a room at a community centre" (9 câu, khoảng 2 phút audio), Part 4 "Green roofs lecture" (8 câu, khoảng 3 phút). Piper đọc giọng theo vai; giải mù trên transcript khớp khóa.
+  - Dùng 5 lượt gọi `lis-ai-items` hôm nay (2 lượt lỗi + 3 lượt).
+- **Sửa nhỏ:** CLI `items --skill speaking` in sai "đề Writing Task 2".
+- **Kiểm tra:** `npm.cmd run check`: 389/389 test (57 file), build OK.
+- **Chưa kiểm:** chưa ai làm bài Speaking/Listening thật qua giao diện; người dùng sẽ thử sau bước tối ưu giao diện.

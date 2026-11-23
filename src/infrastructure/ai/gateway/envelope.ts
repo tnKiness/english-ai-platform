@@ -2,7 +2,7 @@
 // inside is parsed and checked against the task's contract. Envelope layouts are NOT assumed: a layout must be
 // recorded from an observed run (D-01 output contract) before it is used; unverified layouts refuse to parse.
 import type { AdapterResult, ProviderError, TaskType } from '../../../application/ai/provider-adapter.js';
-import { validateAiResult } from '../result-contracts.js';
+import { validateAiResult, aiResultErrors } from '../result-contracts.js';
 import { classifyRunFailure, resetTimeIn } from './failover.js';
 import { redact } from './redaction.js';
 
@@ -75,6 +75,6 @@ export function parseEnvelope(stdout: string, exitCode: number | null, spec: Env
     body = JSON.parse(fenced ? fenced[1]! : inner.trim());
   } catch { return { ok: false, error: 'INVALID_SCHEMA', detail: 'inner result is not JSON' }; }
   if (typeof body !== 'object' || body === null || (body as { schema_version?: unknown }).schema_version !== '1') return { ok: false, error: 'INVALID_SCHEMA', detail: 'schema_version mismatch' };
-  if (!validateAiResult(taskType, body)) return { ok: false, error: 'INVALID_SCHEMA', detail: 'contract violation' };
+  if (!validateAiResult(taskType, body)) { const why = aiResultErrors(taskType, body); return { ok: false, error: 'INVALID_SCHEMA', detail: `contract violation${why.length ? `: ${why.join('; ')}` : ''}` }; }
   return { ok: true, result: body as Extract<AdapterResult, { ok: true }>['result'] };
 }

@@ -116,6 +116,25 @@ Nhập Band mục tiêu tổng và từng kỹ năng, loại thi (Academic/Gener
 - **Quỹ thời gian phiên này** và **chế độ làm bài**: *Có hướng dẫn*, *Tự luyện*, *Mô phỏng thi* (ẩn mọi hỗ trợ). Bấm *Cập nhật danh sách nhiệm vụ* để lọc nhiệm vụ vừa với số phút.
 - **Nhiệm vụ đề xuất** kèm lý do và nhãn mục đích: bài học/luyện, kiểm chứng 7A, tổng hợp 7B, ôn giãn cách Bước 9. Danh sách được xếp theo **điểm ưu tiên D-02** (hiện ngay dưới mỗi nhiệm vụ): ảnh hưởng + độ chắc chắn + tần suất lỗi + liên quan mục tiêu (mỗi phần 0–3) + thời hạn (+3 đến hạn hôm nay, +5 quá hạn) + đã chờ (+1 mỗi 3 ngày, tối đa +3). Nhiệm vụ kiểm chứng bị bỏ qua 3 buổi học hoặc quá hạn hơn 7 ngày được **giữ chỗ đầu danh sách** (mỗi buổi một nhiệm vụ).
 - **Đề xuất sắp xếp lại lịch** (chỉ hiện khi cần): khi có nhiệm vụ trễ quá 1 ngày và tổng phút (trễ + đến hạn 3 ngày tới) vượt quỹ 3 ngày tới, hệ thống đề xuất dời nhiệm vụ sang các ngày tới, không ngày nào vượt quỹ, tối đa 1 bài kiểm chứng/ngày, không cắt nhỏ bài kiểm chứng. Nếu 14 ngày qua bạn học dưới 60 % quỹ (không tính ngày nghỉ có kế hoạch), đề xuất kèm gợi ý thu hẹp phạm vi hoặc dời mốc thi. **Không có gì thay đổi cho tới khi bạn bấm** *Áp dụng lịch mới* hoặc *Giữ nguyên lịch*; đề xuất hết hạn sau 48 giờ và tối đa 1 đề xuất mỗi ngày.
+- **Kho đề Writing Task 2 (AI soạn theo khung đã duyệt)** (E-49, D-05 C3b): danh sách đề đã qua QC1–QC4.
+  - Mỗi đề hiện tiêu đề, dạng, thời gian, số từ tối thiểu, số năng lực được chấm và nhãn *đã xem*. Nguyên văn đề chỉ hiện khi bạn bấm *Làm đề này*; lúc đó việc xem được ghi tiếp xúc.
+  - Chọn chế độ *Tự luyện* hoặc *Mô phỏng thi*. Bài làm là **luyện tập**, được **chấm thật** theo các năng lực của khung đã duyệt, và bằng chứng được tính vào hồ sơ (mục Tiến độ).
+  - Chỉ làm được khi app chạy chế độ chấm thật (`STUDY_ENGLISH_LEARNING_AI=real` + `npm.cmd run worker -- --learning`); ở chế độ synthetic, kho chỉ hiện danh sách.
+  - Sau khi chấm, vòng học tập trung vào vấn đề ưu tiên đầu tiên mà AI đánh giá *chưa đạt*: chẩn đoán, gợi mở theo nấc, tự sửa, rồi Bước 6 và chuỗi kiểm chứng 7A → 7B → Bước 9 bằng đề AI chưa xem (mục 4.3).
+  - Kho chỉ có **bài luận**. Đề đoạn ngắn được giữ chưa xem để dùng cho 7A.
+- **Thêm đề Writing Task 2 của bạn** (E-51, D-05 C4): mở mục này dưới kho đề.
+  1. Dán nguyên văn đề, chọn dạng, module, mức đã tiếp xúc (*chưa từng làm* / *đã làm* / *đã xem bài mẫu hoặc đáp án*); ghi nguồn nếu muốn. Tích *Tôi sở hữu tài liệu này và chỉ dùng cá nhân*, rồi bấm *Nhập đề*.
+  2. App ghi quyền bạn khai vào sổ nguồn, đóng gói đề (`learner_owned`), chạy QC1–3. App cũng ghi tiếp xúc: bạn đã thấy đề, và thêm mức *đã xem bài mẫu* nếu bạn khai.
+  3. Một lượt AI kiểm tra đề rõ ràng và đúng dạng bạn chọn. Lượt này không xét "đề đã xuất bản", vì đề của bạn có thể là đề sách. Worker `--learning` tự chạy lượt này khi rảnh; hoặc chạy tay `npm.cmd run author -- own-review`. Xem trạng thái: `npm.cmd run author -- own-list`.
+  4. Đạt thì đề vào kho với nhãn *(đề của bạn)*. Bài làm trên đề này là **luyện tập**, được chấm thật theo khung và tính vào hồ sơ.
+  - Đề đã nhập là đề bạn **đã thấy**: nó không bao giờ được dùng làm bài kiểm chứng 7A/7B/9 và không tính vào độ phủ kho đề. Đã xem bài mẫu thì kết quả không được coi là vận dụng độc lập.
+  - Hiện chỉ nhập được **Writing Task 2**. Task 1 (cả biểu đồ) và Speaking bị từ chối (`TASK_NOT_SUPPORTED`) vì chưa có khung năng lực để chấm.
+  - Đề chỉ lưu trong `var/`: không vào Git, không vào bản xuất công khai.
+- **Cảnh báo ổ đĩa** (D-07, E-53): ổ chứa dữ liệu còn dưới 5 GB thì có dòng cảnh báo ở đầu kho đề. Dưới 2 GB thì app tạm dừng tải nguồn/audio mới và tạo audio TTS; viết, nộp, chấm bài vẫn chạy.
+  - App không bao giờ tự xóa. Dọn bản sao nguồn không dùng (trang đã loại, file mồ côi): `npm.cmd run sources -- prune-copies` để xem, thêm `--apply` để xóa. Nguồn đã duyệt, bài làm, audio của bạn và lịch sử không bị đụng tới.
+- **Listening** (E-54), dưới phần Reading: danh sách Part Listening AI soạn đã phát hành. Chọn *Tự luyện* (nghe lại được) hoặc *Mô phỏng thi* (chỉ một lần *Bắt đầu nghe*, không tua), rồi *Làm Part này*.
+  - Trả lời rồi *Nộp bài*. App chấm ngay theo khóa đã được kiểm bằng giải mù, cho phép khác hoa/thường, dấu cách và dấu câu cuối. Mỗi lượt chấm một lần; muốn làm lại thì mở lượt mới (bài đã xem không còn "mới").
+  - Sau khi nộp mới hiện đáp án, câu trích trong transcript và toàn bộ transcript. Kết quả là số câu đúng; chưa kết luận năng lực Listening và không báo Band.
 - Phía dưới cùng màn: **Reading** và **Luyện nói (audio mẫu)**.
 
 ### 4.3. Workspace Writing (vòng học)
@@ -124,7 +143,14 @@ Nhập Band mục tiêu tổng và từng kỹ năng, loại thi (Academic/Gener
 3. **Nộp bài** → nhận chẩn đoán tối đa 1–2 lỗi trọng tâm.
 4. **Tự sửa (Bước 5)**: mở gợi mở theo nấc 1 → 2 → 3 (mỗi nấc ghi lại mức hỗ trợ đã dùng), hoặc chọn *Để mình thử thêm* / *Giải thích trực tiếp*. Gửi **bản sửa** mới được chấm lại.
 5. **Bước 6**: bài học nhỏ + câu kiểm tra khái niệm.
-6. **Làm bài kiểm chứng 7A**: một bài mới, không gợi ý, để xem bạn tự áp dụng được chưa. Lịch theo D-02 (mục C):
+   - Với **đề AI soạn** (E-50): phần giải thích là giải thích nấc 3 trong chẩn đoán thật của bài bạn; việc hiện nó được ghi tiếp xúc mức giải thích.
+   - Bạn trả lời câu hỏi, bấm *Trả lời rồi xem ý chính để tự đối chiếu*, rồi tự đánh giá *Đã nêu được* hoặc *Chưa, đọc lại giải thích*.
+   - App không chấm câu trả lời tự do bằng so khớp chữ. Bước 6 không tính vào hồ sơ; nó chỉ mở bước 7A, và bài 7A mới là bước kiểm chứng.
+6. **Làm bài kiểm chứng 7A**: một bài mới, không gợi ý, để xem bạn tự áp dụng được chưa.
+   - Với đề AI: 7A là một **đề đoạn ngắn** (khoảng 15 phút, tối thiểu 100 từ) chưa xem, đo đúng năng lực đang tập trung.
+   - 7B và Bước 9 dùng **bài luận AI chưa xem** có đo năng lực đó.
+   - Nếu kho không còn đề phù hợp, app báo `NO_ELIGIBLE_7A_TASK` (7A) hoặc không xếp lịch (7B/9), đồng thời mở mục *thiếu đề kiểm chứng* trong **Cần xử lý**. Soạn thêm theo lệnh ghi trong mục đó, hoặc dùng `author -- replenish`.
+   - Lịch theo D-02 (mục C):
    - Đạt 7A → xếp **7B** từ ngày hôm sau. Chưa đạt 7A → quay về củng cố Bước 6, không bắt làm lại 7A ngay.
    - Đạt 7B → mở **Bước 9** sau 3 ngày; mỗi lần đạt, khoảng cách giãn ra 3 → 7 → 14 → 30 → 60 ngày. Chưa đạt 7B → luyện thêm rồi làm lại 7B sau 2 ngày. Chưa đạt Bước 9 → quay về khoảng 3 ngày.
    - Bài tổng hợp (luyện tập/thi thử) làm khi Bước 9 đã đến hạn được **tính luôn cho Bước 9** nếu là bài độc lập và có cơ hội dùng cấu trúc.
@@ -205,6 +231,24 @@ Dành cho việc tạo/kiểm định gói nội dung. Các tab:
 
      Duyệt bản mới thì bản đã duyệt trước chuyển sang *Đã thay thế*. Lịch sử và nội dung mỗi bản không bao giờ bị sửa.
   - Khung không đặt ngưỡng Band; báo Band vẫn tắt. Bản đã duyệt là căn cứ cho bước C3 (AI sinh đề), chưa thay gói synthetic đang dùng.
+- **Khung Speaking dạng văn bản** (E-52, theo E-43): ở đầu tab Khung năng lực, chọn *Speaking (dạng văn bản)*.
+  - Soạn: `npm.cmd run author -- framework --skill speaking` (xem nguồn: `author -- sources --skill speaking`). Duyệt giống khung Writing.
+  - Khung chỉ gồm 3 tiêu chí đo được trên văn bản: Fluency & Coherence (phần mạch lạc, phát triển ý, liên kết), Lexical Resource, Grammatical Range & Accuracy. Mã năng lực bắt đầu bằng `spk.`.
+  - Cột **Pronunciation** của bảng band descriptors bị bỏ khỏi dữ liệu gửi AI. Khung không đo tốc độ, ngập ngừng hay phát âm.
+  - Có khung Speaking đã duyệt thì soạn đề bằng `npm.cmd run author -- items --skill speaking` (Part 2/Part 3; thêm `--paragraph` cho Part 1 dùng ở 7A). Các lệnh `items-list`, `coverage`, `replenish` cũng nhận `--skill speaking`.
+  - Đề Speaking hiện trong kho đề ở Học hôm nay (*Speaking Part 2 — …*). Bạn trả lời **bằng văn bản như khi nói**; bài được chấm theo các năng lực `spk.` và tính vào hồ sơ Speaking (dạng văn bản), không báo Band Speaking.
+- **Khung và đề Listening** (E-54): chọn *Listening* ở đầu tab Khung năng lực.
+  - Khung: `npm.cmd run author -- framework --skill listening`. Listening không có bảng band descriptors; khung dựa trên các kỹ năng mà trang định dạng đề chính thức nêu (ý chính, chi tiết, quan điểm/thái độ, mục đích, theo dõi ý), mã `lis.`. Duyệt như các khung khác.
+  - Đề: `npm.cmd run author -- listening [--count 2] [--part 1,2]`. Cần khung Listening đã duyệt và Piper cùng giọng đã cài (`npm.cmd run tts -- status`).
+    - AI viết bối cảnh, kịch bản có vai và 5–10 câu hỏi kèm đáp án và câu trích.
+    - App kiểm: đáp án có nguyên văn trong kịch bản, đúng giới hạn số từ, câu hỏi không chứa đáp án, đáp án trắc nghiệm là một lựa chọn.
+    - Piper đọc từng câu bằng giọng theo vai (nữ/nam, giọng trong `policies/authoring/listening-items.v1.json`) rồi ghép thành một file WAV.
+    - Một AI khác **giải mù** trên transcript, không thấy đáp án; app so với khóa. Sai một câu hoặc AI báo mơ hồ thì QC4 không đạt. Thêm một lượt rà soát (có khóa) cho QC2/QC3. Đạt đủ thì tự phát hành.
+    - Mỗi lô dùng 3 lượt gọi AI (trần 10/ngày, đếm riêng). Rà soát lại sau lỗi: `author -- listening-review <batch_id>`; xem: `author -- listening-list`.
+- **Đối chiếu bài mẫu chính thức (C6, E-55)**: kiểm tra định tính cách AI chấm so với giám khảo.
+  - `npm.cmd run calibrate -- samples`: các bài mẫu có điểm và nhận xét giám khảo tách nguyên văn từ PDF "example responses" chính thức đã duyệt (không gọi AI). Hiện có 6 bài, trong đó 3 bài Task 2.
+  - `npm.cmd run calibrate -- run`: chấm thử mỗi bài Task 2 bằng khung Writing đã duyệt (1 lượt gọi AI/bài). Báo cáo Markdown ghi vào `var/reports/calibration-<thời điểm>.md`: nhận xét và Band của giám khảo đặt cạnh kết quả đạt/chưa đạt/chưa đủ kết luận theo tiêu chí và lỗi trọng tâm của AI.
+  - Không có ngưỡng, không ước lượng Band, báo Band vẫn tắt. N9 cần 20–30 bài Task 2 có điểm trước khi có bất kỳ nhận định Band nào. Nguồn bài mẫu không kèm đề bài, nên nhận định về Task Response kém tin cậy.
 - **Đề Writing Task 2 do AI soạn** (E-47, D-05 C3; cùng tab Khung năng lực). Cần một khung **đã duyệt**.
   1. Chạy:
      ```
@@ -225,7 +269,16 @@ Dành cho việc tạo/kiểm định gói nội dung. Các tab:
   - Nếu lượt rà soát lỗi (ví dụ hết thời gian), chạy lại riêng nó: `npm.cmd run author -- items-review <batch_id>`. Xem các lô: `npm.cmd run author -- items-list`.
   - Trần **10 lượt gọi AI sinh/rà soát đề mỗi ngày học** (N8), tách khỏi lượt chấm bài. Mỗi lô dùng 2 lượt.
   - Phần *Đề Writing Task 2 do AI soạn* chỉ hiện thể loại, chủ đề và trạng thái, **không hiện nguyên văn đề**. Xem đề là một lần tiếp xúc: mở gói ở tab Gói tri thức → *Xem nội dung* (được ghi nhật ký tiếp xúc; đề đã xem không dùng làm bài kiểm chứng độc lập). Thu hồi đề cũng ở tab đó.
-  - **Giới hạn hiện tại:** màn học Writing **chưa cấp** các đề này; vẫn dùng gói synthetic. Việc cấp đề thật và chấm theo khung là bước C3b. Độ khó chỉ là ước tính.
+  - Đề đã phát hành hiện ở **Học hôm nay → Kho đề Writing Task 2** (C3b, mục 4.2). Độ khó chỉ là ước tính.
+  - **Đề đoạn cho 7A** (E-50): `npm.cmd run author -- items --paragraph --count 3`. Mỗi đề yêu cầu viết một đoạn và nhắm đúng một năng lực. Thêm `--focus <id,id>` để ưu tiên năng lực đang thiếu đề kiểm chứng.
+  - **Duyệt mẫu ngẫu nhiên (N6):** trong tab Khung năng lực, bấm *Rút 2 đề* để đọc đề đã tự phát hành rồi chọn *Giữ* hoặc *Thu hồi*.
+    - Thu hồi cần ghi chú và đi qua pipeline: ngừng cấp, xóa cache, liệt kê bằng chứng liên quan.
+    - Rút đề là **đã xem đề**: đề đó không còn dùng làm bài kiểm chứng độc lập cho bạn.
+    - Mỗi đề chỉ được rút một lần; mỗi mẫu quyết định một lần.
+  - **Độ phủ kho đề (C5, N8):** `npm.cmd run author -- coverage` (không gọi AI) báo theo hai ô: đề đoạn (7A) và bài luận (luyện tập, 7B, Bước 9).
+    - Với mỗi ô: số đề **chưa xem**, số họ đề, và năng lực đang thiếu đề kiểm chứng. Ngưỡng: ≥ 3 đề chưa xem thuộc ≥ 2 họ đề, đặt trong `coverage` của `policies/authoring/wt2-items.v1.json`.
+    - `npm.cmd run author -- replenish` soạn một lô 5 đề cho mỗi ô thiếu, ưu tiên năng lực đang thiếu đề kiểm chứng. Lệnh dừng khi chạm trần 10 lượt gọi/ngày.
+    - Tự động: chạy worker với `--learning --replenish`. Worker chỉ bổ sung khi hàng đợi rảnh, tối đa một lần mỗi 30 phút (đổi bằng `--replenish-every-min`).
 - **Cần xử lý**: review mở (sau thu hồi, khiếu nại…) và job bị dừng; chọn cách xử lý.
 - **Lần chạy**: các lần chạy AI và trạng thái gateway.
 
@@ -255,7 +308,8 @@ Tóm tắt; hướng dẫn chi tiết từng lệnh: [Codex](engineering/D01_COD
 4. `npm.cmd run ai -- probe-boundary <codex|claude|agy> --profile <dir>`: chứng minh CLI không đọc được file ngoài phạm vi.
 5. `npm.cmd run ai -- verify <codex|claude|agy> --profile <dir>`: tốn vài prompt synthetic; ghi bằng chứng, không tự đặt VERIFIED.
 6. Bạn duyệt file bằng chứng, rồi `npm.cmd run ai -- evidence <file.json> --boundary <báo_cáo_probe.json>`.
-7. `npm.cmd run ai -- consent <provider> approved grant`: cho phép đúng 5 loại dữ liệu đã duyệt (audio người học luôn bị chặn).
+7. `npm.cmd run ai -- consent <provider> approved grant`: cho phép các loại dữ liệu đã duyệt (audio người học luôn bị chặn).
+   - Từ E-51, danh sách gồm thêm `learner_owned_content` (đề bạn tự nhập). Provider đã bật từ trước cần cấp riêng: `npm.cmd run ai -- consent claude-code learner_owned_content grant`. Chưa cấp thì lượt rà soát đề nhập và việc chấm bài trên đề đó bị chặn.
 
 ### 6.3. Việc định kỳ
 - **Mỗi 30 ngày**: xác nhận lại extra usage vẫn tắt (`confirm-extra-usage … off`), nếu không gateway chặn provider đó. `ai -- status` in hạn xác nhận.
@@ -291,6 +345,7 @@ npm.cmd run worker
   ```
   - Bài nộp vào hàng đợi; Workspace hiện *Đang chờ worker chấm* / *AI đang chấm…* và tự tải lại mỗi 3 giây.
   - Mỗi lần nộp (bài gốc hoặc bản sửa) tốn **một lượt gọi model** trên gói thuê bao của provider chính (Claude Code, theo E-38). Không có provider sẵn sàng thì worker không chạy; hết hạn mức thì bài chờ tới khi mở lại.
+  - `--replenish` (cùng `--learning`): khi không còn bài chờ chấm, tự soạn thêm đề cho ô kho đề thiếu theo N8, không chiếm lượt chấm bài (C5, E-50).
   - AI chỉ nhận đề bài, tiêu chí của từng kỹ năng, chế độ làm bài và bài viết của bạn; không nhận lịch sử học, gợi ý cũ hay kho đáp án. AI chỉ **đề xuất**: kết quả từng tiêu chí, tối đa 3 lỗi trọng tâm (kèm điểm ảnh hưởng/độ chắc chắn 0–3) và 3 nấc gợi ý. Ứng dụng tự quyết mức hỗ trợ, giới hạn trọng tâm, trạng thái giả thuyết; gợi ý nấc 1–2 nào lộ câu mẫu nấc 3 bị **loại bỏ toàn bộ** (lượt đó không có gợi ý).
   - Không đặt biến (mặc định): vẫn chấm synthetic ngay trong app như trước, không tốn hạn mức.
   - Đề bài hiện vẫn là gói synthetic, nên theo quy tắc G0 kết quả **không** vào mức năng lực cho tới khi có nội dung thật (D-05); bạn vẫn nhận chẩn đoán và gợi ý thật.
@@ -461,6 +516,7 @@ Chạy lint → kiểm tra hướng dẫn này → typecheck → test → build.
 | `npm.cmd run sources` | Quét trang nguồn IELTS chính thức/tham chiếu trong danh sách miền cho phép (`crawl`, `status`); duyệt ở Builder & QC → Nguồn. |
 | `npm.cmd run author` | AI soạn khung năng lực + rubric Writing Task 2 từ nguồn đã duyệt rồi một AI khác rà soát (`framework`, `review <version>`, `sources`, `list`); duyệt ở Builder & QC → Khung năng lực. C3: `items [--count n]` AI soạn đề Writing Task 2 theo khung đã duyệt, đề đạt QC1–QC4 tự phát hành; `items-review <batch_id>`, `items-list`. |
 | `npm.cmd run tts` | TTS cục bộ (Piper, offline) để đọc kịch bản Listening: `status` xem engine/giọng đã cài, `say "<văn bản>" [--voice id]` đọc thử và lưu WAV vào kho media. |
+| `npm.cmd run calibrate` | C6 (E-55): `samples` liệt kê bài mẫu có điểm + nhận xét giám khảo tách từ PDF chính thức (không gọi AI); `run` chấm thử bài Task 2 bằng khung Writing đã duyệt và ghi báo cáo đối chiếu định tính vào var/reports (không ngưỡng, không Band). |
 | `npm.cmd run qc:real` | Chạy QC1–4 thật bằng provider READY trên gói synthetic trong kho tạm `var/qc-real/` (tốn vài prompt thuê bao). |
 | `npm.cmd run seed:reading` | Nạp gói Reading synthetic đã qua QC vào kho để thử luồng Reading. |
 <!-- AUTO:scripts:END -->
@@ -478,7 +534,7 @@ Usage: npm run ai -- <command>
   evidence <file.json> [--boundary <probe.json>]    record {"evidence":…,"envelope":…} (no secrets), then re-check;
                                                     --boundary takes file_scope_test from a PASS probe-boundary report
   consent <provider> <data_class> grant|revoke      who may receive which data (default: nobody; learner_audio never)
-  consent <provider> approved grant                 E-11: grant the 5 user-approved classes to a D-01-verified provider
+  consent <provider> approved grant                 E-11/E-51: grant the user-approved classes to a D-01-verified provider
   confirm-extra-usage <provider> off                you checked today that extra usage / auto-recharge is OFF (valid 30 days)
   verify codex|claude|agy --profile <dir> [--profile-id <id>] [--model <m> | --models <a,b,c>] [--effort <e>] [--entrypoint <exe>] [--argv '<json>'] [--out <file>]
                                                     collect D-01 evidence (codex ~8 prompts; claude/agy ~3 prompts); never sets VERIFIED
@@ -522,6 +578,8 @@ Usage: npm run export -- <command>
 | `--learning` | Chấm bài Writing của người học bằng AI thật qua gateway (bài nộp khi app chạy với `STUDY_ENGLISH_LEARNING_AI=real`). Không dùng được với `--fake`. |
 | `--fake-blind-answers` | Kèm `--fake`: đáp án giải mù giả lập, ví dụ `"q1=FALSE,q2=NOT GIVEN"`. |
 | `--complaints` | Chỉ xử lý job khiếu nại/tái đánh giá của người học qua gateway. |
+| `--replenish` | Cùng --learning: khi hàng đợi rảnh, tự soạn thêm đề Writing Task 2 cho ô kho đề thiếu theo N8 (C5), trong trần lượt gọi sinh đề mỗi ngày. |
+| `--replenish-every-min` | Khoảng cách tối thiểu (phút, mặc định 30) giữa hai lần kiểm tra bổ sung kho đề của --replenish. |
 | `--poll-ms` | Khoảng nghỉ khi hàng đợi trống (mặc định 2000 ms). |
 <!-- AUTO:worker-flags:END -->
 
@@ -552,6 +610,11 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `POST /api/learning/audio/:id/review-text` | Nhận xét dạng văn bản (không gửi audio, không báo Band Speaking). |
 | `POST /api/learning/reading` | Bắt đầu một bài Reading. |
 | `GET /api/learning/reading/:id` | Xem bài Reading (đề giải mù, không có đáp án trước khi nộp). |
+| `GET /api/learning/listening` | Các Part Listening AI soạn đã phát hành (tiêu đề, số câu, độ dài audio, đã làm chưa) và các lượt làm gần đây; không chứa transcript hay câu hỏi. |
+| `POST /api/learning/listening` | Bắt đầu một Part Listening (tự luyện hoặc mô phỏng thi); ghi tiếp xúc mức đề. Trả bối cảnh và câu hỏi, không có transcript. |
+| `GET /api/learning/listening/:id` | Một lượt Listening: câu hỏi; sau khi nộp thêm kết quả từng câu, đáp án kèm câu trích và transcript. |
+| `GET /api/learning/listening/:id/audio` | File WAV của Part (đọc bằng Piper cục bộ); đếm số lần tải, không chặn để trình duyệt tua/đệm được. |
+| `POST /api/learning/listening/:id/submit` | Nộp đáp án Listening: chấm xác định với khóa đã qua giải mù QC4; ghi tiếp xúc đáp án/giải thích; mỗi lượt chấm một lần. |
 | `POST /api/learning/reading/:id/autosave` | Lưu nháp Reading. |
 | `POST /api/learning/reading/:id/submit` | Nộp đáp án Reading. |
 | `POST /api/learning/reading/:id/hints` | Mở gợi ý Reading theo nấc (nấc 3 mở đáp án, ghi exposure). |
@@ -560,6 +623,9 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `GET /api/learning/today` | Màn Học hôm nay: bài đang dở, nhiệm vụ đề xuất (`?available_minutes=`). |
 | `POST /api/learning/attempts` | Bắt đầu một bài Writing (chế độ, mục đích). |
 | `GET /api/learning/attempts/:id` | Workspace của một bài (đã cắt quyền: không lộ đáp án/gợi ý chưa mở). |
+| `GET /api/learning/writing-bank` | Kho đề Writing Task 2 do AI soạn đã phát hành (C3b): tiêu đề, dạng, thời gian, đã xem chưa; không chứa nguyên văn đề (đề hiện khi bắt đầu làm, lúc đó ghi tiếp xúc). |
+| `GET /api/learning/own-items` | Đề Writing Task 2 bạn đã nhập (C4) và trạng thái: chờ AI rà soát, đã vào kho, không đạt (kèm lý do). |
+| `POST /api/learning/own-items` | Nhập một đề Writing Task 2 bạn sở hữu: khai quyền, dạng đề, mức đã tiếp xúc. Không gọi AI; đóng gói learner_owned và chạy QC1–3 ngay, lượt AI rà soát do worker --learning chạy sau. |
 | `POST /api/learning/attempts/:id/autosave` | Lưu nháp lên server. |
 | `POST /api/learning/attempts/:id/input-support` | Hỗ trợ đầu vào (dàn ý/từ vựng); bị chặn ở chế độ thi. |
 | `POST /api/learning/attempts/:id/submit` | Nộp bài gốc hoặc bản sửa (`is_repair`). |
@@ -574,6 +640,7 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `POST /api/learning/notifications/:id/dismiss` | Đánh dấu đã xem một lời nhắc. |
 | `POST /api/learning/export` | Xuất dữ liệu học tập vào `var/exports/` (chỉ đọc, không xóa gì). |
 | `GET /api/learning/storage` | Dung lượng dữ liệu trong `var/`, dung lượng trống của ổ, các bảng lớn nhất. |
+| `GET /api/learning/disk` | Dung lượng trống của ổ chứa dữ liệu và mức D-07 (ok / cảnh báo dưới 5 GB / chặn tải mới dưới 2 GB) cho thanh cảnh báo ở Học hôm nay. |
 | `GET /api/learning/progress` | Tiến độ & hồ sơ năng lực: mức A1–A6, độ tin cậy, mức theo từng điều kiện làm bài theo chính sách D-02 v1 (chưa báo Band). |
 | `GET /api/learning/replan` | Đề xuất sắp xếp lại lịch (D-02 F): tạo tối đa 1 đề xuất mỗi ngày khi bị trễ quá quỹ giờ; không thay đổi gì cho tới khi bạn chọn. |
 | `POST /api/learning/replan/:id/accept` | Áp dụng đề xuất lịch (chỉ khi lịch chưa đổi từ lúc đề xuất; quá 48 giờ thì hết hạn). |
@@ -610,6 +677,10 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `POST /api/console/frameworks/:version/decision` | Duyệt hoặc loại một bản nháp khung năng lực (cần không còn lỗi kiểm tra, đã có AI rà soát, không phải synthetic). |
 | `GET /api/console/item-batches` | Các lô đề Writing Task 2 do AI soạn (C3): số đề phát hành/nháp/bị loại, số lượt gọi AI sinh đề hôm nay. Không chứa nguyên văn đề. |
 | `GET /api/console/item-batches/:batchId` | Một lô đề: thể loại, chủ đề, trạng thái QC/phát hành từng đề, lỗi kiểm tra tự động và kết quả AI rà soát; không chứa nguyên văn đề (xem đề qua Gói tri thức để ghi tiếp xúc). |
+| `GET /api/console/listening-batches` | Các lô Part Listening do AI soạn và trạng thái QC/phát hành (không có transcript). |
+| `GET /api/console/item-samples` | Các đề AI soạn đã rút để duyệt mẫu ngẫu nhiên (N6), kèm nguyên văn đề (đã ghi tiếp xúc lúc rút) và quyết định giữ/thu hồi. |
+| `POST /api/console/item-samples/draw` | Rút ngẫu nhiên 1–5 đề đã phát hành chưa từng rút; ghi tiếp xúc trước khi trả nguyên văn đề. |
+| `POST /api/console/item-samples/:sampleId/decision` | Giữ hoặc thu hồi một đề đã rút (thu hồi cần ghi chú, đi qua pipeline: ngừng cấp, xóa cache, liệt kê bằng chứng bị ảnh hưởng). Mỗi mẫu quyết định một lần. |
 <!-- AUTO:routes:END -->
 
 ### Migration cơ sở dữ liệu
@@ -632,6 +703,9 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | `0014_content_origin.sql` | E-41 (D-05 N10, 19/11/2026): content origins 'ai_authored' and 'learner_owned' join 'synthetic_fixture' and 'sourced'. |
 | `0015_competency_frameworks.sql` | E-42 (D-05 C2, 19/11/2026): AI-authored competency framework drafts and the record of every authoring run. |
 | `0016_item_authoring_runs.sql` | E-47 (D-05 C3, 20/11/2026): AI-authored Writing Task 2 prompts add two authoring task types, 'content.item_author' |
+| `0017_item_sample_reviews.sql` | E-50 (D-05 N6, 20/11/2026): random sample review of AI-authored prompts released automatically. Drawing a sample |
+| `0018_learner_owned_consent.sql` | E-51 (D-05 C4/N7, 20/11/2026): material the learner imported and owns is its own consent class, |
+| `0019_listening.sql` | E-54 (D-05 N1/N5, E-44, 20/11/2026): AI-authored Listening parts. Two authoring task types join the append-only |
 <!-- AUTO:migrations:END -->
 
 ### Quyết định kỹ thuật
@@ -686,6 +760,13 @@ Mọi route trừ `/api/health` và `GET /api/session` cần cookie phiên; rout
 | E-46 | Khung năng lực v2: bảng theo đường kẻ, định nghĩa cạnh, soạn lại theo góp ý (19/11/2026, người dùng "Làm v2") |
 | E-47 | C3a: AI soạn đề Writing Task 2, QC1–QC4, tự phát hành (20/11/2026, người dùng "tiến hành triển khai phần tiếp theo"; quyết định triển khai, đảo ngược  |
 | E-48 | Claude Code 2.1.329: plugin dựng sẵn `cc-plugin-privacy` và thư mục `plugins/store/` (20/11/2026, người dùng chốt) |
+| E-49 | C3b phần 1: kho đề Writing Task 2 do AI soạn trong màn học (20/11/2026, người dùng "Làm C3b"/"tiếp tục triển khai"; quyết định triển khai, đảo ngược đ |
+| E-50 | Hoàn tất C3 với đề AI (đề đoạn 7A, Bước 6, 7A/7B/9, duyệt mẫu N6) và C5 (20/11/2026, người dùng "làm xong hết toàn bộ"; quyết định triển khai, đảo ngư |
+| E-51 | C4: nhập đề Writing Task 2 của người học (20/11/2026, người dùng "Làm C4 và phần còn lại"; căn cứ N7 đã đồng ý ở E-36; quyết định triển khai, đảo ngượ |
+| E-52 | Speaking dạng văn bản: khung năng lực và đề Part 1–3 dùng chung đường Writing (20/11/2026, người dùng "Làm C4 và phần còn lại"; theo E-43; quyết định  |
+| E-53 | D-07: ổ đĩa sắp đầy (20/11/2026, người dùng chốt "Cảnh báo + dọn bản sao nguồn") |
+| E-54 | Listening: khung, Part do AI soạn, audio Piper, QC4 giải mù trên transcript, màn làm bài (23/11/2026, người dùng "Làm tiếp"; theo N1/N5/N6/N8 và E-44; |
+| E-55 | C6: đối chiếu định tính với bài mẫu chính thức có điểm (23/11/2026, người dùng chốt "Nhập mẫu, đo định tính") |
 <!-- AUTO:decisions:END -->
 
 ### Trạng thái công việc

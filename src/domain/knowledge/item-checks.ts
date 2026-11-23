@@ -3,10 +3,13 @@
 // any error here is recorded as rejected and never packaged. Text similarity is a preliminary filter only.
 
 /** knowledge.v1 wt2_item_set_result. */
-export type Wt2Genre = 'opinion' | 'discussion' | 'advantages_disadvantages' | 'problem_solution' | 'two_part';
+/** Writing Task 2 genres, and (E-52) Speaking parts answered in writing. */
+export type Wt2Genre = 'opinion' | 'discussion' | 'advantages_disadvantages' | 'problem_solution' | 'two_part' | 'part1' | 'part2' | 'part3';
 export interface Wt2ItemDraft {
   item_key: string; genre: Wt2Genre; topic: string; item_family: string; prompt: string;
   test_type: 'academic' | 'general_training' | 'both'; competencies: string[]; difficulty_estimate: 'lower' | 'middle' | 'upper'; rationale: string;
+  /** E-50: 'paragraph' = a short 7A transfer task aimed at exactly one competency (N5); absent = a whole essay. */
+  task_scope?: 'essay' | 'paragraph';
 }
 export interface Wt2ItemSetResult { schema_version: '1'; job_id: string; context_manifest_id: string; synthetic: boolean; items: Wt2ItemDraft[]; limitations: string[] }
 
@@ -56,7 +59,7 @@ const FORCED_STRUCTURE = /\b(write|use|include)\b[^.]{0,30}\b(\d+|two|three|four
 const GIVEN_IDEAS = /\b(for example,? you (could|might|can)|you (could|might|may) (mention|argue|say|write about)|ideas?:|model answer|sample answer|outline:)/i;
 
 export function checkItems(items: Wt2ItemDraft[], opts: {
-  competencies: ReadonlySet<string>; existing: ExistingPrompt[]; similarity_threshold: number; min_prompt_words: number;
+  competencies: ReadonlySet<string>; existing: ExistingPrompt[]; similarity_threshold: number; min_prompt_words: number; task_scope?: 'essay' | 'paragraph';
 }): ItemFinding[] {
   const f: ItemFinding[] = [];
   const add = (code: string, severity: 'error' | 'warning', item_key: string, detail: string) => f.push({ code, severity, item_key, detail });
@@ -67,6 +70,8 @@ export function checkItems(items: Wt2ItemDraft[], opts: {
     const unknown = it.competencies.filter((c) => !opts.competencies.has(c));
     if (unknown.length) add('COMPETENCY_UNKNOWN', 'error', it.item_key, `not in the approved framework: ${unknown.join(', ')}`);
     if (new Set(it.competencies).size !== it.competencies.length) add('COMPETENCY_REPEATED', 'warning', it.item_key, 'a competency is listed twice');
+    if (it.task_scope === 'paragraph' && it.competencies.length !== 1) add('PARAGRAPH_TARGET', 'error', it.item_key, `a paragraph task targets exactly one competency (${it.competencies.length} given)`);
+    if (opts.task_scope && (it.task_scope ?? 'essay') !== opts.task_scope) add('TASK_SCOPE_MISMATCH', 'error', it.item_key, `asked for ${opts.task_scope}, got ${it.task_scope ?? 'essay'}`);
     const words = it.prompt.trim().split(/\s+/).length;
     if (words < opts.min_prompt_words) add('PROMPT_TOO_SHORT', 'error', it.item_key, `${words} words`);
     if (FORCED_STRUCTURE.test(it.prompt)) add('FORCED_STRUCTURE', 'error', it.item_key, 'prompt imposes a structure or a count');

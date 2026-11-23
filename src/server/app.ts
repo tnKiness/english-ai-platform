@@ -1,4 +1,5 @@
-import { createReadStream } from 'node:fs';
+import { createReadStream, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import Fastify from 'fastify';
 import { ComplaintService } from '../application/learning/complaints.js';
 import { DailyTracker, type ActivityInput } from '../application/learning/daily-tracker.js';
@@ -10,7 +11,10 @@ import { ReplanPlanner } from '../application/learning/replan-planner.js';
 import { SourceReview } from '../infrastructure/sources/review.js';
 import { FrameworkAuthoringService } from '../application/authoring/framework-authoring.js';
 import { ItemAuthoringService } from '../application/authoring/item-authoring.js';
-import { loadFrameworkPolicy, loadFrameworkSources, loadItemPolicy } from '../infrastructure/authoring/framework-sources.js';
+import { LearnerItemService, type ImportInput } from '../application/authoring/learner-items.js';
+import { ListeningAuthoringService, type ListeningPolicy } from '../application/authoring/listening-authoring.js';
+import { ListeningWorkflow, type ListeningAnswer } from '../application/learning/listening-workflow.js';
+import { FRAMEWORK_POLICY_FILES, ITEM_POLICY_FILES, loadFrameworkPolicy, loadFrameworkSources, loadItemPolicy } from '../infrastructure/authoring/framework-sources.js';
 import { ConsoleService } from '../application/qc/console.js';
 import type { BuilderPipeline } from '../application/qc/pipeline.js';
 import type { ContextRole } from '../application/context/scoped-reader.js';
@@ -18,6 +22,7 @@ import type { Mode, Opportunity, Purpose } from '../domain/evidence/types.js';
 import { gatewayFor } from '../infrastructure/ai/gateway/compose.js';
 import { autoBackupStatus } from '../infrastructure/backup/auto.js';
 import { exportLearnerData, storageUsage } from '../infrastructure/export/learner-export.js';
+import { diskStatus } from '../infrastructure/files/disk-guard.js';
 import { ConsoleQueries } from '../infrastructure/sqlite/console-queries.js';
 import { builderPipeline, type Store } from '../infrastructure/sqlite/store.js';
 import { parseCookies, SESSION_COOKIE, SessionManager } from './session.js';
@@ -130,6 +135,22 @@ export function createApp(deps: AppDeps = {}) {
     schema: body({ item_id: str, version: str, mode: { enum: ['guided', 'self_practice', 'exam'] }, request_key: str }),
   }, async (r) => reading.start(r.body.item_id, r.body.version, r.body.mode, r.body.request_key));
   app.get<{ Params: { id: string } }>('/api/learning/reading/:id', async (r) => reading.view(r.params.id));
+  // E-54: AI-authored Listening parts. The transcript and key reach the browser only after submission.
+  const listening = new ListeningWorkflow(store);
+  app.get('/api/learning/listening', async () => listening.catalog());
+  app.post<{ Body: { item_id: string; version: string; mode: Mode; request_key: string } }>('/api/learning/listening', {
+    schema: body({ item_id: str, version: str, mode: { enum: ['self_practice', 'exam'] }, request_key: str }),
+  }, async (r) => listening.start(r.body.item_id, r.body.version, r.body.mode, r.body.request_key));
+  app.get<{ Params: { id: string } }>('/api/learning/listening/:id', async (r) => listening.view(r.params.id));
+  app.get<{ Params: { id: string } }>('/api/learning/listening/:id/audio', async (r, reply) => {
+    const a = listening.audio(r.params.id);
+    return reply.header('content-type', a.type).header('x-content-type-options', 'nosniff').header('cache-control', 'private, max-age=3600').send(a.bytes);
+  });
+  app.post<{ Params: { id: string }; Body: { request_key: string; answers: ListeningAnswer[] } }>('/api/learning/listening/:id/submit', {
+    schema: body({ request_key: str, answers: { type: 'array', maxItems: 40, items: {
+      type: 'object', additionalProperties: false, required: ['question_id', 'answer'], properties: { question_id: str, answer: { type: 'string', maxLength: 200 } },
+    } } }),
+  }, async (r) => listening.submit(r.params.id, r.body.request_key, r.body.answers));
   app.post<{ Params: { id: string }; Body: { content: string } }>('/api/learning/reading/:id/autosave', {
     schema: body({ content: { type: 'string', maxLength: 50_000 } }),
   }, async (r) => reading.save(r.params.id, r.body.content));
@@ -208,18 +229,44 @@ export function createApp(deps: AppDeps = {}) {
   app.get('/api/console/gateway', async () => gatewayStatus());
   // E-42 (D-05 C2): AI-authored competency framework drafts. The AI runs only from `npm run author`; here the learner
   // reads a draft (checks, independent review, quotes with their sources) and approves or rejects it.
-  const frameworkPolicy = loadFrameworkPolicy();
-  const frameworks = new FrameworkAuthoringService(store, frameworkPolicy, () => loadFrameworkSources(store.db, store.paths, frameworkPolicy));
-  app.get('/api/console/frameworks', async () => ({ framework_id: frameworkPolicy.framework_id, rows: frameworks.list(), runs: frameworks.runs() }));
-  app.get<{ Params: { version: string } }>('/api/console/frameworks/:version', async (r) => frameworks.detail(r.params.version));
-  app.post<{ Params: { version: string }; Body: { decision: 'approve' | 'reject'; note: string } }>('/api/console/frameworks/:version/decision', {
+  // E-52: one service per framework policy (`?skill=writing` default, `?skill=speaking` for the Speaking text framework).
+  const frameworkBySkill = Object.fromEntries(Object.entries(FRAMEWORK_POLICY_FILES).map(([skill, file]) => {
+    const policy = loadFrameworkPolicy(resolve(file));
+    return [skill, { policy, service: new FrameworkAuthoringService(store, policy, () => loadFrameworkSources(store.db, store.paths, policy)) }];
+  })) as Record<string, { policy: ReturnType<typeof loadFrameworkPolicy>; service: FrameworkAuthoringService }>;
+  const fwFor = (skill: string | undefined) => {
+    const f = frameworkBySkill[skill ?? 'writing'];
+    if (!f) throw Object.assign(new Error(`Unknown framework skill ${skill}`), { statusCode: 400 });
+    return f;
+  };
+  app.get<{ Querystring: { skill?: string } }>('/api/console/frameworks', async (r) => { const f = fwFor(r.query.skill); return { framework_id: f.policy.framework_id, skills: Object.keys(frameworkBySkill), rows: f.service.list(), runs: f.service.runs() }; });
+  app.get<{ Params: { version: string }; Querystring: { skill?: string } }>('/api/console/frameworks/:version', async (r) => fwFor(r.query.skill).service.detail(r.params.version));
+  app.post<{ Params: { version: string }; Querystring: { skill?: string }; Body: { decision: 'approve' | 'reject'; note: string } }>('/api/console/frameworks/:version/decision', {
     schema: body({ decision: { enum: ['approve', 'reject'] }, note: { type: 'string', maxLength: 2000 } }),
-  }, async (r) => frameworks.decide(r.params.version, r.body.decision, r.body.note));
+  }, async (r) => fwFor(r.query.skill).service.decide(r.params.version, r.body.decision, r.body.note));
   // E-47 (D-05 C3): AI-authored Writing Task 2 prompts. The AI runs only from `npm run author -- items`; prompts that
   // pass QC1–QC4 are released automatically (N6); the learner reads them here and revokes from the package console.
-  const items = new ItemAuthoringService(store, pipeline, () => frameworks.approved(), loadItemPolicy());
-  app.get('/api/console/item-batches', async () => ({ batches: items.list(), calls_today: items.callsToday() }));
-  app.get<{ Params: { batchId: string } }>('/api/console/item-batches/:batchId', async (r) => items.detail(r.params.batchId));
+  // E-52: one item service per skill (`?skill=speaking` for Speaking parts answered in writing).
+  const itemsBySkill = Object.fromEntries(Object.entries(ITEM_POLICY_FILES).map(([skill, file]) =>
+    [skill, new ItemAuthoringService(store, pipeline, () => fwFor(skill).service.approved(), loadItemPolicy(resolve(file)))])) as Record<string, ItemAuthoringService>;
+  const itemsFor = (skill: string | undefined) => {
+    const s = itemsBySkill[skill ?? 'writing'];
+    if (!s) throw Object.assign(new Error(`Unknown item skill ${skill}`), { statusCode: 400 });
+    return s;
+  };
+  app.get<{ Querystring: { skill?: string } }>('/api/console/item-batches', async (r) => { const s = itemsFor(r.query.skill); return { batches: s.list(), calls_today: s.callsToday() }; });
+  app.get<{ Params: { batchId: string }; Querystring: { skill?: string } }>('/api/console/item-batches/:batchId', async (r) => itemsFor(r.query.skill).detail(r.params.batchId));
+  // E-54: Listening batches (metadata only). The AI and the TTS run from `npm run author -- listening`.
+  const listeningItems = new ListeningAuthoringService(store, pipeline, () => fwFor('listening').service.approved(),
+    JSON.parse(readFileSync(resolve('policies/authoring/listening-items.v1.json'), 'utf8')) as ListeningPolicy);
+  app.get('/api/console/listening-batches', async () => ({ batches: listeningItems.list(), calls_today: listeningItems.callsToday() }));
+  // E-50 (N6): random sample review. Drawing records the exposure before the prompt text is returned.
+  app.get<{ Querystring: { skill?: string } }>('/api/console/item-samples', async (r) => ({ samples: itemsFor(r.query.skill).samples() }));
+  app.post<{ Querystring: { skill?: string }; Body: { count?: number } }>('/api/console/item-samples/draw', { schema: body({ count: { type: 'integer', minimum: 1, maximum: 5 } }, []) },
+    async (r) => ({ samples: itemsFor(r.query.skill).drawSamples(r.body.count ?? 2) }));
+  app.post<{ Params: { sampleId: string }; Querystring: { skill?: string }; Body: { decision: 'keep' | 'revoke'; note: string } }>('/api/console/item-samples/:sampleId/decision', {
+    schema: body({ decision: { enum: ['keep', 'revoke'] }, note: { type: 'string', maxLength: 2000 } }),
+  }, async (r) => itemsFor(r.query.skill).decideSample(r.params.sampleId, r.body.decision, r.body.note));
 
   // ---- P3 Khung học, Vòng Writing & Gợi mở theo nấc (01, 02, 03, 06) -------------------------
   const bandNum = { type: 'number', minimum: 0, maximum: 9 } as const;
@@ -249,6 +296,20 @@ export function createApp(deps: AppDeps = {}) {
   }, async (r) => learningWorkflow.startAttempt(r.body));
 
   app.get<{ Params: { id: string } }>('/api/learning/attempts/:id', async (r) => learningWorkflow.getWorkspaceView(r.params.id));
+  // E-49 (D-05 C3b): released AI-authored Writing Task 2 prompts, metadata only; the prompt is shown once an attempt starts.
+  app.get('/api/learning/writing-bank', async () => learningWorkflow.writingBank());
+  // E-51 (D-05 C4, N7): Writing Task 2 prompts the learner owns. Import is synchronous and AI-free; the AI review runs
+  // in the learning worker (or `npm run author -- own-review`), never inside this request.
+  const ownItems = new LearnerItemService(store, pipeline, () => new FrameworkAuthoringService(store, loadFrameworkPolicy(), () => ({ sources: [], haystacks: [], missing: [] })).approved(), loadItemPolicy());
+  app.get('/api/learning/own-items', async () => ({ items: ownItems.list() }));
+  app.post<{ Body: ImportInput }>('/api/learning/own-items', {
+    schema: body({
+      request_key: str, prompt: { type: 'string', minLength: 1, maxLength: 2000 },
+      task: { enum: ['writing_task2', 'writing_task1_academic', 'writing_task1_general', 'speaking'] },
+      genre: { enum: ['opinion', 'discussion', 'advantages_disadvantages', 'problem_solution', 'two_part'] }, test_type: { enum: ['academic', 'general_training', 'both'] },
+      topic: { type: 'string', maxLength: 80 }, exposure: { enum: ['never_done', 'done', 'seen_sample'] }, rights_confirmed: { type: 'boolean' }, source_note: { type: 'string', maxLength: 200 },
+    }),
+  }, async (r) => ownItems.importPrompt(r.body));
 
   app.post<{ Params: { id: string }; Body: { content: string } }>('/api/learning/attempts/:id/autosave', {
     schema: body({ content: { type: 'string', maxLength: 50_000 } }),
@@ -275,9 +336,9 @@ export function createApp(deps: AppDeps = {}) {
     schema: body({ action: { enum: ['try_more', 'direct_explanation', 'clarify'] }, request_key: str, current_draft_text: { type: 'string', maxLength: 50_000 } }, ['action', 'request_key']),
   }, async (r) => learningWorkflow.recordStep5Interaction(r.params.id, r.body.action, r.body.request_key, r.body.current_draft_text ?? ''));
 
-  app.post<{ Params: { id: string }; Body: { concept_check_answer: string } }>('/api/learning/attempts/:id/step6/complete', {
-    schema: body({ concept_check_answer: { type: 'string', minLength: 1, maxLength: 2000 } }),
-  }, async (r) => learningWorkflow.completeStep6(r.params.id, r.body.concept_check_answer));
+  app.post<{ Params: { id: string }; Body: { concept_check_answer: string; self_check?: boolean } }>('/api/learning/attempts/:id/step6/complete', {
+    schema: body({ concept_check_answer: { type: 'string', minLength: 1, maxLength: 2000 }, self_check: { type: 'boolean' } }, ['concept_check_answer']),
+  }, async (r) => learningWorkflow.completeStep6(r.params.id, r.body.concept_check_answer, r.body.self_check));
 
   app.post<{ Params: { id: string }; Body: { request_key: string } }>('/api/learning/attempts/:id/start-7a', {
     schema: body({ request_key: str }),
@@ -307,6 +368,8 @@ export function createApp(deps: AppDeps = {}) {
     return { dir, created_at: manifest.created_at, tables: Object.fromEntries(Object.entries(manifest.tables).map(([k, v]) => [k, v.rows])), media: manifest.media.length, excluded: manifest.excluded };
   });
   app.get('/api/learning/storage', async () => ({ ...storageUsage(store.db, store.paths), backups: autoBackupStatus(store) }));
+  // E-53 (D-07): cheap free-space check for the Today banner (no directory walk).
+  app.get('/api/learning/disk', async () => diskStatus(store.paths.root));
 
   app.get('/api/learning/progress', async () => learningWorkflow.progressView());
 

@@ -133,7 +133,7 @@ export async function waitForProvider<S extends { ready: boolean; reasons: reado
 }
 
 /** Single sequential worker loop. Restart-safe: expired leases are recovered on every claim. */
-export async function runWorkerLoop(deps: WorkerDeps & { pollMs: number; signal: AbortSignal; quotaRecheckMs?: number }): Promise<void> {
+export async function runWorkerLoop(deps: WorkerDeps & { pollMs: number; signal: AbortSignal; quotaRecheckMs?: number; onIdle?: () => Promise<void> }): Promise<void> {
   deps.queue.recoverExpired();
   const recheckMs = deps.quotaRecheckMs ?? DEFAULT_QUOTA_RECHECK_MS;
   let nextRecheck = 0;
@@ -143,6 +143,10 @@ export async function runWorkerLoop(deps: WorkerDeps & { pollMs: number; signal:
       try { await resumeWaitingJobs(deps); } catch { /* a failed recheck leaves jobs waiting; retried next interval */ }
     }
     const outcome = await processNextJob(deps);
-    if (outcome.status === 'IDLE') await new Promise((resolve) => setTimeout(resolve, deps.pollMs));
+    if (outcome.status === 'IDLE') {
+      // E-50 (C5): background work that must never take a learner job's turn runs only while the queue is idle.
+      if (deps.onIdle) { try { await deps.onIdle(); } catch { /* the hook reports its own failure; the worker keeps going */ } }
+      await new Promise((resolve) => setTimeout(resolve, deps.pollMs));
+    }
   }
 }

@@ -10,7 +10,7 @@ import type { ObservationDraft } from '../ports.js';
 export interface CompetencyDef { competency_id: string; title: string; criterion: string }
 
 /** Assessor context (blind to learner history, answer bank and hidden targets): the task, the criteria, the conditions. */
-export function assessorContext(input: { task: { title: string; prompt: string; genre: string; min_words: number }; competencies: readonly CompetencyDef[]; mode: Mode; purpose: Purpose; is_repair: boolean }) {
+export function assessorContext(input: { task: { title: string; prompt: string; genre: string; min_words: number; skill?: 'writing' | 'speaking_text' }; competencies: readonly CompetencyDef[]; mode: Mode; purpose: Purpose; is_repair: boolean }) {
   return {
     task: input.task,
     competencies: input.competencies.map((c) => ({ competency_id: c.competency_id, title: c.title, criterion: c.criterion })),

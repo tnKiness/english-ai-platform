@@ -1,0 +1,59 @@
+{
+  "schema_version": "1",
+  "framework_id": "ielts-listening",
+  "decision": "E-54 (D-05 N1/N4): khung năng lực Listening từ trang định dạng đề chính thức (không có bảng band descriptors; điểm là số câu đúng); E-54: thêm 6 trang hướng dẫn dạng câu hỏi của IDP vì 2 trang định dạng chủ yếu mô tả thủ tục",
+  "task": "IELTS Listening (Parts 1-4, Academic and General Training share it): the abilities the official format says the test assesses",
+  "requirements": {
+    "min_per_criterion": 1,
+    "max_per_criterion": 5,
+    "recommended_min": 2,
+    "recommended_max": 4,
+    "criteria": [
+      "main_ideas",
+      "detail",
+      "opinion_attitude",
+      "purpose",
+      "development"
+    ],
+    "id_prefix": "lis",
+    "excluded": [
+      "spelling or handwriting conventions as separate competencies",
+      "band score conversion"
+    ]
+  },
+  "max_chars_per_source": 16000,
+  "sources": [
+    {
+      "url": "https://ielts.org/take-a-test/test-types/ielts-academic-test/ielts-academic-format-listening",
+      "role": "test_format"
+    },
+    {
+      "url": "https://ielts.org/take-a-test/test-types/ielts-general-training-test/ielts-general-training-format-listening",
+      "role": "test_format"
+    },
+    {
+      "url": "https://ielts.idp.com/prepare/article-question-types-listening",
+      "role": "question_type_guidance"
+    },
+    {
+      "url": "https://ielts.idp.com/prepare/article-ielts-listening-test-multiple-choice-questions",
+      "role": "question_type_guidance"
+    },
+    {
+      "url": "https://ielts.idp.com/prepare/article-ielts-listening-matching-questions-guide",
+      "role": "question_type_guidance"
+    },
+    {
+      "url": "https://ielts.idp.com/prepare/article-tables-forms-and-notes-in-the-ielts-listening-test",
+      "role": "question_type_guidance"
+    },
+    {
+      "url": "https://ielts.idp.com/prepare/article-ielts-listening-tips-for-map-plan-diagram-questions",
+      "role": "question_type_guidance"
+    },
+    {
+      "url": "https://ielts.idp.com/prepare/article-ielts-listening-test-flow-chart-completion-questions",
+      "role": "question_type_guidance"
+    }
+  ]
+}

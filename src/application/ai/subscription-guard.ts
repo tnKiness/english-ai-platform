@@ -11,10 +11,13 @@ export const CLI_PROVIDERS: readonly CliProvider[] = ['claude-code', 'agy', 'cod
 /** Orders any provider list by the system preference (jobs store eligibility as a set; order is decided here). */
 export const byPreference = (list: readonly CliProvider[]): CliProvider[] => [...new Set(list)].filter((p) => CLI_PROVIDERS.includes(p)).sort((a, b) => CLI_PROVIDERS.indexOf(a) - CLI_PROVIDERS.indexOf(b));
 export type Capability = 'text' | 'structured_result' | 'direct_audio';
-export type DataClass = 'synthetic_fixture' | 'knowledge_content' | 'answer_key' | 'learner_submission' | 'learner_audio' | 'learner_profile';
-export const DATA_CLASSES: readonly DataClass[] = ['synthetic_fixture', 'knowledge_content', 'answer_key', 'learner_submission', 'learner_audio', 'learner_profile'];
-/** E-11 (2), user decision: what a D-01-verified provider may be granted. Still recorded per provider (ai_data_consents). */
-export const USER_APPROVED_DATA_CLASSES: readonly DataClass[] = ['synthetic_fixture', 'knowledge_content', 'answer_key', 'learner_submission', 'learner_profile'];
+export type DataClass = 'synthetic_fixture' | 'knowledge_content' | 'answer_key' | 'learner_submission' | 'learner_audio' | 'learner_profile' | 'learner_owned_content';
+export const DATA_CLASSES: readonly DataClass[] = ['synthetic_fixture', 'knowledge_content', 'answer_key', 'learner_submission', 'learner_audio', 'learner_profile', 'learner_owned_content'];
+/**
+ * E-11 (2), user decision: what a D-01-verified provider may be granted. Still recorded per provider (ai_data_consents).
+ * E-51: learner_owned_content (D-05 N7, recommendation accepted in E-36) joins the list; each provider still needs a grant.
+ */
+export const USER_APPROVED_DATA_CLASSES: readonly DataClass[] = ['synthetic_fixture', 'knowledge_content', 'answer_key', 'learner_submission', 'learner_profile', 'learner_owned_content'];
 /** E-11 (2): never sent to any provider, whatever the consent table says. */
 export const NEVER_SENT_DATA_CLASSES: readonly DataClass[] = ['learner_audio'];
 /** E-11 (5): "extra usage / auto-recharge is off" must be re-confirmed by the user at least this often. */
@@ -180,11 +183,9 @@ export function latestExtraUsageConfirmation(e: Pick<ProviderEvidence, 'extra_us
 
 /** Data classes a context sends, derived from role, scope and content origin — never from what the AI says. */
 export function dataClassesFor(m: { role: string; scope: 'learner' | 'dry_run'; content_origin: ContentOrigin | null }): DataClass[] {
-  const content: DataClass = m.content_origin === 'synthetic_fixture' ? 'synthetic_fixture' : 'knowledge_content';
+  // E-51 (C4): material the learner imported is its own consent class, never plain knowledge_content.
+  const content: DataClass = m.content_origin === 'synthetic_fixture' ? 'synthetic_fixture' : m.content_origin === 'learner_owned' ? 'learner_owned_content' : 'knowledge_content';
   const classes = new Set<DataClass>([content]);
-  // E-41: imported learner material is personal data. Until C4 adds a dedicated consent class it needs the
-  // learner_submission consent too, never only knowledge_content.
-  if (m.content_origin === 'learner_owned') classes.add('learner_submission');
   if (m.role === 'verifier') classes.add(m.content_origin === 'synthetic_fixture' ? 'synthetic_fixture' : 'answer_key');
   if (m.scope === 'learner') classes.add('learner_submission');
   return [...classes];

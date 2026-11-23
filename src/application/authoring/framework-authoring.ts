@@ -11,7 +11,7 @@ import { canonicalJson, sha256 } from '../../infrastructure/files/paths.js';
 import type { FrameworkPolicy, FrameworkSources } from '../../infrastructure/authoring/framework-sources.js';
 import type { Store } from '../../infrastructure/sqlite/store.js';
 
-export type AuthoringTask = 'content.author' | 'content.review' | 'content.item_author' | 'content.item_review';
+export type AuthoringTask = 'content.author' | 'content.review' | 'content.item_author' | 'content.item_review' | 'content.listening_author' | 'content.listening_solve';
 export interface ExecutorOutput { result: AdapterResult; provider: string; cli_version: string | null; model: string | null; detail?: string }
 /** One AI call; the real implementation goes through the gateway (subscription guard, verified providers only). */
 export type AuthoringExecutor = (task: AuthoringTask, payload: Record<string, unknown>) => Promise<ExecutorOutput>;

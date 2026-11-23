@@ -1,0 +1,40 @@
+{
+  "schema_version": "1",
+  "framework_id": "ielts-speaking-text",
+  "decision": "E-52 (D-05 N4, E-43): khung năng lực Speaking Part 1–3 chỉ trên văn bản (ý tưởng, phát triển ý, từ vựng, ngữ pháp); không đo phát âm, độ trôi chảy khi nói",
+  "task": "IELTS Speaking Parts 1-3, judged only on a written transcript of the answer (no audio): what a text can show of Fluency and Coherence (coherence, development, linking), Lexical Resource and Grammatical Range and Accuracy",
+  "requirements": {
+    "min_per_criterion": 2,
+    "max_per_criterion": 6,
+    "recommended_min": 3,
+    "recommended_max": 5,
+    "criteria": [
+      "fluency_coherence",
+      "lexical_resource",
+      "grammatical_range_accuracy"
+    ],
+    "id_prefix": "spk",
+    "excluded": [
+      "Pronunciation (not observable on text)",
+      "speech rate, hesitation, pausing and self-correction while speaking (not observable on text)"
+    ]
+  },
+  "max_chars_per_source": 16000,
+  "band_table": {
+    "url": "https://ielts.org/cdn/ielts-guides/ielts-speaking-band-descriptors.pdf",
+    "first_criterion": "Fluency and Coherence",
+    "exclude_criteria": [
+      "Pronunciation"
+    ]
+  },
+  "sources": [
+    {
+      "url": "https://ielts.org/cdn/ielts-guides/ielts-speaking-key-assessment-criteria.pdf",
+      "role": "official_criteria"
+    },
+    {
+      "url": "https://ielts.org/take-a-test/test-types/ielts-academic-test/ielts-academic-format-speaking",
+      "role": "test_format"
+    }
+  ]
+}

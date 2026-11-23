@@ -85,6 +85,10 @@ npm run sources -- crawl   # crawl allowlisted IELTS reference sites into var/so
 npm run tts -- status        # local Piper TTS for Listening audio (offline); `say "text"` writes a WAV to the media store
 npm run author -- framework   # AI drafts the Writing Task 2 competency framework from approved sources; review in Builder & QC → Competency framework
 npm run author -- items       # AI writes Writing Task 2 prompts from the approved framework; prompts passing QC1–QC4 are released automatically
+npm run author -- coverage    # prompt bank coverage against the N8 thresholds (no AI call); `replenish` authors what is missing
+npm run author -- listening   # AI writes Listening parts, Piper voices them, a blind solve on the transcript gates release
+npm run calibrate -- run      # qualitative check of the Writing assessor on the official scored samples (no band estimate)
+npm run worker -- --learning --replenish   # also tops up the prompt bank while the queue is idle
 ```
 
 ## Project layout

@@ -426,6 +426,6 @@ export class CliProviderAdapter implements ProviderAdapter {
     if (r.run_id) this.envelopes.delete(r.run_id);
     if (!envelope || typeof r.stdout !== 'string') return { ok: false, error: 'BILLING_UNVERIFIED' };
     const parsed = parseEnvelope(r.stdout, r.code ?? null, envelope, taskType, { stderr: typeof r.stderr === 'string' ? r.stderr : '' });
-    return parsed.ok ? { ok: true, result: parsed.result } : { ok: false, error: parsed.error, reset_at: parsed.reset_at ?? null };
+    return parsed.ok ? { ok: true, result: parsed.result } : { ok: false, error: parsed.error, reset_at: parsed.reset_at ?? null, ...(parsed.detail ? { detail: parsed.detail } : {}) };
   }
 }

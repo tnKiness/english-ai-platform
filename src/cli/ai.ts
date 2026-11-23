@@ -33,7 +33,7 @@ const USAGE = `Usage: npm run ai -- <command>
   evidence <file.json> [--boundary <probe.json>]    record {"evidence":…,"envelope":…} (no secrets), then re-check;
                                                     --boundary takes file_scope_test from a PASS probe-boundary report
   consent <provider> <data_class> grant|revoke      who may receive which data (default: nobody; learner_audio never)
-  consent <provider> approved grant                 E-11: grant the 5 user-approved classes to a D-01-verified provider
+  consent <provider> approved grant                 E-11/E-51: grant the user-approved classes to a D-01-verified provider
   confirm-extra-usage <provider> off                you checked today that extra usage / auto-recharge is OFF (valid 30 days)
   verify codex|claude|agy --profile <dir> [--profile-id <id>] [--model <m> | --models <a,b,c>] [--effort <e>] [--entrypoint <exe>] [--argv '<json>'] [--out <file>]
                                                     collect D-01 evidence (codex ~8 prompts; claude/agy ~3 prompts); never sets VERIFIED

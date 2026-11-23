@@ -1,6 +1,7 @@
 // P5-3 Learner data export and storage report (D-07 independent part; E-28). Read-only: nothing is deleted or changed.
 // The export holds what the learner wrote or was already shown: hints not yet unlocked, answer keys, knowledge content,
 // AI account evidence and credentials are never written. One read transaction gives a consistent snapshot.
+import { diskStatus } from '../files/disk-guard.js';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
 import { extname, join, relative, resolve, sep } from 'node:path';
 import type { Db } from '../sqlite/database.js';
@@ -148,7 +149,8 @@ export function storageUsage(db: Db, paths: DataPaths) {
     root, total_bytes: total, areas,
     disk: { free_bytes: Number(fsInfo.bavail) * Number(fsInfo.bsize), total_bytes: Number(fsInfo.blocks) * Number(fsInfo.bsize) },
     largest_tables: tables,
-    retention: { policy: 'none', note: 'Chưa có chính sách lưu giữ (D-07): hệ thống không tự xóa dữ liệu. Báo cáo này chỉ để bạn quyết định.' },
+    disk_status: diskStatus(root),
+    retention: { policy: 'warn_block_manual_prune', note: 'D-07 (E-53): dưới 5 GB trống thì cảnh báo; dưới 2 GB thì tạm dừng tải nguồn/audio mới và tạo audio TTS. Hệ thống không bao giờ tự xóa dữ liệu; dọn bản sao nguồn không dùng bằng `npm.cmd run sources -- prune-copies`.' },
   };
 }
 

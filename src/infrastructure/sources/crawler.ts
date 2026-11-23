@@ -1,6 +1,7 @@
 // Source crawler (E-37, D-05 N2): fetches pages of the allowlisted source domains into var/sources and records each one
 // as a candidate for the learner's review. Bounded (pages per run, depth, size, timeout), polite (robots.txt, one
 // request per host per interval, redirects checked hop by hop before they are requested), resumable (the QUEUED rows are the frontier). Never follows links off the allowlist.
+import { diskStatus, type DiskStatus } from '../files/disk-guard.js';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -69,12 +70,14 @@ export const sourcesDir = (paths: DataPaths) => join(paths.root, 'sources');
 type Fetch = (url: string, init: { headers: Record<string, string>; signal: AbortSignal; redirect: 'manual' }) => Promise<Response>;
 export interface CrawlOptions {
   maxPages: number;
+  /** E-53: disk check before each download (tests inject one). */
+  disk?: () => DiskStatus;
   now?: () => Date;
   fetchImpl?: Fetch;
   sleep?: (ms: number) => Promise<void>;
   log?: (line: string) => void;
 }
-export interface CrawlReport { processed: number; fetched: number; skipped: number; failed: number; discovered: number; queued_left: number; excluded_from_queue: number }
+export interface CrawlReport { processed: number; fetched: number; skipped: number; failed: number; discovered: number; queued_left: number; excluded_from_queue: number; stopped?: 'DISK_LOW' }
 const DEFAULT_MAX_AUDIO_BYTES = 60 * 1024 * 1024;
 
 export class SourceCrawler {
@@ -194,6 +197,9 @@ export class SourceCrawler {
     const finish = this.db.prepare(`UPDATE source_candidates SET fetch_state = ?, http_status = ?, content_type = ?, title = ?, byte_size = ?, sha256 = ?, stored_path = ?, text_chars = ?,
       kind = ?, skill = ?, error = ?, fetched_at = ?, updated_at = ? WHERE candidate_id = ?`);
     while (report.processed < opts.maxPages) {
+      // E-53 (D-07): stop before the next download when the disk is in the block zone; the queue stays for later.
+      const disk = (opts.disk ?? (() => diskStatus(this.paths.root)))();
+      if (disk.level === 'block') { report.stopped = 'DISK_LOW'; log(`DỪNG  ${disk.message ?? 'DISK_LOW'}`); break; }
       const row = next.get() as { candidate_id: string; url: string; depth: number; origin: DomainRule['origin'] } | undefined;
       if (!row) break;
       report.processed += 1;

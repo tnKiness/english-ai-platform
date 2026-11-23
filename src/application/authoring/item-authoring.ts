@@ -8,7 +8,10 @@
 //   release store, so a later revoke in the QC console is reflected here without rewriting history.
 import type { BuilderPipeline } from '../qc/pipeline.js';
 import type { QcStage } from '../../domain/knowledge/release-gate.js';
+import { randomInt, randomUUID } from 'node:crypto';
 import { studyDayOf } from '../../domain/scheduling/study-day.js';
+import { assessNovelty } from '../../domain/knowledge/novelty.js';
+import { servableAiWritingItems } from '../learning/writing-catalog.js';
 import { checkItems, REVIEW_STAGE, type ItemFinding, type ItemReviewResult, type Wt2ItemDraft, type Wt2ItemSetResult } from '../../domain/knowledge/item-checks.js';
 import type { Store } from '../../infrastructure/sqlite/store.js';
 import { AuthoringError, runAuthoringCall, type AuthoringExecutor, type FrameworkDocument } from './framework-authoring.js';
@@ -16,7 +19,15 @@ import { AuthoringError, runAuthoringCall, type AuthoringExecutor, type Framewor
 export interface ItemPolicy {
   schema_version: '1'; item_set_id: string; decision: string; task: string; batch_size: number; daily_ai_call_cap: number; similarity_threshold: number;
   min_prompt_words: number; essay_min_words: number; recommended_minutes: number; genres: string[]; usage_purposes: ('practice' | 'independent_verification')[];
+  /** E-50: short 7A paragraph tasks and N8 coverage targets (C5). */
+  paragraph_min_words: number; paragraph_minutes: number; coverage: { min_unseen: number; min_families: number; replenish_count: number };
+  /** E-52: the track this policy authors for. Defaults: Writing Task 2 (`writing`, `writing_task2`, ids `wt2-ai-…`). */
+  skill?: 'writing' | 'speaking'; task_type?: 'writing_task2' | 'speaking_text'; item_id_prefix?: string;
+  /** Learner-visible instruction under the prompt; `{n}` = minimum words. */
+  answer_instruction?: { essay: string; paragraph: string };
 }
+export type TaskScope = 'essay' | 'paragraph';
+export interface AuthorOptions { task_scope?: TaskScope; focus?: string[] }
 
 export interface BatchItem extends Wt2ItemDraft { item_id: string; package_id: string; precheck: 'passed' | 'rejected' }
 export interface BatchDocument {
@@ -28,9 +39,15 @@ export interface BatchDocument {
 export interface ItemReviewDocument { schema_version: '1'; batch_id: string; run_id: string; provider: string; model: string | null; reviewed: { item_id: string; bundle_hash: string }[]; result: ItemReviewResult }
 /** Metadata only: the prompt text is never part of a status, so listing batches is not an exposure (06 §4.1). */
 export interface ItemStatus {
-  item_id: string; package_id: string; item_key: string; genre: string; topic: string; competencies: string[]; precheck: 'passed' | 'rejected';
+  item_id: string; package_id: string; item_key: string; task_scope: TaskScope; genre: string; topic: string; competencies: string[]; precheck: 'passed' | 'rejected';
   release_state: string | null; bundle_hash: string | null; qc: { stage: string; status: string }[]; release_reasons: string[];
 }
+
+interface SampleRow { sample_id: string; item_id: string; item_version: string; package_id: string; package_version: string; drawn_at: string; decision: 'keep' | 'revoke' | null; note: string | null; decided_at: string | null }
+/** A drawn sample: the prompt text is included because drawing it already recorded the exposure. */
+export interface SampleView extends SampleRow { task_scope: TaskScope; genre: string; topic: string; prompt: string; instruction: string; release_state: string | null }
+
+export interface CoverageCell { task_scope: TaskScope; unseen: number; families: number; min_unseen: number; min_families: number; deficient: boolean; focus: string[] }
 
 const PKG_VERSION = 'v1';
 const BATCH_DOC = 'wt2-item-batch';
@@ -88,15 +105,19 @@ export class ItemAuthoringService {
    * One batch: author (1 AI call), deterministic pre-checks, package + freeze + QC1–3 each passing prompt, then one
    * independent review call over the frozen prompts and automatic release of those that pass every QC part.
    */
-  async author(executor: AuthoringExecutor, count = this.policy.batch_size): Promise<{ batch_id: string; items: ItemStatus[] }> {
+  async author(executor: AuthoringExecutor, count = this.policy.batch_size, opts: AuthorOptions = {}): Promise<{ batch_id: string; items: ItemStatus[] }> {
     const fw = this.framework();
     const n = Math.max(1, Math.min(10, Math.floor(count)));
+    const scope: TaskScope = opts.task_scope ?? 'essay';
+    const known = new Set(fw.competencies.map((c) => c.competency_id));
+    const focus = (opts.focus ?? []).filter((c) => known.has(c));
     this.ensureQuota(2);
     const existing = this.existing();
     const competencies = fw.competencies.map((c) => ({ competency_id: c.competency_id, criterion: c.criterion, title_vi: c.title_vi, assessor_criterion: c.assessor_criterion }));
     const payload = {
       task: this.policy.task,
-      requirements: { count: n, genres: this.policy.genres, essay_min_words: this.policy.essay_min_words },
+      requirements: { count: n, skill: this.policy.skill ?? 'writing', task_scope: scope, genres: this.policy.genres, essay_min_words: this.policy.essay_min_words, paragraph_min_words: this.policy.paragraph_min_words,
+        ...(focus.length ? { focus_competencies: focus } : {}) },
       framework: { framework_id: fw.framework_id, version: fw.version, competencies },
       avoid: existing.map(({ prompt, item_family, topic, genre }) => ({ prompt, item_family, topic, genre })),
     };
@@ -104,12 +125,12 @@ export class ItemAuthoringService {
     if (!out.result.ok) throw new AuthoringError(`AI soạn đề thất bại (${out.result.error}${out.detail ? `: ${out.detail}` : ''}). Lần chạy ${runId} đã được ghi.`, `AI_${out.result.error}`, 502);
     const set = out.result.result as Wt2ItemSetResult;
     const checks = checkItems(set.items, { competencies: new Set(fw.competencies.map((c) => c.competency_id)), existing,
-      similarity_threshold: this.policy.similarity_threshold, min_prompt_words: this.policy.min_prompt_words });
+      similarity_threshold: this.policy.similarity_threshold, min_prompt_words: this.policy.min_prompt_words, task_scope: scope });
     const short = runId.slice(0, 8);
     const items: BatchItem[] = set.items.map((it) => {
-      const item_id = `wt2-ai-${short}-${it.item_key.replace(/_/g, '-')}`;
+      const item_id = `${this.policy.item_id_prefix ?? 'wt2'}-ai-${short}-${it.item_key.replace(/_/g, '-')}`;
       const rejected = checks.some((f) => f.item_key === it.item_key && f.severity === 'error');
-      return { ...it, item_id, package_id: `pkg-${item_id}`, precheck: rejected ? 'rejected' as const : 'passed' as const };
+      return { ...it, task_scope: it.task_scope ?? 'essay', item_id, package_id: `pkg-${item_id}`, precheck: rejected ? 'rejected' as const : 'passed' as const };
     });
     const doc: BatchDocument = {
       schema_version: '1', batch_id: runId, item_set_id: this.policy.item_set_id, created_at: this.store.now().toISOString(),
@@ -123,12 +144,19 @@ export class ItemAuthoringService {
     return { batch_id: runId, items: this.status(runId) };
   }
 
+  /** The learner-visible instruction; the catalog reads the minimum word count back from it. */
+  private instruction(short: boolean): string {
+    const n = short ? this.policy.paragraph_min_words : this.policy.essay_min_words;
+    const t = this.policy.answer_instruction ?? { essay: 'Write at least {n} words.', paragraph: 'Write one paragraph of at least {n} words.' };
+    return (short ? t.paragraph : t.essay).replace('{n}', String(n));
+  }
+
   private units(fw: FrameworkDocument, it: BatchItem) {
     const sources = fw.sources.map((s) => ({ ...splitRef(s.source_ref), locator: s.role }));
     const bandSources = fw.sources.filter((s) => s.role === 'band_descriptors').map((s) => ({ ...splitRef(s.source_ref), locator: 'band descriptor table' }));
     const gov = (unitType: 'task_item' | 'answer_key' | 'rubric', id: string, roles: string[], disclosure: string, extra: { deps?: { kind: string; id: string; version: string }[]; sources?: typeof sources; authority?: string } = {}) => ({
       identity: { unit_id: id, unit_type: unitType, version: PKG_VERSION },
-      scope: { test_type: it.test_type, skills: ['writing'], task_types: ['writing_task2', it.genre], context: `AI-authored IELTS Writing Task 2 prompt (E-47), framework ${fw.framework_id}@${fw.version}` },
+      scope: { test_type: it.test_type, skills: [this.policy.skill ?? 'writing'], task_types: [this.policy.task_type ?? 'writing_task2', it.genre, ...(it.task_scope === 'paragraph' ? ['paragraph'] : [])], context: `AI-authored IELTS ${this.policy.skill === 'speaking' ? 'Speaking (text)' : 'Writing Task 2'} prompt (E-47), framework ${fw.framework_id}@${fw.version}` },
       basis: { sources: extra.sources ?? sources, derivation: 'authored_from_sources', derived_from: [], knowledge_gaps: [] },
       authority: extra.authority ?? 'pedagogical_guidance',
       validity: { status: 'draft', effective_from: null, review_due: null },
@@ -144,7 +172,7 @@ export class ItemAuthoringService {
       item: { schema_version: '1', governance: gov('task_item', it.item_id, ['learner', 'blind_solver', 'verifier', 'assessor'], 'prompt'), body: {
         item_family_id: `wt2-fam-${it.item_family}`, derived_from: [], shared_stimulus_id: null, decisive_features: [it.genre, it.topic],
         stimulus: { text: null, media: [] }, prompt: it.prompt,
-        questions: [{ question_id: 'q1', prompt: `Write at least ${this.policy.essay_min_words} words.`, response_type: 'essay', options: [] }],
+        questions: [{ question_id: 'q1', prompt: this.instruction(it.task_scope === 'paragraph'), response_type: 'essay', options: [] }],
         difficulty: { target_learner_level: null, initial_estimate: it.difficulty_estimate, observed: null, calibration: 'estimated' },
       } },
       key: { schema_version: '1', governance: gov('answer_key', keyId, ['verifier', 'assessor'], 'answer', { deps: [itemRef] }), body: {
@@ -165,7 +193,7 @@ export class ItemAuthoringService {
     const u = this.units(fw, it);
     const req = this.pipeline.createRequest({
       schema_version: '1', request_id: `req-${it.item_id}`, package_id: it.package_id, competencies: it.competencies, task_roles: [...this.policy.usage_purposes],
-      blocks: ['task_item', 'answer_key', 'rubric'], usage_purposes: [...this.policy.usage_purposes], scope: { test_type: it.test_type, skills: ['writing'] },
+      blocks: ['task_item', 'answer_key', 'rubric'], usage_purposes: [...this.policy.usage_purposes], scope: { test_type: it.test_type, skills: [this.policy.skill ?? 'writing'] },
       out_of_scope: ['Band estimation', 'Model answers'], acceptance_criteria: ['QC1–QC4 PASS on the frozen bundle hash; automatic release (D-05 N6)'],
       limits: { max_sources: Math.max(1, fw.sources.length), max_revision_rounds: 0, max_ai_runs: 2 }, content_origin: 'ai_authored',
     });
@@ -206,7 +234,7 @@ export class ItemAuthoringService {
     const frozen = pending.map(({ item, bundle_hash }) => {
       const body = (this.store.json.get('item', item.item_id, PKG_VERSION) as { body: { prompt: string } }).body;
       const key = (this.store.json.get('knowledge', `${item.item_id}-key`, PKG_VERSION) as { body: { measurement_targets: string[] } }).body;
-      return { item, bundle_hash, view: { item_key: item.item_key, genre: item.genre, topic: item.topic, prompt: body.prompt, competencies: key.measurement_targets } };
+      return { item, bundle_hash, view: { item_key: item.item_key, task_scope: item.task_scope ?? 'essay', genre: item.genre, topic: item.topic, prompt: body.prompt, competencies: key.measurement_targets } };
     });
     const others = this.existing().filter((e) => !frozen.some((f) => f.item.item_id === e.item_id));
     const payload = {
@@ -240,11 +268,106 @@ export class ItemAuthoringService {
     return { run_id: runId, reviewed: frozen.length, released };
   }
 
+  // ---- C5 coverage and replenishment (N8, E-50) -----------------------------------------------------
+  /**
+   * N8: each cell must keep at least `min_unseen` prompts the learner has not seen, from at least `min_families`
+   * item families. Cells: whole essays (practice, 7B, Bước 9) and paragraph tasks (7A). Competencies with an open
+   * verification coverage gap are the focus of the next batch, and cells with such gaps come first.
+   */
+  coverage(): { cells: CoverageCell[]; gaps: { competency_id: string; purpose: string }[] } {
+    const exposures = this.store.learning.exposures();
+    const unseen = servableAiWritingItems(this.store).filter((i) => i.task_type === (this.policy.task_type ?? 'writing_task2'))
+      .filter((i) => assessNovelty({ item_id: i.id, item_family_id: i.family, shared_stimulus_id: null, derived_from: [] }, exposures).novelty === 'novel');
+    const gaps = this.store.builder.reviews('open')
+      .filter((r) => r.kind === 'coverage_gap' && r.target_kind === 'competency')
+      .map((r) => ({ competency_id: r.target_id, purpose: (r.detail as { purpose?: string }).purpose ?? '?' }));
+    const { min_unseen, min_families } = this.policy.coverage;
+    const cell = (task_scope: TaskScope): CoverageCell => {
+      const items = unseen.filter((i) => (i.task_scope === 'short') === (task_scope === 'paragraph'));
+      const families = new Set(items.map((i) => i.family)).size;
+      const focus = [...new Set(gaps.filter((g) => (g.purpose === '7A') === (task_scope === 'paragraph')).map((g) => g.competency_id))];
+      return { task_scope, unseen: items.length, families, min_unseen, min_families, deficient: items.length < min_unseen || families < min_families || focus.length > 0, focus };
+    };
+    return { cells: [cell('paragraph'), cell('essay')].sort((a, b) => b.focus.length - a.focus.length), gaps };
+  }
+
+  /**
+   * Author one batch for each deficient cell while the N8 daily cap allows it (2 calls per batch). It reports why
+   * nothing ran instead of throwing for the cap or a missing framework, so the worker can call it when idle.
+   */
+  async replenish(executor: AuthoringExecutor): Promise<{ ran: { task_scope: TaskScope; batch_id: string; released: number }[]; skipped: string[] }> {
+    const ran: { task_scope: TaskScope; batch_id: string; released: number }[] = [];
+    const skipped: string[] = [];
+    if (!this.approvedFramework()) return { ran, skipped: ['FRAMEWORK_NOT_APPROVED'] };
+    for (const c of this.coverage().cells.filter((x) => x.deficient)) {
+      if (this.callsToday() + 2 > this.policy.daily_ai_call_cap) { skipped.push(`DAILY_CAP:${c.task_scope}`); continue; }
+      try {
+        const r = await this.author(executor, this.policy.coverage.replenish_count, { task_scope: c.task_scope, ...(c.focus.length ? { focus: c.focus } : {}) });
+        ran.push({ task_scope: c.task_scope, batch_id: r.batch_id, released: r.items.filter((i) => i.release_state === 'active').length });
+      } catch (e) { skipped.push(`${c.task_scope}:${e instanceof AuthoringError ? e.code : 'ERROR'}`); }
+    }
+    return { ran, skipped };
+  }
+
+  // ---- N6 random sample review (E-50) ------------------------------------------------------------
+  /**
+   * Draw up to `count` released prompts never sampled before, at random, and show them. Showing a prompt is an
+   * exposure: it is recorded (surface builder) in the same transaction, before the text is returned, so a sampled
+   * prompt is no longer offered as a novel verification task.
+   */
+  drawSamples(count = 2): SampleView[] {
+    const n = Math.max(1, Math.min(5, Math.floor(count)));
+    return this.store.db.transaction(() => {
+      const sampled = new Set((this.store.db.prepare('SELECT item_id FROM item_sample_reviews').all() as { item_id: string }[]).map((r) => r.item_id));
+      const pool = this.batchIds().flatMap((id) => this.batch(id).items)
+        .filter((i) => i.precheck === 'passed' && !sampled.has(i.item_id) && this.store.knowledge.releaseState(i.package_id, PKG_VERSION) === 'active');
+      const picked: BatchItem[] = [];
+      while (picked.length < n && pool.length) picked.push(pool.splice(randomInt(pool.length), 1)[0]!);
+      const at = this.store.now().toISOString();
+      return picked.map((i) => {
+        const servable = this.store.knowledge.servableItem(i.item_id, PKG_VERSION, 'learner');
+        const hash = this.store.json.find('item', i.item_id, PKG_VERSION)!.hash;
+        const sampleId = randomUUID();
+        this.store.learning.recordExposure({ idempotency_key: `builder:sample:${sampleId}`, item: { id: i.item_id, version: PKG_VERSION, hash },
+          item_family_id: servable.ok ? servable.item_family_id : `wt2-fam-${i.item_family}`, shared_stimulus_id: null, surface: 'builder', scope: 'dry_run', level: 'prompt' });
+        this.store.db.prepare('INSERT INTO item_sample_reviews (sample_id, item_id, item_version, package_id, package_version, drawn_at) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(sampleId, i.item_id, PKG_VERSION, i.package_id, PKG_VERSION, at);
+        return this.sampleView(sampleId);
+      });
+    }).immediate();
+  }
+
+  private sampleView(sampleId: string): SampleView {
+    const r = this.store.db.prepare('SELECT * FROM item_sample_reviews WHERE sample_id = ?').get(sampleId) as SampleRow | undefined;
+    if (!r) throw new AuthoringError(`Không có mẫu ${sampleId}`, 'NOT_FOUND', 404);
+    const item = this.batchIds().flatMap((id) => this.batch(id).items).find((i) => i.item_id === r.item_id);
+    const body = (this.store.json.get('item', r.item_id, r.item_version) as { body: { prompt: string; questions: { prompt: string }[] } }).body;
+    return { ...r, task_scope: item?.task_scope ?? 'essay', genre: item?.genre ?? '-', topic: item?.topic ?? '-', prompt: body.prompt, instruction: body.questions[0]?.prompt ?? '',
+      release_state: this.store.knowledge.releaseState(r.package_id, r.package_version) ?? null };
+  }
+
+  /** Samples already drawn (their prompts were seen when drawn), newest first. */
+  samples(): SampleView[] {
+    return (this.store.db.prepare('SELECT sample_id FROM item_sample_reviews ORDER BY drawn_at DESC, rowid DESC LIMIT 100').all() as { sample_id: string }[]).map((r) => this.sampleView(r.sample_id));
+  }
+
+  /** Keep, or revoke through the pipeline (suspends the package, invalidates caches, lists affected evidence). */
+  decideSample(sampleId: string, decision: 'keep' | 'revoke', note: string): SampleView {
+    const r = this.sampleView(sampleId);
+    if (r.decision) throw new AuthoringError(`Mẫu này đã được quyết định (${r.decision})`, 'ALREADY_DECIDED');
+    if (decision === 'revoke' && !note.trim()) throw new AuthoringError('Thu hồi cần ghi lý do', 'NOTE_REQUIRED', 400);
+    this.store.db.transaction(() => {
+      if (decision === 'revoke') this.pipeline.revoke({ target_kind: 'item', target_id: r.item_id, target_version: r.item_version }, `N6 sample review: ${note.trim()}`);
+      this.store.db.prepare('UPDATE item_sample_reviews SET decision = ?, note = ?, decided_at = ? WHERE sample_id = ?').run(decision, note.trim() || null, this.store.now().toISOString(), sampleId);
+    }).immediate();
+    return this.sampleView(sampleId);
+  }
+
   status(batchId: string): ItemStatus[] {
     return this.batch(batchId).items.map((i) => {
       const state = this.store.knowledge.releaseState(i.package_id, PKG_VERSION) ?? null;
       const qc = state === null ? null : this.pipeline.qcStatus(i.package_id, PKG_VERSION);
-      return { item_id: i.item_id, package_id: i.package_id, item_key: i.item_key, genre: i.genre, topic: i.topic, competencies: i.competencies, precheck: i.precheck,
+      return { item_id: i.item_id, package_id: i.package_id, item_key: i.item_key, task_scope: i.task_scope ?? 'essay', genre: i.genre, topic: i.topic, competencies: i.competencies, precheck: i.precheck,
         release_state: state, bundle_hash: qc?.bundle_hash ?? null, qc: qc?.stages.map((s) => ({ stage: s.stage, status: s.status })) ?? [], release_reasons: this.lastReasons.get(i.package_id) ?? [] };
     });
   }

@@ -1,4 +1,5 @@
 // Local TTS CLI (E-44, D-06 Listening). Offline: Piper runs on this machine; nothing is sent anywhere.
+import { assertCanStoreNew } from '../infrastructure/files/disk-guard.js';
 import { dataPaths } from '../infrastructure/files/paths.js';
 import { PiperTts } from '../infrastructure/audio/tts.js';
 import { openStore } from '../infrastructure/sqlite/store.js';
@@ -22,6 +23,7 @@ async function main(args: string[]): Promise<number> {
     const i = args.indexOf('--voice');
     const voice = i >= 0 ? args[i + 1] : tts.voices()[0]?.id;
     if (!voice) { console.log('Chưa có giọng nào. Chạy `npm.cmd run tts -- status`.'); return 2; }
+    assertCanStoreNew(dataPaths().root, 'tạo audio TTS mới'); // E-53 (D-07)
     const wav = await tts.synthesize(text, voice);
     const store = await openStore(dataPaths());
     try {

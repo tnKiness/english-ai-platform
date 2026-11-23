@@ -1,0 +1,13 @@
+{
+  "schema_version": "1",
+  "item_set_id": "lis-ai-items",
+  "decision": "E-54 (D-05 N5/N6/N8, E-44): AI soạn Part Listening (kịch bản + câu hỏi + đáp án) theo khung Listening đã duyệt; Piper đọc thành audio; giải mù trên transcript (QC4) và rà soát (QC2/QC3) đạt thì tự phát hành",
+  "task": "IELTS Listening Parts 1-4 (Academic and General Training)",
+  "batch_size": 2,
+  "daily_ai_call_cap": 10,
+  "similarity_threshold": 0.6,
+  "parts": [1, 2, 3, 4],
+  "voices": { "female": ["en_GB-jenny_dioco-medium"], "male": ["en_GB-alan-medium", "en_GB-northern_english_male-medium"] },
+  "line_gap_seconds": 0.6,
+  "usage_purposes": ["practice", "independent_verification"]
+}

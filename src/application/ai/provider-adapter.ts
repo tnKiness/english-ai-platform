@@ -2,7 +2,7 @@ import type { FrameworkResult, FrameworkReviewResult } from '../../domain/knowle
 import type { ItemReviewResult, Wt2ItemSetResult } from '../../domain/knowledge/item-checks.js';
 export type { FrameworkCompetency, FrameworkResult, FrameworkReviewResult } from '../../domain/knowledge/framework-checks.js';
 export type ProviderError = 'QUOTA_EXHAUSTED' | 'RATE_LIMIT' | 'AUTH_EXPIRED' | 'BILLING_UNVERIFIED' | 'NETWORK' | 'TIMEOUT' | 'INVALID_SCHEMA' | 'REFUSAL' | 'CAPABILITY_MISSING' | 'CANCELLED';
-export type TaskType = 'writing.assess' | 'reading.blind_solve' | 'reading.verify' | 'repair.assess' | 'content.author' | 'content.review' | 'content.item_author' | 'content.item_review';
+export type TaskType = 'writing.assess' | 'reading.blind_solve' | 'reading.verify' | 'repair.assess' | 'content.author' | 'content.review' | 'content.item_author' | 'content.item_review' | 'content.listening_author' | 'content.listening_solve';
 export interface Job {
   job_id: string;
   context_manifest_id: string;
@@ -40,7 +40,7 @@ export interface WritingAssessment {
 export const isWritingAssessment = (r: unknown): r is WritingAssessment => typeof r === 'object' && r !== null && Array.isArray((r as { competencies?: unknown }).competencies);
 export type AiResult = Assessment | WritingAssessment | BlindSolveResult | VerificationResult | FrameworkResult | FrameworkReviewResult | Wt2ItemSetResult | ItemReviewResult;
 /** reset_at (E-24): thời điểm hãng báo mở lại hạn mức/giới hạn tốc độ, nếu đọc được từ lỗi của CLI. */
-export type AdapterResult = { ok: true; result: AiResult } | { ok: false; error: ProviderError; reset_at?: string | null };
+export type AdapterResult = { ok: true; result: AiResult } | { ok: false; error: ProviderError; reset_at?: string | null; /** E-52: why (no content values), e.g. contract paths. */ detail?: string };
 export interface ProviderAdapter {
   inspectAuth(): Promise<{ authenticated: boolean; synthetic: boolean }>;
   inspectEntitlement(): Promise<{ verified: boolean; billing: 'subscription_only' | 'unverified'; synthetic: boolean }>;

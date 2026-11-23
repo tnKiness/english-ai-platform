@@ -30,6 +30,7 @@
     "sources": "tsx src/cli/sources.ts",
     "author": "tsx src/cli/author.ts",
     "tts": "tsx src/cli/tts.ts",
+    "calibrate": "tsx src/cli/calibrate.ts",
     "qc:real": "tsx scripts/qc-real-synthetic.ts",
     "seed:reading": "tsx scripts/seed-reading.ts"
   },

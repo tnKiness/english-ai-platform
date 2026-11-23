@@ -28,6 +28,10 @@ import type { ObservationDraft } from '../ports.js';
 import { submitForAssessment } from './submit-for-assessment.js';
 import { assessorContext, diagnosisFromResult, observationsFromLegacy, observationsFromResult, type CompetencyDef } from './writing-assessment.js';
 import { isSyntheticEvidence } from '../../domain/knowledge/content-origin.js';
+import { FrameworkAuthoringService, type FrameworkDocument } from '../authoring/framework-authoring.js';
+import { resolve } from 'node:path';
+import { FRAMEWORK_POLICY_FILES, loadFrameworkPolicy } from '../../infrastructure/authoring/framework-sources.js';
+import { aiWritingItem, servableAiWritingItems, type AiWritingItem } from './writing-catalog.js';
 
 export const SYNTHETIC_COMPETENCY_ID = 'syn.writing.tr.clear_position';
 export const SYNTHETIC_SECONDARY_COMPETENCY_ID = 'syn.writing.cc.paragraph_cohesion';
@@ -131,6 +135,10 @@ export interface AttemptWorkspaceView {
     step6_branch: Step6Branch | null;
     step6_completed: boolean;
     step6_lesson: { title: string; explanation: string; contrast_examples: string[]; concept_question: string } | null;
+    /** E-50: AI-authored prompts only — the key idea, returned once, right after the learner answered (self-check). */
+    step6_expected?: string | null;
+    /** E-50: true when Bước 6 is a learner self-check against the key idea (AI-authored prompt). */
+    step6_self_check?: boolean;
     linked_7a_attempt_id: string | null;
     synthetic: boolean;
   } | null;
@@ -256,6 +264,12 @@ const SYNTHETIC_ITEMS: readonly SyntheticItemMeta[] = [
   },
 ];
 
+/** E-49: one Writing item as the workflow sees it — a synthetic fixture item or a released AI-authored prompt. */
+type ItemMeta = Omit<SyntheticItemMeta, 'purpose'> & { purpose: Purpose | null; synthetic: boolean; min_words: number; rubric: { id: string; version: string }; framework_version: string | null; package: { id: string; version: string } };
+type CompetencyInfo = CompetencyDef & { skill: 'writing' | 'speaking_text'; description: string };
+const AI_ITEM_MODES: readonly Mode[] = ['self_practice', 'exam'];
+type FrameworkSkill = 'writing' | 'speaking';
+
 export class LearningWorkflowService {
   /** D-02 v1 (E-33). null = no approved policy file → every conclusion stays "chưa đủ kết luận". */
   readonly policy: LoadedPolicy | null;
@@ -264,9 +278,91 @@ export class LearningWorkflowService {
    * learning worker (`npm run worker -- --learning`), which goes through the gateway and a D-01 verified provider.
    */
   readonly aiMode: 'synthetic' | 'real';
-  constructor(private store: Store, policy?: LoadedPolicy | null, options: { aiMode?: 'synthetic' | 'real' } = {}) {
+  /** E-49/E-52: a version of a competency framework (undefined = the approved one) per skill; null when there is none. */
+  private readonly framework: (version?: string, skill?: FrameworkSkill) => FrameworkDocument | null;
+  constructor(private store: Store, policy?: LoadedPolicy | null, options: { aiMode?: 'synthetic' | 'real'; framework?: (version?: string, skill?: FrameworkSkill) => FrameworkDocument | null } = {}) {
     this.policy = policy === undefined ? loadCompetencyPolicy() : policy;
     this.aiMode = options.aiMode ?? (process.env.STUDY_ENGLISH_LEARNING_AI === 'real' ? 'real' : 'synthetic');
+    this.framework = options.framework ?? ((version, skill = 'writing') => {
+      try {
+        const svc = new FrameworkAuthoringService(store, loadFrameworkPolicy(resolve(FRAMEWORK_POLICY_FILES[skill]!)), () => ({ sources: [], haystacks: [], missing: [] }));
+        return version ? svc.document(version) : svc.approved();
+      } catch { return null; }
+    });
+  }
+
+  /** Metadata of a Writing item: synthetic fixture first, then a released AI-authored prompt (E-49). */
+  private itemMeta(id: string | undefined, version = 'v1'): ItemMeta | undefined {
+    if (!id) return undefined;
+    const syn = SYNTHETIC_ITEMS.find((m) => m.id === id);
+    if (syn) return { ...syn, synthetic: true, min_words: 150, rubric: { id: SYNTHETIC_WRITING_RUBRIC_ID, version: 'v1' }, framework_version: null, package: { id: SYNTHETIC_WRITING_PKG_ID, version: 'v1' } };
+    const ai = aiWritingItem(this.store, id, version);
+    if (!ai) return undefined;
+    return {
+      id: ai.id, title: ai.title, prompt: ai.prompt, skill: ai.skill, genre: ai.genre_label, family: ai.family, purpose: null, mode: 'self_practice',
+      estimated_minutes: ai.estimated_minutes, meets_min_scope: true, task_scope: ai.task_scope, constraint: ai.constraint, competencies: ai.competencies,
+      outline_suggestions: [], vocabulary_frame: [], synthetic: false, min_words: ai.min_words, rubric: ai.rubric, framework_version: ai.framework_version, package: ai.package,
+    };
+  }
+
+  /** Competency of the framework version an item was written for (falls back to the approved one). */
+  private frameworkCompetencies(version?: string | null, skill: FrameworkSkill = 'writing'): CompetencyInfo[] {
+    const fw = (version ? this.framework(version, skill) : null) ?? this.framework(undefined, skill);
+    return (fw?.competencies ?? []).map((c) => ({ competency_id: c.competency_id, title: c.title_vi, criterion: c.assessor_criterion, skill: skill === 'speaking' ? 'speaking_text' as const : 'writing' as const, description: c.target_claim }));
+  }
+
+  /** Every competency the profile shows: the synthetic fixtures and the approved Writing Task 2 framework (E-49). */
+  private competencyDefs(): CompetencyInfo[] {
+    const out: CompetencyInfo[] = [...WRITING_COMPETENCIES];
+    for (const c of [...this.frameworkCompetencies(), ...this.frameworkCompetencies(undefined, 'speaking')]) if (!out.some((w) => w.competency_id === c.competency_id)) out.push(c);
+    return out;
+  }
+
+  /** The competency the attempt's loop focuses on (hints, self-repair, verification). */
+  private loopCompetency(attemptId: string): string {
+    return (this.store.db.prepare('SELECT competency_id FROM writing_loop_states WHERE attempt_id = ?').get(attemptId) as { competency_id: string } | undefined)?.competency_id ?? SYNTHETIC_COMPETENCY_ID;
+  }
+
+  /**
+   * E-50: a released AI-authored prompt that measures the competency, has the requested breadth (short = paragraph for
+   * 7A, composite = essay for 7B/9), is still novel for the learner (05 §6.B, 04 §5.B.4) and is not already assigned
+   * to an open task. Deterministic order; undefined when the bank has none (C5 replenishes it).
+   */
+  private pickVerificationItem(competencyId: string, breadth: 'short' | 'composite'): AiWritingItem | undefined {
+    const exposures = this.store.learning.exposures();
+    const busy = new Set((this.store.db.prepare("SELECT item_id FROM scheduled_tasks WHERE state IN ('PENDING', 'AWAITING_OPPORTUNITY', 'IN_PROGRESS')").all() as { item_id: string }[]).map((r) => r.item_id));
+    return servableAiWritingItems(this.store)
+      .filter((i) => i.task_scope === breadth && i.competencies.includes(competencyId) && !busy.has(i.id))
+      .filter((i) => assessNovelty({ item_id: i.id, item_family_id: i.family, shared_stimulus_id: null, derived_from: [] }, exposures).novelty === 'novel')
+      .sort((a, b) => a.id.localeCompare(b.id))[0];
+  }
+
+  /** No novel item to verify a framework competency: an open coverage gap tells the learner to author more (C5). */
+  private verificationGap(competencyId: string, purpose: Purpose, at: string): void {
+    const scope = purpose === '7A' ? 'paragraph' : 'essay';
+    this.store.builder.openReview({ dedupe_key: `coverage:verify:${competencyId}:${purpose}:${studyDayOf(new Date(at))}`, kind: 'coverage_gap', target_kind: 'competency', target_id: competencyId, target_version: null,
+      severity: 'normal', summary: `Thiếu đề ${scope === 'paragraph' ? 'đoạn' : 'bài luận'} chưa xem để kiểm chứng ${purpose} cho ${competencyId}`,
+      detail: { competency_id: competencyId, purpose, remedy: `npm.cmd run author -- items${scope === 'paragraph' ? ' --paragraph' : ''} --focus ${competencyId}` } });
+  }
+
+  /**
+   * E-49 "kho đề": released AI-authored Writing Task 2 prompts, metadata only (no prompt text: reading it is an
+   * exposure, recorded when an attempt starts). `seen` = any exposure of the item already exists.
+   */
+  writingBank() {
+    const exposures = this.store.learning.exposures();
+    // Paragraph tasks are kept for 7A transfer checks: showing them here would spend their novelty (E-50).
+    const items = servableAiWritingItems(this.store, ['ai_authored', 'learner_owned']).filter((i) => i.task_scope === 'composite').map((i) => ({
+      item_id: i.id, item_version: i.version, title: i.origin === 'learner_owned' ? `${i.title} (đề của bạn)` : i.title, origin: i.origin, genre: i.genre_label, estimated_minutes: i.estimated_minutes, min_words: i.min_words,
+      competencies: i.competencies.length, seen: exposures.some((e) => e.item_id === i.id),
+    }));
+    return {
+      ai_mode: this.aiMode, available: this.aiMode === 'real',
+      note: this.aiMode === 'real'
+        ? 'Đề do AI soạn theo khung năng lực đã duyệt, đã qua QC1–QC4. Bài được chấm thật theo các năng lực của khung; độ khó chỉ là ước tính.'
+        : 'Đề AI chỉ làm được khi app chạy chế độ chấm thật (STUDY_ENGLISH_LEARNING_AI=real và worker học); FakeAdapter không chấm được đề thật.',
+      items: items.sort((a, b) => Number(a.seen) - Number(b.seen) || a.title.localeCompare(b.title)),
+    };
   }
 
   /** Khởi tạo gói học Writing synthetic đã kích hoạt để phục vụ luồng P3 độc lập (idempotent). */
@@ -378,11 +474,12 @@ export class LearningWorkflowService {
 
     const candidates: TaskCandidate[] = dueRows.map((r) => {
       const servable = this.store.knowledge.servableItem(r.item_id, r.item_version, 'learner');
-      const releaseState = this.store.knowledge.releaseState(SYNTHETIC_WRITING_PKG_ID, 'v1') ?? 'draft';
+      const pkg = this.itemMeta(r.item_id, r.item_version)?.package ?? { id: SYNTHETIC_WRITING_PKG_ID, version: 'v1' };
+      const releaseState = this.store.knowledge.releaseState(pkg.id, pkg.version) ?? 'draft';
       return {
         task_id: r.task_id,
         item: { id: r.item_id, version: r.item_version, item_family_id: servable.ok ? servable.item_family_id : 'unknown', shared_stimulus_id: servable.ok ? servable.shared_stimulus_id : null, derived_from: [] },
-        package: { id: SYNTHETIC_WRITING_PKG_ID, version: 'v1', release_state: releaseState },
+        package: { id: pkg.id, version: pkg.version, release_state: releaseState },
         competency_ids: [r.competency_id],
         purpose: r.purpose,
         mode: r.mode,
@@ -395,7 +492,7 @@ export class LearningWorkflowService {
 
     const filtered = filterEligible(
       candidates,
-      { competency_ids: [SYNTHETIC_COMPETENCY_ID, SYNTHETIC_SECONDARY_COMPETENCY_ID, SYNTHETIC_SPEAKING_TEXT_COMPETENCY_ID], available_minutes: availableMinutes },
+      { competency_ids: this.competencyDefs().map((c) => c.competency_id), available_minutes: availableMinutes },
       this.store.learning.exposures(),
       this.store.knowledge.revocations(),
     );
@@ -416,7 +513,7 @@ export class LearningWorkflowService {
     const recommended = ordered.slice(0, 3).map((c) => {
       const row = dueRows.find((r) => r.task_id === c.task_id)!;
       const priority = ranked?.find((r) => r.task_id === c.task_id)?.priority ?? null;
-      const meta = SYNTHETIC_ITEMS.find((m) => m.id === c.item.id);
+      const meta = this.itemMeta(c.item.id, c.item.version);
       return {
         task_id: c.task_id,
         title: meta?.title ?? c.item.id,
@@ -443,13 +540,13 @@ export class LearningWorkflowService {
       speaking_mode_note: 'Speaking giai đoạn đầu (E-11): hỗ trợ ý tưởng, dàn ý và từ vựng dạng văn bản như Writing; chưa chấm audio/phát âm hay báo Band Speaking.',
       in_progress: inProgress.map((a) => ({
         ...a,
-        title: SYNTHETIC_ITEMS.find((m) => m.id === a.item_id)?.title ?? a.item_id,
+        title: this.itemMeta(a.item_id, a.item_version)?.title ?? a.item_id,
       })),
       recommended_tasks: recommended,
       deferred_or_ineligible: filtered.rejected,
       upcoming_scheduled: futureRows.map((r) => ({
         task_id: r.task_id,
-        title: SYNTHETIC_ITEMS.find((m) => m.id === r.item_id)?.title ?? r.item_id,
+        title: this.itemMeta(r.item_id, r.item_version)?.title ?? r.item_id,
         purpose: r.purpose,
         mode: r.mode,
         estimated_minutes: r.estimated_minutes,
@@ -464,11 +561,23 @@ export class LearningWorkflowService {
   startAttempt(input: { request_key: string; item_id?: string; item_version?: string; rubric_id?: string; rubric_version?: string; mode: Mode; purpose: Purpose; task_id?: string; competency_id?: string }): AttemptWorkspaceView {
     this.ensureSyntheticWritingCatalog();
     const itemId = input.item_id ?? SYNTHETIC_ITEM_LESSON_ID;
-    if (!SYNTHETIC_ITEMS.some((m) => m.id === itemId)) throw Object.assign(new Error('Unsupported Writing item'), { statusCode: 409 });
     const itemVersion = input.item_version ?? 'v1';
-    const rubricId = input.rubric_id ?? SYNTHETIC_WRITING_RUBRIC_ID;
-    const rubricVersion = input.rubric_version ?? 'v1';
-    const competencyId = input.competency_id ?? SYNTHETIC_COMPETENCY_ID;
+    const meta = this.itemMeta(itemId, itemVersion);
+    if (!meta) throw Object.assign(new Error('Unsupported Writing item'), { statusCode: 409 });
+    if (!meta.synthetic) {
+      // E-49: AI-authored prompts are real content; they are assessed only by a real provider, as practice.
+      if (this.aiMode !== 'real') throw Object.assign(new Error('Đề AI soạn chỉ làm được ở chế độ chấm thật (FakeAdapter không chấm đề thật)'), { statusCode: 409, code: 'AI_ITEM_NEEDS_REAL_MODE' });
+      const verification = input.purpose === '7B' || input.purpose === '9';
+      if (!AI_ITEM_MODES.includes(input.mode) || !(input.purpose === 'practice' || (verification && input.task_id))) {
+        throw Object.assign(new Error('Đề AI soạn dùng cho luyện tập (tự luyện hoặc mô phỏng thi) hoặc cho nhiệm vụ kiểm chứng đã lập lịch'), { statusCode: 409, code: 'AI_ITEM_PRACTICE_ONLY' });
+      }
+      if (input.purpose === 'practice' && meta.task_scope !== 'composite') throw Object.assign(new Error('Đề đoạn chỉ dùng cho kiểm chứng 7A'), { statusCode: 409, code: 'AI_ITEM_PRACTICE_ONLY' });
+      if (!this.store.knowledge.servableItem(itemId, itemVersion, 'learner').ok) throw Object.assign(new Error('Đề này hiện không được cấp (chưa phát hành, đã ngừng hoặc bị thu hồi)'), { statusCode: 409, code: 'ITEM_NOT_SERVABLE' });
+    }
+    const rubricId = meta.synthetic ? input.rubric_id ?? SYNTHETIC_WRITING_RUBRIC_ID : meta.rubric.id;
+    const rubricVersion = meta.synthetic ? input.rubric_version ?? 'v1' : meta.rubric.version;
+    const competencyId = meta.synthetic ? input.competency_id ?? SYNTHETIC_COMPETENCY_ID
+      : input.competency_id && meta.competencies.includes(input.competency_id) ? input.competency_id : meta.competencies[0]!;
 
     if ((input.purpose === '7A' || input.purpose === '7B' || input.purpose === '9') && input.mode === 'guided') {
       throw new Error('Verification tasks (7A/7B/9) cannot run in guided mode');
@@ -556,7 +665,7 @@ export class LearningWorkflowService {
         submission_id: sub.submission_id,
         hint_level: 0,
         content: canonicalJson(support),
-        impacts: [{ competency_id: SYNTHETIC_COMPETENCY_ID, impact: 'affected', reduced_load: true }],
+        impacts: [{ competency_id: this.loopCompetency(attemptId), impact: 'affected', reduced_load: true }],
         pre_snapshot_id: pre.snapshot_id,
         post_snapshot_id: null,
       });
@@ -621,11 +730,12 @@ export class LearningWorkflowService {
 
   /** Assessor context for a Writing item: task text, criteria of its competencies, conditions. No answers or history. */
   private assessorContextFor(itemId: string, mode: Mode, purpose: Purpose, isRepair: boolean) {
-    const meta = SYNTHETIC_ITEMS.find((m) => m.id === itemId);
+    const meta = this.itemMeta(itemId);
     const ids = meta?.competencies ?? [SYNTHETIC_COMPETENCY_ID];
+    const defs: readonly CompetencyInfo[] = meta && !meta.synthetic ? this.frameworkCompetencies(meta.framework_version, meta.skill === 'speaking_text' ? 'speaking' : 'writing') : WRITING_COMPETENCIES;
     return assessorContext({
-      task: { title: meta?.title ?? itemId, prompt: meta?.prompt ?? '', genre: meta?.genre ?? '', min_words: 150 },
-      competencies: WRITING_COMPETENCIES.filter((c) => ids.includes(c.competency_id)),
+      task: { title: meta?.title ?? itemId, prompt: meta?.prompt ?? '', genre: meta?.genre ?? '', min_words: meta?.min_words ?? 150, skill: meta?.skill ?? 'writing' },
+      competencies: defs.filter((c) => ids.includes(c.competency_id)),
       mode, purpose, is_repair: isRepair,
     });
   }
@@ -641,7 +751,7 @@ export class LearningWorkflowService {
     if (!attempt) return [];
     const loop = this.store.db.prepare('SELECT unlocked_hint_level FROM writing_loop_states WHERE attempt_id = ?').get(sub.attempt_id) as { unlocked_hint_level: number } | undefined;
     const supportImpact = sub.kind === 'repair' || (loop?.unlocked_hint_level ?? 0) > 0 || attempt.mode === 'guided' ? 'affected' : 'no_related_effect_detected';
-    const allowed = SYNTHETIC_ITEMS.find((m) => m.id === attempt.item.id)?.competencies ?? [SYNTHETIC_COMPETENCY_ID];
+    const allowed = this.itemMeta(attempt.item.id, attempt.item.version)?.competencies ?? [SYNTHETIC_COMPETENCY_ID];
     if (isWritingAssessment(result)) return observationsFromResult(result, { submission_id: submissionId, allowed, support_impact: supportImpact });
     const opportunity: Opportunity = opportunityOverride ?? (sub.content.includes('[SYNTHETIC_NO_OPPORTUNITY]') ? 'absent' : 'observed');
     return observationsFromLegacy(result as Assessment, { submission_id: submissionId, primary: SYNTHETIC_COMPETENCY_ID, secondary: SYNTHETIC_SECONDARY_COMPETENCY_ID,
@@ -674,15 +784,19 @@ export class LearningWorkflowService {
       const provider = this.store.queue.runs(job.job_id).find((r) => r.state === 'COMPLETED')?.provider ?? 'fake';
       const real = isWritingAssessment(result) && result.synthetic === false && provider !== 'fake';
 
-      const obsRow = this.store.db.prepare('SELECT outcome, opportunity FROM observations WHERE submission_id = ? AND competency_id = ?')
-        .get(submission.submission_id, SYNTHETIC_COMPETENCY_ID) as { outcome: Outcome; opportunity: Opportunity } | undefined;
-      const outcome: Outcome = obsRow?.outcome ?? 'inconclusive';
-      const opportunity: Opportunity = obsRow?.opportunity ?? 'unknown';
+      const loopOutcome = () => {
+        const row = this.store.db.prepare('SELECT outcome, opportunity FROM observations WHERE submission_id = ? AND competency_id = ?')
+          .get(submission.submission_id, this.loopCompetency(submission.attempt_id)) as { outcome: Outcome; opportunity: Opportunity } | undefined;
+        return { outcome: row?.outcome ?? 'inconclusive' as Outcome, opportunity: row?.opportunity ?? 'unknown' as Opportunity };
+      };
       if (real) {
         this.finalizeReal(result, { job_id: job.job_id, submission_id: submission.submission_id, evidence_source_id: submission.evidence_source_id, attempt_id: submission.attempt_id, mode: attempt.mode, purpose: attempt.purpose, item_id: attempt.item.id });
-        this.advanceLoop(attempt.attempt_id, attempt.purpose, submission.submission_id, outcome, opportunity, isRepair);
+        if (!isRepair) this.retargetLoop(submission.attempt_id, submission.submission_id);
+        const r = loopOutcome();
+        this.advanceLoop(attempt.attempt_id, attempt.purpose, submission.submission_id, r.outcome, r.opportunity, isRepair);
         return true;
       }
+      const { outcome, opportunity } = loopOutcome();
 
       // Kiểm duyệt chính sách tiết lộ trước khi lưu gói gợi mở sinh sẵn ở server (04 §2.D, 06A §7.C.3).
       const disclosureCheck = verifyHintDisclosurePolicy(DEFAULT_PREGENERATED_HINTS);
@@ -748,15 +862,30 @@ export class LearningWorkflowService {
     } else {
       const nextStep = outcome === 'met' ? 6 : 5;
       this.store.db.prepare('UPDATE writing_loop_states SET step = ?, updated_at = ? WHERE attempt_id = ?').run(nextStep, at, attemptId);
-      if (!isRepair) this.integratedStep9(attemptId, SYNTHETIC_COMPETENCY_ID, outcome, opportunity, at);
+      if (!isRepair) this.integratedStep9(attemptId, this.loopCompetency(attemptId), outcome, opportunity, at);
     }
-    for (const c of WRITING_COMPETENCIES) this.refreshHypotheses(c.competency_id, at);
+    for (const c of this.competencyDefs()) this.refreshHypotheses(c.competency_id, at);
+  }
+
+  /**
+   * E-49: an AI-authored prompt measures many framework competencies; after the first real diagnosis the loop focuses
+   * on the first priority issue the assessor judged not met (the AI proposes the issue, the observation decides).
+   * Synthetic items keep their fixed loop competency.
+   */
+  private retargetLoop(attemptId: string, submissionId: string): void {
+    const attempt = this.store.learning.getAttempt(attemptId);
+    if (!attempt || this.itemMeta(attempt.item.id, attempt.item.version)?.synthetic !== false) return;
+    const diag = this.store.db.prepare('SELECT priority_issues_json FROM writing_diagnoses WHERE submission_id = ?').get(submissionId) as { priority_issues_json: string } | undefined;
+    const issues = diag ? JSON.parse(diag.priority_issues_json) as PriorityIssue[] : [];
+    const notMet = new Set((this.store.db.prepare("SELECT competency_id FROM observations WHERE submission_id = ? AND outcome = 'not_met'").all(submissionId) as { competency_id: string }[]).map((r) => r.competency_id));
+    const target = issues.find((i) => notMet.has(i.competency_id))?.competency_id ?? [...notMet][0];
+    if (target) this.store.db.prepare('UPDATE writing_loop_states SET competency_id = ?, updated_at = ? WHERE attempt_id = ?').run(target, this.store.now().toISOString(), attemptId);
   }
 
   /** Diagnosis and ledger entries proposed by a real assessor, after the application's checks (P5-5). */
   private finalizeReal(result: AiResult, ctx: { job_id: string; submission_id: string; evidence_source_id: string; attempt_id: string; mode: Mode; purpose: Purpose; item_id: string }): void {
     if (!isWritingAssessment(result)) return;
-    const allowed = SYNTHETIC_ITEMS.find((m) => m.id === ctx.item_id)?.competencies ?? [SYNTHETIC_COMPETENCY_ID];
+    const allowed = this.itemMeta(ctx.item_id)?.competencies ?? [SYNTHETIC_COMPETENCY_ID];
     const complex = ctx.purpose === '7B' || ctx.purpose === '9' || ctx.mode === 'exam';
     const limit = this.policy ? focusLimit(complex, this.policy.params) : 3;
     const d = diagnosisFromResult(result, { allowed, focus_limit: limit });
@@ -878,7 +1007,7 @@ export class LearningWorkflowService {
         submission_id: latestSub.submission_id,
         hint_level: level,
         content: hintContent,
-        impacts: [{ competency_id: SYNTHETIC_COMPETENCY_ID, impact: 'affected', reduced_load: level >= 2 }],
+        impacts: [{ competency_id: this.loopCompetency(attemptId), impact: 'affected', reduced_load: level >= 2 }],
         pre_snapshot_id: preSnap.snapshot_id,
         post_snapshot_id: null,
       });
@@ -944,7 +1073,7 @@ export class LearningWorkflowService {
         submission_id: latestSub.submission_id,
         hint_level: 3,
         content: bundle.level_3,
-        impacts: [{ competency_id: SYNTHETIC_COMPETENCY_ID, impact: 'affected', reduced_load: true }],
+        impacts: [{ competency_id: this.loopCompetency(attemptId), impact: 'affected', reduced_load: true }],
         pre_snapshot_id: preSnap.snapshot_id,
         post_snapshot_id: null,
       });
@@ -955,13 +1084,39 @@ export class LearningWorkflowService {
     return this.getWorkspaceView(attemptId);
   }
 
+  /** Checked hints of the latest real diagnosis of this attempt (null when none passed the disclosure check). */
+  private aiStep6Hints(attemptId: string): PreGeneratedHints | null {
+    const row = this.store.db.prepare("SELECT hints_json FROM writing_diagnoses WHERE attempt_id = ? AND synthetic = 0 AND hints_json <> 'null' ORDER BY created_at DESC LIMIT 1").get(attemptId) as { hints_json: string } | undefined;
+    return row ? JSON.parse(row.hints_json) as PreGeneratedHints : null;
+  }
+
+  /**
+   * E-50 Bước 6 on an AI-authored prompt. Free-text answers are not graded by string matching (04: matching does not
+   * recognise understanding), and Bước 6 produces no evidence: it only gates 7A. So the learner answers, then sees the
+   * key idea once and judges the match themself; 7A (a novel task, no hints) is what verifies.
+   */
+  private completeAiStep6(attemptId: string, selfCheck: boolean | undefined): AttemptWorkspaceView {
+    const hints = this.aiStep6Hints(attemptId);
+    if (!hints) throw Object.assign(new Error('Chưa có chẩn đoán thật kèm giải thích cho bài này'), { statusCode: 409, code: 'STEP6_NOT_READY' });
+    if (selfCheck === undefined) {
+      const view = this.getWorkspaceView(attemptId);
+      return { ...view, loop: view.loop ? { ...view.loop, step6_expected: hints.concept_check_expected } : null };
+    }
+    this.store.uow.run(() => {
+      this.store.db.prepare(`UPDATE writing_loop_states SET concept_check_passed = ?, step6_branch = COALESCE(step6_branch, 'micro_lesson'), step6_completed = ?, step = CASE WHEN ? = 1 THEN 7 ELSE 6 END, updated_at = ? WHERE attempt_id = ?`)
+        .run(selfCheck ? 1 : 0, selfCheck ? 1 : 0, selfCheck ? 1 : 0, this.store.now().toISOString(), attemptId);
+    });
+    return this.getWorkspaceView(attemptId);
+  }
+
   // ---- Bước 6: Concept-check & Bổ sung kiến thức mục tiêu (01 Bước 5–6) ------------------------
-  completeStep6(attemptId: string, conceptCheckAnswer: string): AttemptWorkspaceView {
+  completeStep6(attemptId: string, conceptCheckAnswer: string, selfCheck?: boolean): AttemptWorkspaceView {
     const attempt = this.store.learning.getAttempt(attemptId);
     if (!attempt) throw Object.assign(new Error('Unknown attempt'), { statusCode: 404 });
     if (!conceptCheckAnswer.trim()) {
       throw Object.assign(new Error('Concept check answer is required'), { statusCode: 400, code: 'EMPTY_CONCEPT_CHECK' });
     }
+    if (this.itemMeta(attempt.item.id, attempt.item.version)?.synthetic === false) return this.completeAiStep6(attemptId, selfCheck);
 
     const passed = conceptCheckAnswer.toLowerCase().includes('nhượng bộ')
       || conceptCheckAnswer.toLowerCase().includes('lập trường')
@@ -989,6 +1144,7 @@ export class LearningWorkflowService {
     this.ensureSyntheticWritingCatalog();
     const origin = this.store.learning.getAttempt(originAttemptId);
     if (!origin) throw Object.assign(new Error('Unknown origin attempt'), { statusCode: 404 });
+    const originMeta = this.itemMeta(origin.item.id, origin.item.version);
 
     const loop = this.store.db.prepare('SELECT step6_completed, linked_7a_attempt_id, competency_id FROM writing_loop_states WHERE attempt_id = ?')
       .get(originAttemptId) as { step6_completed: number; linked_7a_attempt_id: string | null; competency_id: string } | undefined;
@@ -999,18 +1155,28 @@ export class LearningWorkflowService {
       return this.getWorkspaceView(loop.linked_7a_attempt_id);
     }
 
+    // E-50: a loop on an AI-authored prompt verifies with a novel AI paragraph task for the same competency.
+    const aiTarget = originMeta?.synthetic === false ? this.pickVerificationItem(loop.competency_id, 'short') : undefined;
+    if (originMeta?.synthetic === false && !aiTarget) {
+      this.store.uow.run(() => this.verificationGap(loop.competency_id, '7A', this.store.now().toISOString()));
+      throw Object.assign(new Error(`Chưa có đề đoạn chưa xem cho ${loop.competency_id}. Soạn thêm: npm.cmd run author -- items --paragraph --focus ${loop.competency_id}`), { statusCode: 409, code: 'NO_ELIGIBLE_7A_TASK' });
+    }
+    const target = aiTarget
+      ? { id: aiTarget.id, version: aiTarget.version, rubric: aiTarget.rubric, package: aiTarget.package, minutes: aiTarget.estimated_minutes, synthetic: 0 }
+      : { id: SYNTHETIC_ITEM_7A_ID, version: 'v1', rubric: { id: origin.rubric.id, version: origin.rubric.version }, package: { id: SYNTHETIC_WRITING_PKG_ID, version: 'v1' }, minutes: 20, synthetic: 1 };
+
     // Kiểm tra điều kiện đủ của bài 7A qua bộ lọc điều phối Stage 1 (filterEligible).
-    const servable = this.store.knowledge.servableItem(SYNTHETIC_ITEM_7A_ID, 'v1', 'learner');
+    const servable = this.store.knowledge.servableItem(target.id, target.version, 'learner');
     if (!servable.ok) throw Object.assign(new Error(`7A item not servable: ${servable.reason}`), { statusCode: 409 });
 
     const candidate: TaskCandidate = {
       task_id: `7a-for-${originAttemptId}`,
-      item: { id: SYNTHETIC_ITEM_7A_ID, version: 'v1', item_family_id: servable.item_family_id, shared_stimulus_id: servable.shared_stimulus_id, derived_from: [] },
-      package: { id: SYNTHETIC_WRITING_PKG_ID, version: 'v1', release_state: 'active' },
+      item: { id: target.id, version: target.version, item_family_id: servable.item_family_id, shared_stimulus_id: servable.shared_stimulus_id, derived_from: [] },
+      package: { id: target.package.id, version: target.package.version, release_state: 'active' },
       competency_ids: [loop.competency_id],
       purpose: '7A',
       mode: 'self_practice',
-      estimated_minutes: 20,
+      estimated_minutes: target.minutes,
       meets_min_scope: true,
       quality_gate_passed: true,
       resources_available: true,
@@ -1024,15 +1190,15 @@ export class LearningWorkflowService {
       const created = this.store.learning.createAttempt({
         request_key: requestKey,
         scope: 'learner',
-        item: { id: SYNTHETIC_ITEM_7A_ID, version: 'v1' },
-        rubric: { id: origin.rubric.id, version: origin.rubric.version },
+        item: { id: target.id, version: target.version },
+        rubric: target.rubric,
         mode: 'self_practice',
         purpose: '7A',
       });
 
       this.store.learning.recordExposure({
         idempotency_key: `learner:prompt:${created.attempt_id}`,
-        item: { id: SYNTHETIC_ITEM_7A_ID, version: 'v1', hash: created.item.hash },
+        item: { id: target.id, version: target.version, hash: created.item.hash },
         item_family_id: servable.item_family_id,
         shared_stimulus_id: servable.shared_stimulus_id,
         surface: 'learner',
@@ -1042,7 +1208,7 @@ export class LearningWorkflowService {
 
       const at = this.store.now().toISOString();
       this.store.db.prepare(`INSERT INTO writing_loop_states (attempt_id, origin_attempt_id, competency_id, step, unlocked_hint_level, synthetic, updated_at)
-        VALUES (?, ?, ?, 7, 0, 1, ?)`).run(created.attempt_id, originAttemptId, loop.competency_id, at);
+        VALUES (?, ?, ?, 7, 0, ?, ?)`).run(created.attempt_id, originAttemptId, loop.competency_id, target.synthetic, at);
       this.store.db.prepare('UPDATE writing_loop_states SET linked_7a_attempt_id = ?, step = 7, updated_at = ? WHERE attempt_id = ?')
         .run(created.attempt_id, at, originAttemptId);
       if (origin.state === 'SUBMITTED' || origin.state === 'REPAIRING') {
@@ -1064,10 +1230,17 @@ export class LearningWorkflowService {
       ORDER BY s.revision DESC LIMIT 1`).get(attemptId) as { submission_id: string } | undefined;
     if (pendingSub) this.finalizeAssessment(pendingSub.submission_id);
 
-    const itemObj = this.store.json.get('item', attempt.item.id, attempt.item.version, attempt.item.hash) as {
-      title: string; prompt: string; skill: 'writing' | 'speaking_text'; genre: string; min_words: number;
-      recommended_minutes: number; criteria_summary: string[]; outline_suggestions?: string[]; vocabulary_frame?: string[];
-    };
+    type ItemView = { title: string; prompt: string; skill: 'writing' | 'speaking_text'; genre: string; min_words: number;
+      recommended_minutes: number; criteria_summary: string[]; outline_suggestions?: string[]; vocabulary_frame?: string[] };
+    const meta = this.itemMeta(attempt.item.id, attempt.item.version);
+    // E-49: an AI-authored item is a knowledge unit; the learner view is built from its prompt and the criteria titles.
+    const itemObj: ItemView = meta && !meta.synthetic
+      ? { title: meta.title, prompt: meta.prompt, skill: meta.skill, genre: meta.genre, min_words: meta.min_words, recommended_minutes: meta.estimated_minutes,
+        criteria_summary: meta.skill === 'speaking_text'
+          ? ['Fluency and Coherence (phần thể hiện trên văn bản)', 'Lexical Resource', 'Grammatical Range and Accuracy', 'Không chấm phát âm (E-43)']
+          : ['Task Response', 'Coherence and Cohesion', 'Lexical Resource', 'Grammatical Range and Accuracy'] }
+      : this.store.json.get('item', attempt.item.id, attempt.item.version, attempt.item.hash) as ItemView;
+    const loopCompetencyId = this.loopCompetency(attemptId);
 
     const latestSnap = this.store.db.prepare(`SELECT snapshot_version, content, created_at FROM snapshots
       WHERE attempt_id = ? ORDER BY snapshot_version DESC LIMIT 1`).get(attemptId) as { snapshot_version: number; content: string; created_at: string } | undefined;
@@ -1079,7 +1252,7 @@ export class LearningWorkflowService {
 
     const submissions = subRows.map((s) => {
       const obs = this.store.db.prepare('SELECT outcome, ai_run_id FROM observations WHERE submission_id = ? AND competency_id = ?')
-        .get(s.submission_id, SYNTHETIC_COMPETENCY_ID) as { outcome: Outcome; ai_run_id: string } | undefined;
+        .get(s.submission_id, loopCompetencyId) as { outcome: Outcome; ai_run_id: string } | undefined;
       return {
         ...s,
         outcome: obs?.outcome ?? null,
@@ -1139,15 +1312,27 @@ export class LearningWorkflowService {
       // Chỉ nạp nội dung bài học ngắn Bước 6 khi không phải nhiệm vụ kiểm chứng 7A/7B/9 và người học đã bước sang pha sửa/học.
       let step6Lesson: NonNullable<AttemptWorkspaceView['loop']>['step6_lesson'] = null;
       if (!isVerification && !isExam && (loopRow.step >= 6 || step6Decision.ready_for_step6 || loopRow.unlocked_hint_level >= 3 || repairSubs.length >= 1)) {
-        const lessonObj = this.store.json.get('knowledge', SYNTHETIC_MICRO_LESSON_ID, 'v1') as {
-          title: string; explanation: string; contrast_examples: string[];
-        };
-        step6Lesson = {
-          title: lessonObj.title,
-          explanation: lessonObj.explanation,
-          contrast_examples: lessonObj.contrast_examples,
-          concept_question: DEFAULT_PREGENERATED_HINTS.concept_check_question,
-        };
+        const aiHints = meta && !meta.synthetic ? this.aiStep6Hints(attemptId) : null;
+        if (aiHints) {
+          // E-50: the lesson is the checked level-3 explanation of this attempt's real diagnosis; serving it is an explanation exposure.
+          const title = this.competencyDefs().find((c) => c.competency_id === loopRow.competency_id)?.title ?? loopRow.competency_id;
+          step6Lesson = { title: `Trọng tâm: ${title}`, explanation: aiHints.level_3, contrast_examples: [], concept_question: aiHints.concept_check_question };
+          const servable = this.store.knowledge.servableItem(attempt.item.id, attempt.item.version, 'learner');
+          if (servable.ok) {
+            this.store.learning.recordExposure({ idempotency_key: `learner:step6:${attemptId}`, item: attempt.item, item_family_id: servable.item_family_id,
+              shared_stimulus_id: servable.shared_stimulus_id, surface: 'learner', scope: 'learner', level: 'explanation' });
+          }
+        } else if (!meta || meta.synthetic) {
+          const lessonObj = this.store.json.get('knowledge', SYNTHETIC_MICRO_LESSON_ID, 'v1') as {
+            title: string; explanation: string; contrast_examples: string[];
+          };
+          step6Lesson = {
+            title: lessonObj.title,
+            explanation: lessonObj.explanation,
+            contrast_examples: lessonObj.contrast_examples,
+            concept_question: DEFAULT_PREGENERATED_HINTS.concept_check_question,
+          };
+        }
       }
 
       loop = {
@@ -1164,6 +1349,7 @@ export class LearningWorkflowService {
         step6_branch: loopRow.step6_branch ?? step6Decision.branch,
         step6_completed: loopRow.step6_completed === 1,
         step6_lesson: step6Lesson,
+        step6_self_check: meta?.synthetic === false,
         linked_7a_attempt_id: loopRow.linked_7a_attempt_id,
         synthetic: loopRow.synthetic === 1,
       };
@@ -1211,7 +1397,7 @@ export class LearningWorkflowService {
   // ---- Tiến độ & Hồ sơ năng lực (02 §2–4, 06 §2.4, D-02) ---------------------------------------
   progressView() {
     this.ensureSyntheticWritingCatalog();
-    const competencies = WRITING_COMPETENCIES;
+    const competencies = this.competencyDefs();
 
     const profiles = competencies.map((comp) => this.competencyDetail(comp.competency_id, comp.title, comp.skill, comp.description));
 
@@ -1279,11 +1465,11 @@ export class LearningWorkflowService {
     return classified.map(({ observation: o, use }) => {
       const sub = this.store.db.prepare('SELECT kind, created_at, attempt_id FROM submissions WHERE submission_id = ?').get(o.submission_id) as { kind: 'original' | 'repair'; created_at: string; attempt_id: string };
       const att = this.store.db.prepare('SELECT mode, purpose FROM attempts WHERE attempt_id = ?').get(sub.attempt_id) as { mode: Mode; purpose: Purpose };
-      const meta = SYNTHETIC_ITEMS.find((m) => m.id === o.item.id);
+      const meta = this.itemMeta(o.item.id, o.item.version);
       const servable = this.store.knowledge.servableItem(o.item.id, o.item.version, 'learner');
       const hint = (this.store.db.prepare('SELECT MAX(hint_level) AS h FROM assistance_events WHERE attempt_id = ? AND displayed_at < ?').get(sub.attempt_id, sub.created_at) as { h: number | null }).h ?? 0;
       // G0 after N10 (E-41): synthetic when the content origin is a fixture or unknown, or FakeAdapter assessed it.
-      const synthetic = isSyntheticEvidence(servable.ok ? servable.content_origin : null, this.providerOf(o.ai_run_id)) || Boolean(meta) || competencyId.startsWith('syn.');
+      const synthetic = isSyntheticEvidence(servable.ok ? servable.content_origin : null, this.providerOf(o.ai_run_id)) || meta?.synthetic === true || competencyId.startsWith('syn.');
       const breadth: TaskBreadth = att.purpose === '7A' ? 'short' : att.purpose === '7B' || att.purpose === '9' ? 'composite'
         : att.mode !== 'guided' && (att.purpose === 'practice' || att.mode === 'exam') ? (meta?.task_scope ?? 'unknown') : 'unknown';
       const modality: Modality = meta ? (meta.skill === 'speaking_text' ? 'speaking' : 'writing') : fallbackModality;
@@ -1384,6 +1570,19 @@ export class LearningWorkflowService {
 
   // ---- D-02 v1: chuỗi kiểm chứng (C), sổ lỗi (E) ------------------------------------------------
   private scheduleVerification(competencyId: string, originAttemptId: string | null, action: ScheduleAction, synthetic: boolean, at: string): void {
+    // E-50: a framework competency is verified on a novel AI-authored essay; none in the bank → coverage gap, no task.
+    if (!competencyId.startsWith('syn.')) {
+      const item = this.pickVerificationItem(competencyId, 'composite');
+      if (!item) { this.verificationGap(competencyId, action.purpose, at); return; }
+      const due = new Date(this.store.now().getTime() + action.due_in_days * DAY_MS).toISOString();
+      this.store.db.prepare(`INSERT INTO scheduled_tasks (task_id, origin_attempt_id, assigned_attempt_id, competency_id, item_id, item_version, rubric_id, rubric_version,
+        purpose, mode, estimated_minutes, meets_min_scope, due_at, state, synthetic, created_at, updated_at, policy_version, schedule_reason, interval_days, step9_index, constraint_kind)
+        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'PENDING', 0, ?, ?, ?, ?, ?, ?, ?)`).run(
+        `task-${action.purpose.toLowerCase()}-${randomUUID().slice(0, 8)}`, originAttemptId, competencyId, item.id, item.version, item.rubric.id, item.rubric.version, action.purpose,
+        action.purpose === '9' ? 'exam' : 'self_practice', item.estimated_minutes, due, at, at, this.policy?.ref.version ?? null, action.reason, action.interval_days, action.step9_index, action.constraint,
+      );
+      return;
+    }
     const itemId = action.purpose === '7B' ? SYNTHETIC_ITEM_7B_ID : SYNTHETIC_ITEM_9_ID;
     const meta = SYNTHETIC_ITEMS.find((m) => m.id === itemId)!;
     const due = new Date(this.store.now().getTime() + action.due_in_days * DAY_MS).toISOString();
@@ -1411,7 +1610,7 @@ export class LearningWorkflowService {
   private integratedStep9(attemptId: string, competencyId: string, outcome: Outcome, opportunity: Opportunity, at: string): void {
     if (!this.policy) return;
     const attempt = this.store.learning.getAttempt(attemptId);
-    const meta = SYNTHETIC_ITEMS.find((m) => m.id === attempt?.item.id);
+    const meta = attempt ? this.itemMeta(attempt.item.id, attempt.item.version) : undefined;
     if (!attempt || attempt.mode === 'guided' || meta?.task_scope !== 'composite' || !(attempt.purpose === 'practice' || attempt.mode === 'exam')) return;
     const task = this.store.db.prepare(`SELECT task_id, step9_index, absent_count, synthetic FROM scheduled_tasks WHERE competency_id = ? AND purpose = '9'
       AND state IN ('PENDING', 'AWAITING_OPPORTUNITY') AND due_at <= ? ORDER BY due_at LIMIT 1`).get(competencyId, at) as { task_id: string; step9_index: number | null; absent_count: number; synthetic: number } | undefined;
@@ -1462,7 +1661,7 @@ export class LearningWorkflowService {
   /** D1–D4 inputs of one scheduled task. AI dimensions come from real diagnoses only (P5-5); otherwise null → default 1. */
   private priorityInput(row: { task_id: string; competency_id: string; item_id: string; purpose: Purpose; due_at: string; estimated_minutes: number }, policy: LoadedPolicy): PriorityInput {
     const goal = this.getGoal();
-    const meta = SYNTHETIC_ITEMS.find((m) => m.id === row.item_id);
+    const meta = this.itemMeta(row.item_id);
     const skill: Skill = meta?.skill === 'speaking_text' ? 'speaking' : 'writing';
     const hyp = this.store.db.prepare('SELECT status FROM error_hypotheses WHERE competency_id = ? ORDER BY updated_at DESC LIMIT 1').get(row.competency_id) as { status: PriorityIssue['hypothesis_status'] } | undefined;
     // D4 "buổi bị bỏ qua": study days with recorded activity after the due day (today excluded) while the task stayed open.
